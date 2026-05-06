@@ -70,6 +70,31 @@ def db_to_amp(db: float) -> float:
     return float(10.0 ** (db / 20.0))
 
 
+def sanitize_points(points: Any, duration: float, value_key: str, default: list[dict[str, float]], lo: float, hi: float) -> list[dict[str, float]]:
+    if not isinstance(points, list) or not points:
+        points = default
+    out = []
+    for point in points[:16]:
+        if not isinstance(point, dict):
+            continue
+        time_value = float(np.clip(float(point.get("time", 0.0)), 0.0, duration))
+        value = float(np.clip(float(point.get(value_key, point.get("value", 0.0))), lo, hi))
+        out.append({"time": time_value, value_key: value})
+    out.sort(key=lambda item: item["time"])
+    return out or default
+
+
+def automation_curve(points: list[dict[str, float]], value_key: str, samples: int, duration: float) -> np.ndarray:
+    if samples <= 0:
+        return np.zeros(0, dtype=np.float32)
+    times = np.asarray([float(point["time"]) for point in points], dtype=np.float32)
+    values = np.asarray([float(point[value_key]) for point in points], dtype=np.float32)
+    if times.size == 1:
+        return np.full(samples, values[0], dtype=np.float32)
+    t = np.linspace(0.0, duration, samples, endpoint=False, dtype=np.float32)
+    return np.interp(t, times, values).astype(np.float32)
+
+
 def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int) -> dict[str, Any]:
     session = dict(DEFAULT_SESSION)
     session["duration"] = float(duration)
@@ -122,11 +147,24 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                     "cutoff_start_hz": float(np.clip(float(filt.get("cutoff_start_hz", 550.0)), 80.0, 12000.0)),
                     "cutoff_end_hz": float(np.clip(float(filt.get("cutoff_end_hz", 1800.0)), 80.0, 14000.0)),
                     "resonance": float(np.clip(float(filt.get("resonance", 0.25)), 0.0, 1.0)),
+                    "cutoff_points": sanitize_points(
+                        filt.get("cutoff_points"),
+                        duration,
+                        "hz",
+                        [
+                            {"time": 0.0, "hz": float(np.clip(float(filt.get("cutoff_start_hz", 550.0)), 80.0, 12000.0))},
+                            {"time": duration, "hz": float(np.clip(float(filt.get("cutoff_end_hz", 1800.0)), 80.0, 14000.0))},
+                        ],
+                        80.0,
+                        14000.0,
+                    ),
                 },
                 "modulation": {
                     "lfo_rate_hz": float(np.clip(float(layer.get("modulation", {}).get("lfo_rate_hz", 0.15)), 0.0, 8.0)),
                     "lfo_depth": float(np.clip(float(layer.get("modulation", {}).get("lfo_depth", 0.05)), 0.0, 1.0)),
+                    "gate_points": sanitize_points(layer.get("modulation", {}).get("gate_points"), duration, "level", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}], 0.0, 1.0),
                 },
+                "gain_points": sanitize_points(layer.get("gain_points"), duration, "db", [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}], -36.0, 12.0),
                 "effects": {
                     "chorus_mix": float(np.clip(float(effects.get("chorus_mix", 0.18)), 0.0, 1.0)),
                     "reverb_mix": float(np.clip(float(effects.get("reverb_mix", 0.18)), 0.0, 0.7)),
@@ -143,6 +181,9 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
 
 def oscillator(phase: np.ndarray, waveform: str, blend: float) -> np.ndarray:
     sine = np.sin(phase)
+    if waveform in {"noise", "air", "transient"}:
+        rng = np.random.default_rng(int(phase.size + blend * 1000))
+        return rng.normal(0.0, 0.5 + 0.5 * blend, phase.size)
     saw = 2.0 * ((phase / (2.0 * np.pi)) % 1.0) - 1.0
     square = np.sign(sine)
     tri = 2.0 * np.abs(saw) - 1.0
@@ -176,12 +217,15 @@ def envelope(total: int, sr: int, attack: float, decay: float, sustain: float, r
     return np.pad(env, (0, max(0, total - env.size)))[:total]
 
 
-def moving_lowpass(audio: np.ndarray, sr: int, start_hz: float, end_hz: float, resonance: float) -> np.ndarray:
+def moving_lowpass(audio: np.ndarray, sr: int, start_hz: float, end_hz: float, resonance: float, cutoff_curve: np.ndarray | None = None) -> np.ndarray:
     out = np.zeros_like(audio)
     y = 0.0
     for index, sample in enumerate(audio):
-        frac = index / max(1, audio.size - 1)
-        cutoff = start_hz + (end_hz - start_hz) * frac
+        if cutoff_curve is not None and cutoff_curve.size:
+            cutoff = float(cutoff_curve[min(index, cutoff_curve.size - 1)])
+        else:
+            frac = index / max(1, audio.size - 1)
+            cutoff = start_hz + (end_hz - start_hz) * frac
         alpha = 1.0 - math.exp(-2.0 * math.pi * cutoff / sr)
         y += alpha * (sample - y)
         out[index] = y
@@ -195,6 +239,9 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     amp = layer["amp_envelope"]
     filt = layer["filter"]
     mod = layer["modulation"]
+    gain_curve = automation_curve(layer.get("gain_points", [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}]), "db", samples, duration)
+    gate_curve = automation_curve(mod.get("gate_points", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}]), "level", samples, duration)
+    cutoff_curve = automation_curve(filt.get("cutoff_points", [{"time": 0.0, "hz": filt["cutoff_start_hz"]}, {"time": duration, "hz": filt["cutoff_end_hz"]}]), "hz", samples, duration)
     for note in layer["notes"]:
         start = int(note["start"] * sr)
         count = max(1, int(note["duration"] * sr))
@@ -216,8 +263,10 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
             note_audio *= 1.0 + mod["lfo_depth"] * 0.15 * np.sin(2.0 * np.pi * mod["lfo_rate_hz"] * t)
         note_audio *= envelope(end - start, sr, amp["attack"], amp["decay"], amp["sustain"], amp["release"])
         note_audio *= note["velocity"]
-        note_audio = moving_lowpass(note_audio.astype(np.float32), sr, filt["cutoff_start_hz"], filt["cutoff_end_hz"], filt["resonance"])
+        note_audio = moving_lowpass(note_audio.astype(np.float32), sr, filt["cutoff_start_hz"], filt["cutoff_end_hz"], filt["resonance"], cutoff_curve[start:end])
         mono[start:end] += note_audio.astype(np.float32)
+    mono *= gate_curve
+    mono *= np.power(10.0, gain_curve / 20.0)
     peak = float(np.max(np.abs(mono))) if mono.size else 0.0
     if peak > 1.0:
         mono *= 1.0 / peak
@@ -335,7 +384,8 @@ Allowed action for this run: {phase}
 
 Renderer capabilities:
 - Up to {max_layers} synth layers.
-- Each layer has note events, gain/pan/width, oscillator waveform/blend/voices/detune/sub, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, LFO tremolo, chorus_mix, reverb_mix.
+- Each layer has note events, gain/pan/width, oscillator waveform/blend/voices/detune/sub, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, optional filter.cutoff_points, optional layer gain_points, optional modulation.gate_points, LFO tremolo, chorus_mix, reverb_mix.
+- waveform may be sine, triangle, saw, square, noise, air, or transient.
 - Session has returns and master fields. Preserve them even if empty.
 
 Rules:
@@ -343,7 +393,8 @@ Rules:
 - Preserve useful existing layers and stable layer ids.
 - Add at most one new layer unless the residual clearly demands a paired support/noise layer.
 - Use synth/noise-like approximation only; do not reference external samples.
-- Optimize actual reconstruction metrics: multi-resolution spectral, mel spectrogram, envelope, pitch chroma, spectral motion, transient/onset, stereo width, embedding.
+- The previous Residual Critic recommendation is binding: address its highest-priority missing items first and avoid its do_not guidance if present.
+- Optimize actual reconstruction metrics: multi-resolution spectral, mel spectrogram, envelope, segment_envelope, late_energy_ratio, sustain_coverage, frontload_balance, band_envelope_by_time, pitch chroma, spectral motion, transient/onset, stereo width, embedding.
 
 Return full JSON session with this shape:
 {session_shape()}
@@ -366,6 +417,9 @@ Return ONLY JSON:
 {{
   "missing": ["specific measurable mismatches"],
   "recommendations": ["concrete next actions for the Layer Builder or Mixer"],
+  "must_fix": ["highest priority concrete measurable fixes for the next Builder prompt"],
+  "do_not": ["specific changes the next Builder should avoid"],
+  "success_criteria": ["numbers the next score should move toward"],
   "priority": "layer|automation|pitch|envelope|stereo|mix",
   "stop_layer_building": true_or_false
 }}
@@ -419,6 +473,7 @@ def run_codex_json(output_dir: Path, agent: str, prompt: str, duration: float | 
     prompt_path.write_text(prompt)
     print(f"codex_start agent={agent}", flush=True)
     print(f"codex_prompt_path {prompt_path}", flush=True)
+    print(f"trace_file agent={agent} role=prompt path={prompt_path}", flush=True)
     print(f"codex_prompt_hidden agent={agent} bytes={len(prompt.encode())}", flush=True)
     process = subprocess.Popen(
         [
@@ -450,6 +505,7 @@ def run_codex_json(output_dir: Path, agent: str, prompt: str, duration: float | 
     if returncode != 0:
         raise RuntimeError(f"Codex agent {agent} failed with return code {returncode}.")
     print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
+    print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
     payload = extract_json_object(answer_path.read_text())
     if duration is not None and sample_rate is not None:
         return sanitize_session(payload, duration, sample_rate)
@@ -487,6 +543,11 @@ def local_mono(audio: np.ndarray) -> np.ndarray:
 
 def write_json(path: Path, payload: Any) -> Path:
     path.write_text(json.dumps(payload, indent=2) + "\n")
+    return path
+
+
+def trace_file(agent: str, role: str, path: Path) -> Path:
+    print(f"trace_file agent={agent} role={role} path={path}", flush=True)
     return path
 
 
@@ -583,7 +644,7 @@ def main() -> None:
     reference_clip = args.output_dir / "source_clip.wav"
     sf.write(reference_clip, reference_audio.T, args.sample_rate)
 
-    source_profile_path = write_json(args.output_dir / "source_profile.json", source_profile(reference_audio, args.sample_rate, args.seconds))
+    source_profile_path = trace_file("analyzer", "source_profile", write_json(args.output_dir / "source_profile.json", source_profile(reference_audio, args.sample_rate, args.seconds)))
     print("analysis_start layer_plan", flush=True)
     analysis = run_codex_json(
         args.output_dir,
@@ -596,12 +657,12 @@ def main() -> None:
     global_payload.setdefault("overall_mix", "unknown overall mix")
     if not isinstance(analysis.get("layers"), list):
         raise ValueError(f"Codex Analyzer did not return layers: {analysis}")
-    analyzer_path = write_json(args.output_dir / "analyzer_answer.json", analysis)
-    write_json(args.output_dir / "layer_analysis.json", analysis)
+    analyzer_path = trace_file("analyzer", "parsed_answer", write_json(args.output_dir / "analyzer_answer.json", analysis))
+    trace_file("analyzer", "layer_analysis", write_json(args.output_dir / "layer_analysis.json", analysis))
     print(f"analysis_done layers={len(analysis.get('layers', []))}", flush=True)
 
     session = sanitize_session(DEFAULT_SESSION, args.seconds, args.sample_rate)
-    current_session_path = write_json(args.output_dir / "session_current.json", session)
+    current_session_path = trace_file("session", "current", write_json(args.output_dir / "session_current.json", session))
     history: list[dict[str, Any]] = []
     history_path = write_json(args.output_dir / "history.json", history)
     best_session = session
@@ -612,8 +673,9 @@ def main() -> None:
         "priority": "layer",
         "stop_layer_building": False,
     }
-    recommendation_path = write_json(args.output_dir / "recommendation_initial.json", recommendation)
+    recommendation_path = trace_file("residual_critic", "recommendation_initial", write_json(args.output_dir / "recommendation_initial.json", recommendation))
     rng = np.random.default_rng(20260506)
+    min_builder_steps = min(args.steps, 5)
 
     for step in range(args.steps):
         print(f"agent_stage layer_builder step={step}", flush=True)
@@ -624,7 +686,7 @@ def main() -> None:
             args.seconds,
             args.sample_rate,
         )
-        proposed_session_path = write_json(args.output_dir / f"session_step_{step:02d}_codex_proposal.json", proposed)
+        proposed_session_path = trace_file(f"layer_builder_step_{step:02d}", "session_proposal", write_json(args.output_dir / f"session_step_{step:02d}_codex_proposal.json", proposed))
         candidates = [("codex", proposed)]
         for trial in range(args.local_trials):
             candidates.append((f"local_{trial}", local_mutation(proposed, rng, 0.22, args.seconds, args.sample_rate)))
@@ -634,9 +696,11 @@ def main() -> None:
             diff_path = args.output_dir / f"audio_diff_step_{step:02d}_{label}.json"
             score, diagnostics, candidate_residual = write_audio_diff(reference_audio, candidate_session, args.sample_rate, out_path, diff_path)
             write_json(args.output_dir / f"session_step_{step:02d}_{label}.json", candidate_session)
+            print(f"trace_file agent=loss step={step} role=audio_diff_{label} path={diff_path}", flush=True)
+            print(f"trace_file agent=loss step={step} role=render_{label} path={out_path}", flush=True)
             step_results.append((score.final, label, candidate_session, score, diagnostics, candidate_residual, out_path, diff_path))
             print(
-                f"step={step} candidate={label} score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset={score.transient_onset:.4f} stereo={score.stereo_width:.4f}",
+                f"step={step} candidate={label} score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
                 flush=True,
             )
         step_results.sort(key=lambda item: item[0], reverse=True)
@@ -645,7 +709,7 @@ def main() -> None:
         if accepted:
             best_session = session
             best_score = score
-            current_session_path = write_json(args.output_dir / "session_current.json", best_session)
+            current_session_path = trace_file("session", "current", write_json(args.output_dir / "session_current.json", best_session))
         deterministic_residual = dict(candidate_residual)
         if len(best_session.get("layers", [])) < 2 and best_score.final < 0.72:
             deterministic_residual.setdefault("recommendations", []).append("prefer adding one concrete layer over overfitting the first layer")
@@ -662,7 +726,7 @@ def main() -> None:
             "layers": [{"id": layer["id"], "role": layer["role"]} for layer in best_session.get("layers", [])],
             "deterministic_residual": deterministic_residual,
         }
-        history_item_path = write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item)
+        history_item_path = trace_file(f"loss_step_{step:02d}", "history_item", write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item))
         print(f"agent_stage residual_critic step={step}", flush=True)
         critic = run_codex_json(
             args.output_dir,
@@ -672,18 +736,26 @@ def main() -> None:
         recommendation = {
             "missing": critic.get("missing", deterministic_residual["missing"]),
             "recommendations": critic.get("recommendations", deterministic_residual["recommendations"]),
+            "must_fix": critic.get("must_fix", deterministic_residual["missing"][:4]),
+            "do_not": critic.get("do_not", []),
+            "success_criteria": critic.get("success_criteria", []),
             "priority": critic.get("priority", "layer"),
             "stop_layer_building": bool(critic.get("stop_layer_building", False)),
             "diagnostics": deterministic_residual.get("diagnostics", {}),
         }
-        recommendation_path = write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation)
+        forced_continue = step + 1 < min_builder_steps or best_score.final < 0.78
+        if forced_continue and recommendation["stop_layer_building"]:
+            recommendation["stop_layer_building"] = False
+            recommendation.setdefault("do_not", []).append("do not stop yet; the orchestrator requires more builder passes before mixer")
+            recommendation.setdefault("recommendations", []).append("continue the Builder/Critic loop and address the weakest temporal and spectral metrics")
+        recommendation_path = trace_file(f"residual_critic_step_{step:02d}", "recommendation", write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation))
         history_item["recommendation_path"] = str(recommendation_path)
         history_item["residual_critic"] = recommendation
         history.append(history_item)
         history_path = write_json(args.output_dir / "history.json", history)
-        write_json(args.output_dir / f"session_step_{step:02d}_accepted.json", best_session)
+        trace_file(f"layer_builder_step_{step:02d}", "accepted_session", write_json(args.output_dir / f"session_step_{step:02d}_accepted.json", best_session))
         print(f"step_complete index={step} winner={label} accepted={str(accepted).lower()} best_score={best_score.final:.4f}", flush=True)
-        if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1:
+        if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1 and step + 1 >= min_builder_steps and best_score.final >= 0.78:
             print(f"layer_building_stopped step={step} reason=residual_critic", flush=True)
             break
 
@@ -702,6 +774,8 @@ def main() -> None:
         args.output_dir / "mixer_reconstruction.wav",
         args.output_dir / "audio_diff_mixer.json",
     )
+    trace_file("mixer", "render", args.output_dir / "mixer_reconstruction.wav")
+    trace_file("mixer", "audio_diff", args.output_dir / "audio_diff_mixer.json")
     mixed_accepted = mixed_score.final >= best_score.final
     if mixed_accepted:
         best_session = mixed_session
@@ -725,6 +799,8 @@ def main() -> None:
         args.output_dir / "simplifier_reconstruction.wav",
         args.output_dir / "audio_diff_simplifier.json",
     )
+    trace_file("simplifier", "render", args.output_dir / "simplifier_reconstruction.wav")
+    trace_file("simplifier", "audio_diff", args.output_dir / "audio_diff_simplifier.json")
     simplified_accepted = simplified_score.final >= best_score.final * 0.97
     if simplified_accepted:
         best_session = simplified_session

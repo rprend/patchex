@@ -14,11 +14,19 @@ class AudioScore:
     mel_spectrogram: float
     a_weighted_spectral: float
     envelope: float
+    segment_envelope: float
+    late_energy_ratio: float
+    sustain_coverage: float
+    frontload_balance: float
+    band_envelope_by_time: float
     pitch_chroma: float
     f0_contour: float
     spectral_motion: float
+    centroid_trajectory: float
     spectral_features: float
     transient_onset: float
+    onset_count: float
+    onset_timing: float
     stereo_width: float
     modulation: float
     harmonic_noise: float
@@ -95,6 +103,17 @@ def onset_curve(env: np.ndarray) -> np.ndarray:
     diff = np.maximum(0, np.diff(env, prepend=env[0]))
     peak = float(np.max(diff))
     return diff / peak if peak > 0 else diff
+
+
+def onset_positions(env: np.ndarray, threshold: float = 0.35) -> np.ndarray:
+    curve = onset_curve(env)
+    peaks = []
+    for index in range(1, max(1, curve.size - 1)):
+        if curve[index] >= threshold and curve[index] >= curve[index - 1] and curve[index] >= curve[index + 1]:
+            peaks.append(index)
+    if curve.size and curve[0] >= threshold:
+        peaks.insert(0, 0)
+    return np.asarray(peaks, dtype=np.float32)
 
 
 def chroma(mag: np.ndarray, sr: int) -> np.ndarray:
@@ -209,6 +228,87 @@ def relative_score(ref: np.ndarray, cand: np.ndarray, scale_floor: float = 1e-8)
     return safe_exp_distance(distance)
 
 
+def ratio_score(reference: float, candidate: float, floor: float = 1e-8) -> float:
+    distance = abs(reference - candidate) / max(abs(reference), abs(candidate), floor)
+    return safe_exp_distance(float(distance))
+
+
+def segment_values(values: np.ndarray, segments: int = 10) -> np.ndarray:
+    if values.size == 0:
+        return np.zeros(segments)
+    edges = np.linspace(0, values.size, segments + 1).astype(int)
+    out = []
+    for start, end in zip(edges[:-1], edges[1:]):
+        end = max(start + 1, end)
+        out.append(float(np.mean(values[start:end])))
+    return np.asarray(out)
+
+
+def segmented_relative_score(ref: np.ndarray, cand: np.ndarray, segments: int = 10) -> float:
+    return relative_score(segment_values(ref, segments), segment_values(cand, segments))
+
+
+def late_energy_score(ref_env: np.ndarray, cand_env: np.ndarray) -> float:
+    if ref_env.size == 0 or cand_env.size == 0:
+        return 1.0
+    split_ref = max(1, int(ref_env.size * 0.5))
+    split_cand = max(1, int(cand_env.size * 0.5))
+    ref_late = float(np.sum(ref_env[split_ref:]) / (np.sum(ref_env) + 1e-8))
+    cand_late = float(np.sum(cand_env[split_cand:]) / (np.sum(cand_env) + 1e-8))
+    return ratio_score(ref_late, cand_late)
+
+
+def sustain_score(ref_env: np.ndarray, cand_env: np.ndarray) -> float:
+    if ref_env.size == 0 or cand_env.size == 0:
+        return 1.0
+    ref_threshold = max(float(np.percentile(ref_env, 70)) * 0.35, 1e-6)
+    cand_threshold = max(float(np.percentile(cand_env, 70)) * 0.35, 1e-6)
+    ref_coverage = float(np.mean(ref_env > ref_threshold))
+    cand_coverage = float(np.mean(cand_env > cand_threshold))
+    return ratio_score(ref_coverage, cand_coverage)
+
+
+def frontload_score(ref_env: np.ndarray, cand_env: np.ndarray) -> float:
+    if ref_env.size == 0 or cand_env.size == 0:
+        return 1.0
+    ref_end = max(1, int(ref_env.size * 0.3))
+    cand_end = max(1, int(cand_env.size * 0.3))
+    ref_front = float(np.sum(ref_env[:ref_end]) / (np.sum(ref_env) + 1e-8))
+    cand_front = float(np.sum(cand_env[:cand_end]) / (np.sum(cand_env) + 1e-8))
+    return ratio_score(ref_front, cand_front)
+
+
+def band_envelope_score(ref_mag: np.ndarray, cand_mag: np.ndarray, sr: int) -> float:
+    ref_bands = band_energies(ref_mag, sr)
+    cand_bands = band_energies(cand_mag, sr)
+    scores = [segmented_relative_score(ref_bands[name], cand_bands[name], 8) for name in ref_bands]
+    return float(np.mean(scores)) if scores else 1.0
+
+
+def trajectory_score(ref: np.ndarray, cand: np.ndarray, segments: int = 10) -> float:
+    ref_segments = segment_values(ref, segments)
+    cand_segments = segment_values(cand, segments)
+    return relative_score(ref_segments, cand_segments)
+
+
+def onset_count_score(ref_positions: np.ndarray, cand_positions: np.ndarray) -> float:
+    ref_count = float(ref_positions.size)
+    cand_count = float(cand_positions.size)
+    return ratio_score(ref_count, cand_count, 1.0)
+
+
+def onset_timing_score(ref_positions: np.ndarray, cand_positions: np.ndarray, length: int) -> float:
+    if ref_positions.size == 0 and cand_positions.size == 0:
+        return 1.0
+    if ref_positions.size == 0 or cand_positions.size == 0:
+        return 0.0
+    ref_norm = ref_positions / max(1, length - 1)
+    cand_norm = cand_positions / max(1, length - 1)
+    distances = [float(np.min(np.abs(cand_norm - pos))) for pos in ref_norm]
+    extra_penalty = abs(ref_positions.size - cand_positions.size) / max(ref_positions.size, cand_positions.size, 1)
+    return safe_exp_distance(float(np.mean(distances) * 8.0 + extra_penalty))
+
+
 def matrix_score(ref: np.ndarray, cand: np.ndarray) -> float:
     rows = min(ref.shape[0], cand.shape[0])
     cols = min(ref.shape[1], cand.shape[1])
@@ -238,7 +338,16 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict
     ref_env = frame_rms(ref)
     cand_env = frame_rms(cand)
     envelope = relative_score(ref_env, cand_env)
+    segment_envelope = segmented_relative_score(ref_env, cand_env, 10)
+    late_energy_ratio = late_energy_score(ref_env, cand_env)
+    sustain_coverage = sustain_score(ref_env, cand_env)
+    frontload_balance = frontload_score(ref_env, cand_env)
+    band_envelope_by_time = band_envelope_score(ref_mag, cand_mag, sr)
+    ref_onsets = onset_positions(ref_env)
+    cand_onsets = onset_positions(cand_env)
     transient_onset = relative_score(onset_curve(ref_env), onset_curve(cand_env), 1.0)
+    onset_count = onset_count_score(ref_onsets, cand_onsets)
+    onset_timing = onset_timing_score(ref_onsets, cand_onsets, min(ref_env.size, cand_env.size))
     pitch_chroma = max(0.0, cosine(chroma(ref_mag, sr), chroma(cand_mag, sr)))
 
     ref_f0 = estimate_f0_track(ref, sr)
@@ -256,6 +365,7 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict
         relative_score(ref_features["rolloff"], cand_features["rolloff"]),
     ]
     spectral_motion = float(np.mean(spectral_motion_parts))
+    centroid_trajectory = trajectory_score(ref_features["centroid"], cand_features["centroid"], 10)
     spectral_features = float(
         np.mean(
             [
@@ -293,31 +403,47 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict
 
     score = AudioScore(
         final=float(
-            0.16 * multi_resolution_spectral
-            + 0.14 * mel_spectrogram
-            + 0.08 * a_weighted_spectral
-            + 0.10 * envelope
-            + 0.08 * pitch_chroma
-            + 0.06 * f0_contour
-            + 0.09 * spectral_motion
-            + 0.07 * spectral_features
-            + 0.06 * transient_onset
-            + 0.05 * stereo_width
-            + 0.04 * modulation
-            + 0.03 * harmonic_noise
-            + 0.02 * cepstral
-            + 0.01 * embedding
-            + 0.01 * codec_latent
+            0.12 * multi_resolution_spectral
+            + 0.11 * mel_spectrogram
+            + 0.06 * a_weighted_spectral
+            + 0.06 * envelope
+            + 0.07 * segment_envelope
+            + 0.06 * late_energy_ratio
+            + 0.05 * sustain_coverage
+            + 0.05 * frontload_balance
+            + 0.08 * band_envelope_by_time
+            + 0.06 * pitch_chroma
+            + 0.04 * f0_contour
+            + 0.06 * spectral_motion
+            + 0.05 * centroid_trajectory
+            + 0.04 * spectral_features
+            + 0.04 * transient_onset
+            + 0.04 * onset_count
+            + 0.04 * onset_timing
+            + 0.03 * stereo_width
+            + 0.03 * modulation
+            + 0.02 * harmonic_noise
+            + 0.01 * cepstral
+            + 0.005 * embedding
+            + 0.005 * codec_latent
         ),
         multi_resolution_spectral=multi_resolution_spectral,
         mel_spectrogram=mel_spectrogram,
         a_weighted_spectral=a_weighted_spectral,
         envelope=envelope,
+        segment_envelope=segment_envelope,
+        late_energy_ratio=late_energy_ratio,
+        sustain_coverage=sustain_coverage,
+        frontload_balance=frontload_balance,
+        band_envelope_by_time=band_envelope_by_time,
         pitch_chroma=pitch_chroma,
         f0_contour=f0_contour,
         spectral_motion=spectral_motion,
+        centroid_trajectory=centroid_trajectory,
         spectral_features=spectral_features,
         transient_onset=transient_onset,
+        onset_count=onset_count,
+        onset_timing=onset_timing,
         stereo_width=stereo_width,
         modulation=modulation,
         harmonic_noise=harmonic_noise,
@@ -353,6 +479,14 @@ def build_diagnostics(
         }
         for name in ref_bands
     }
+    ref_onsets = onset_positions(ref_env)
+    cand_onsets = onset_positions(cand_env)
+    ref_segment_env = segment_values(ref_env, 10)
+    cand_segment_env = segment_values(cand_env, 10)
+    ref_late = float(np.sum(ref_env[max(1, int(ref_env.size * 0.5)) :]) / (np.sum(ref_env) + 1e-8)) if ref_env.size else 0.0
+    cand_late = float(np.sum(cand_env[max(1, int(cand_env.size * 0.5)) :]) / (np.sum(cand_env) + 1e-8)) if cand_env.size else 0.0
+    ref_front = float(np.sum(ref_env[: max(1, int(ref_env.size * 0.3))]) / (np.sum(ref_env) + 1e-8)) if ref_env.size else 0.0
+    cand_front = float(np.sum(cand_env[: max(1, int(cand_env.size * 0.3))]) / (np.sum(cand_env) + 1e-8)) if cand_env.size else 0.0
     return {
         "reference_centroid_start_hz": float(ref_features["centroid"][0]) if ref_features["centroid"].size else 0.0,
         "reference_centroid_end_hz": float(ref_features["centroid"][-1]) if ref_features["centroid"].size else 0.0,
@@ -360,8 +494,16 @@ def build_diagnostics(
         "candidate_centroid_end_hz": float(cand_features["centroid"][-1]) if cand_features["centroid"].size else 0.0,
         "reference_rms": float(np.sqrt(np.mean(np.square(mono(reference))) + 1e-12)),
         "candidate_rms": float(np.sqrt(np.mean(np.square(mono(candidate))) + 1e-12)),
-        "reference_onset_count": int(np.sum(onset_curve(ref_env) > 0.35)),
-        "candidate_onset_count": int(np.sum(onset_curve(cand_env) > 0.35)),
+        "reference_onset_count": int(ref_onsets.size),
+        "candidate_onset_count": int(cand_onsets.size),
+        "reference_onset_positions": ref_onsets.astype(int).tolist(),
+        "candidate_onset_positions": cand_onsets.astype(int).tolist(),
+        "reference_late_energy_ratio": ref_late,
+        "candidate_late_energy_ratio": cand_late,
+        "reference_front_energy_ratio": ref_front,
+        "candidate_front_energy_ratio": cand_front,
+        "reference_segment_envelope": ref_segment_env.tolist(),
+        "candidate_segment_envelope": cand_segment_env.tolist(),
         "band_energy": band_deltas,
         "reference_stereo": ref_stereo,
         "candidate_stereo": cand_stereo,
@@ -381,7 +523,23 @@ def residual_from_diff(score: AudioScore, diagnostics: dict[str, Any]) -> dict[s
     if score.envelope < 0.7:
         missing.append("RMS envelope does not follow the source")
         recommendations.append("adjust note durations, attack/release, layer timing, or master gain automation")
-    if score.transient_onset < 0.7:
+    if score.segment_envelope < 0.72:
+        missing.append("time-segmented envelope differs across the 5-second clip")
+        recommendations.append("add or adjust gain automation, note lengths, and sustained layer body across the full clip")
+    if score.late_energy_ratio < 0.78 or score.sustain_coverage < 0.78:
+        ref_late = diagnostics.get("reference_late_energy_ratio", 0.0)
+        cand_late = diagnostics.get("candidate_late_energy_ratio", 0.0)
+        missing.append(f"candidate late/sustained energy differs: source late energy {ref_late:.2f}, candidate {cand_late:.2f}")
+        recommendations.append("increase sustained body after the first half or reduce front-only decay")
+    if score.frontload_balance < 0.78:
+        ref_front = diagnostics.get("reference_front_energy_ratio", 0.0)
+        cand_front = diagnostics.get("candidate_front_energy_ratio", 0.0)
+        missing.append(f"candidate front/back energy balance differs: source front energy {ref_front:.2f}, candidate {cand_front:.2f}")
+        recommendations.append("reduce front-loaded attack energy or add later sustained layer energy")
+    if score.band_envelope_by_time < 0.7:
+        missing.append("band energy changes over time do not match the source")
+        recommendations.append("use filter/gain automation or layer timing to match low/mid/high energy across the whole clip")
+    if score.transient_onset < 0.7 or score.onset_count < 0.78 or score.onset_timing < 0.78:
         ref_count = diagnostics.get("reference_onset_count", 0)
         cand_count = diagnostics.get("candidate_onset_count", 0)
         missing.append(f"onset contour differs: source has {ref_count} prominent onset frames, candidate has {cand_count}")
@@ -389,7 +547,7 @@ def residual_from_diff(score: AudioScore, diagnostics: dict[str, Any]) -> dict[s
     if score.pitch_chroma < 0.65 or score.f0_contour < 0.65:
         missing.append("pitch/chord contour appears mismatched")
         recommendations.append("change note choices, octave support, or add missing chord tones")
-    if score.spectral_motion < 0.7 or score.modulation < 0.7:
+    if score.spectral_motion < 0.7 or score.centroid_trajectory < 0.72 or score.modulation < 0.7:
         ref_start = diagnostics.get("reference_centroid_start_hz", 0.0)
         ref_end = diagnostics.get("reference_centroid_end_hz", 0.0)
         cand_start = diagnostics.get("candidate_centroid_start_hz", 0.0)

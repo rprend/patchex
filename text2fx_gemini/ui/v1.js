@@ -242,7 +242,73 @@ function agentPanel(id, label) {
   return panel;
 }
 
-function routeRunLog(line) {
+function fileUrlFromTracePath(path) {
+  const match = path.match(/\/ui_runs\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  return `/media/runs/${encodeURIComponent(match[1])}/${match[2].split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function tracePanelId(agent, step) {
+  if (step !== null && step !== undefined) return `${agent}_${step}`;
+  const match = agent.match(/(.+)_step_(\d+)/);
+  return match ? `${match[1]}_${Number(match[2])}` : agent;
+}
+
+async function addTraceFile(line) {
+  const agent = line.match(/\bagent=([^ ]+)/)?.[1] || "trace";
+  const role = line.match(/\brole=([^ ]+)/)?.[1] || "file";
+  const stepMatch = line.match(/\bstep=(\d+)/);
+  const step = stepMatch ? Number(stepMatch[1]) : null;
+  const pathMatch = line.match(/\bpath=(.+)$/);
+  if (!pathMatch) {
+    appendRunLog(line);
+    return;
+  }
+  const path = pathMatch[1];
+  const url = fileUrlFromTracePath(path);
+  const fileName = path.split("/").pop();
+  const panel = agentPanel(tracePanelId(agent, step), agent.replaceAll("_", " "));
+  panel.querySelector(".candidate-axis").textContent = role.replaceAll("_", " ");
+  const log = panel.querySelector(".candidate-log");
+  appendToLog(log, line);
+
+  const trace = document.createElement("details");
+  trace.className = "trace-file";
+  trace.open = role.includes("recommendation") || role.includes("audio_diff") || role.includes("answer");
+  trace.innerHTML = `<summary><span>${role.replaceAll("_", " ")}</span><a href="${url || "#"}" target="_blank">${fileName}</a></summary>`;
+  const body = document.createElement("pre");
+  body.textContent = "loading...";
+  trace.appendChild(body);
+  panel.appendChild(trace);
+
+  if (!url) {
+    body.textContent = path;
+    return;
+  }
+  if (fileName.endsWith(".wav")) {
+    body.remove();
+    const player = document.createElement("audio");
+    player.controls = true;
+    player.src = url;
+    trace.appendChild(player);
+    return;
+  }
+  try {
+    const text = await fetch(url).then((res) => {
+      if (!res.ok) throw new Error(`Could not load ${url}`);
+      return res.text();
+    });
+    body.textContent = text.length > 24000 ? `${text.slice(0, 24000)}\n... [truncated in UI; open artifact for full file]` : text;
+  } catch (error) {
+    body.textContent = error.stack || String(error);
+  }
+}
+
+async function routeRunLog(line) {
+  if (line.startsWith("trace_file")) {
+    await addTraceFile(line);
+    return;
+  }
   const step = parseStepIndex(line);
   const agentMatch = line.match(/\bagent_stage ([a-z_]+)(?: step=(\d+))?/);
   if (agentMatch) {
@@ -265,6 +331,39 @@ function routeRunLog(line) {
   if (line.startsWith("step_complete")) {
     panel.classList.remove("running");
     panel.classList.add("completed");
+  }
+}
+
+async function renderTraceArtifacts(artifacts) {
+  const traceArtifacts = artifacts.filter((artifact) => {
+    const name = artifact.name;
+    return (
+      name.startsWith("codex_") ||
+      name.startsWith("audio_diff_") ||
+      name.match(/^reconstruction_step_\d+_.+\.wav$/) ||
+      name === "mixer_reconstruction.wav" ||
+      name === "simplifier_reconstruction.wav" ||
+      name.startsWith("recommendation_step_") ||
+      name === "recommendation_initial.json" ||
+      name === "source_profile.json" ||
+      name === "layer_analysis.json" ||
+      name.match(/^session_step_\d+_(codex_proposal|accepted)\.json$/)
+    );
+  });
+  for (const artifact of traceArtifacts) {
+    const pseudoPath = `/ui_runs/${artifact.url.split("/")[3]}/${artifact.name}`;
+    const role = artifact.name.startsWith("codex_")
+      ? artifact.name.includes("_prompt") ? "prompt" : "answer"
+      : artifact.name.startsWith("audio_diff") ? "audio_diff"
+        : artifact.name.endsWith(".wav") ? "render"
+        : artifact.name.startsWith("session") ? "session"
+          : artifact.name.startsWith("recommendation") ? "recommendation"
+            : "file";
+    const agent = artifact.name
+      .replace(/^codex_/, "")
+      .replace(/_(prompt|answer)\.txt$/, "")
+      .replace(/\.json$/, "");
+    await addTraceFile(`trace_file agent=${agent} role=${role} path=${pseudoPath}`);
   }
 }
 
@@ -323,6 +422,7 @@ async function loadPastRun(run) {
   });
   renderScoreboard(report);
   renderHistoryTimeline(report.history || []);
+  await renderTraceArtifacts(run.artifacts);
   const scores = report.best_scores || {};
   appendRunLog(`final score: ${Number(scores.final || 0).toFixed(3)}`);
   appendRunLog(`final audio: ${report.final_path || "not recorded"}`);
@@ -419,7 +519,7 @@ async function startAutonomousRun() {
     const events = new EventSource(`/api/reconstructions/${data.run_id}/events`);
     events.onmessage = async (event) => {
       const payload = JSON.parse(event.data);
-      if (payload.type === "log") routeRunLog(payload.line);
+      if (payload.type === "log") await routeRunLog(payload.line);
       if (payload.type === "heartbeat") appendRunLog("heartbeat: reconstruction still running");
       if (payload.type === "done") {
         events.close();
@@ -456,11 +556,19 @@ function renderScoreboard(report) {
     "mel_spectrogram",
     "a_weighted_spectral",
     "envelope",
+    "segment_envelope",
+    "late_energy_ratio",
+    "sustain_coverage",
+    "frontload_balance",
+    "band_envelope_by_time",
     "pitch_chroma",
     "f0_contour",
     "spectral_motion",
+    "centroid_trajectory",
     "spectral_features",
     "transient_onset",
+    "onset_count",
+    "onset_timing",
     "stereo_width",
     "modulation",
     "harmonic_noise",

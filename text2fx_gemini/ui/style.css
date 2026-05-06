@@ -361,6 +361,55 @@ textarea {
   background: #b45353;
 }
 
+.trace-file {
+  margin-top: .7rem;
+  border-top: 1px solid var(--line);
+  background: #fbfcff;
+}
+
+.trace-file summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .65rem .75rem;
+  cursor: pointer;
+  color: var(--text);
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+.trace-file summary span {
+  color: var(--muted);
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.trace-file summary a {
+  color: var(--accent);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.trace-file pre {
+  max-height: 26rem;
+  margin: 0;
+  padding: .8rem;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  background: white;
+  color: #1f2937;
+  font-size: .75rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.trace-file audio {
+  width: calc(100% - 1.5rem);
+  margin: 0 .75rem .75rem;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
