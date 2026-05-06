@@ -163,6 +163,9 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
         notes = layer.get("notes", [])
         if not isinstance(notes, list) or not notes:
             notes = [{"note": synth.get("note", 48), "start": 0.0, "duration": duration, "velocity": 0.7}]
+        waveform = str(synth.get("waveform", "saw")).lower()
+        requested_engine = str(synth.get("engine", "")).lower()
+        engine = requested_engine or "vital"
         sanitized_notes = []
         for note in notes[:MAX_NOTES_PER_LAYER]:
             start = float(np.clip(float(note.get("start", 0.0)), 0.0, duration))
@@ -184,8 +187,8 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                 "width": float(np.clip(float(layer.get("width", 0.6)), 0.0, 1.0)),
                 "notes": sanitized_notes,
                 "synth": {
-                    "waveform": str(synth.get("waveform", "saw")).lower(),
-                    "engine": str(synth.get("engine", "wavetable")).lower(),
+                    "waveform": waveform,
+                    "engine": engine,
                     "wavetable": str(synth.get("wavetable", synth.get("waveform", "saw_stack"))).lower(),
                     "wavetable_position": float(np.clip(float(synth.get("wavetable_position", 0.5)), 0.0, 1.0)),
                     "warp": float(np.clip(float(synth.get("warp", 0.0)), 0.0, 1.0)),
@@ -196,6 +199,7 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                     "detune_cents": float(np.clip(float(synth.get("detune_cents", 8.0)), 0.0, 70.0)),
                     "stereo_spread": float(np.clip(float(synth.get("stereo_spread", 0.55)), 0.0, 1.0)),
                     "sub_level": float(np.clip(float(synth.get("sub_level", 0.15)), 0.0, 1.0)),
+                    "vital_parameters": synth.get("vital_parameters", synth.get("parameters", {})) if isinstance(synth.get("vital_parameters", synth.get("parameters", {})), dict) else {},
                 },
                 "amp_envelope": {
                     "attack": float(np.clip(float(amp.get("attack", 1.2)), 0.001, 4.0)),
@@ -400,6 +404,8 @@ def render_vital_layer(layer: dict[str, Any], duration: float, sr: int) -> np.nd
                 "duration": duration,
                 "output_path": str(output_path),
                 "notes": notes,
+                "parameters": layer.get("synth", {}).get("vital_parameters", {}),
+                "dump_parameters_path": str(tmp_path / "vital_parameters.json"),
             },
         )
         subprocess.run([str(renderer), str(request_path)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30)
@@ -616,9 +622,9 @@ Allowed action for this run: {phase}
 Renderer capabilities:
 - Up to {max_layers} synth layers.
 - Each layer has note events, gain/pan/width, wavetable synth params, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, optional filter.cutoff_points, optional layer gain_points, optional modulation.gate_points, LFO tremolo, chorus_mix, phaser_mix, delay_mix, saturation, EQ, reverb_mix.
-- Synth engine may be engine=vital for the native Vital Audio Unit renderer, or engine=wavetable for the internal fallback.
-- Internal wavetable fields: wavetable=saw_stack|square_saw|formant|digital|triangle|sine, wavetable_position, warp, fm_amount, fm_ratio, blend, voices, detune_cents, stereo_spread, sub_level.
-- Vital layers currently support MIDI notes, velocity, gain automation, width/mix effects after render, and the default Vital AU sound. Prefer engine=vital for primary arp/lead/pad layers when exact synth tone matters.
+- Synth engine defaults to engine=vital for every layer.
+- Vital layers support MIDI notes, velocity, gain automation, width/mix effects after render, and arbitrary Vital AU parameters through synth.vital_parameters. Keys may be Vital parameter display names, identifiers, or numeric AudioUnit parameter addresses; values are raw AU parameter values and will be clipped to the parameter's min/max.
+- Internal wavetable fields are fallback-only: wavetable=saw_stack|square_saw|formant|digital|triangle|sine, wavetable_position, warp, fm_amount, fm_ratio, blend, voices, detune_cents, stereo_spread, sub_level.
 - Each layer can send to session returns through effects.return_send. Returns currently support reverb with id/type/gain_db/decay/width.
 - waveform may be sine, triangle, saw, square, noise, air, or transient for fallback/noise layers.
 - Session has returns and master fields. Preserve them even if empty.
@@ -941,7 +947,7 @@ def add_or_replace_pattern_layer(session: dict[str, Any], constraints: dict[str,
         "width": 0.72,
         "notes": notes,
         "synth": {
-            "engine": "wavetable",
+            "engine": "vital",
             "waveform": "saw",
             "wavetable": "saw_stack",
             "wavetable_position": 0.62,
@@ -1148,7 +1154,7 @@ def main() -> None:
     profile = source_profile(reference_audio, args.sample_rate, args.seconds, beat_grid)
     pattern_info = pattern_constraints(profile, args.sample_rate)
     profile["pattern_constraints"] = pattern_info
-    profile["synth_engine"] = {"active": "internal_wavetable", "vital": vital_status()}
+    profile["synth_engine"] = {"active": "vital_audio_unit", "fallback": "internal_wavetable", "vital": vital_status()}
     source_profile_path = trace_file("analyzer", "source_profile", write_json(args.output_dir / "source_profile.json", profile))
     trace_file("analyzer", "pattern_constraints", write_json(args.output_dir / "pattern_constraints.json", pattern_info))
     print("analysis_start layer_plan", flush=True)

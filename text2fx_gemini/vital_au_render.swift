@@ -14,6 +14,8 @@ struct RenderRequest: Codable {
     let duration: Double
     let notes: [Note]
     let output_path: String
+    let parameters: [String: Float]?
+    let dump_parameters_path: String?
 }
 
 func fourCC(_ text: String) -> OSType {
@@ -66,6 +68,39 @@ guard let unit = loadedUnit else {
 }
 guard let midiUnit = unit as? AVAudioUnitMIDIInstrument else {
     fail("Vital AU did not instantiate as AVAudioUnitMIDIInstrument")
+}
+
+let allParameters = midiUnit.auAudioUnit.parameterTree?.allParameters ?? []
+if let dumpPath = request.dump_parameters_path {
+    let rows = allParameters.map { parameter in
+        [
+            "address": String(parameter.address),
+            "identifier": parameter.identifier,
+            "display_name": parameter.displayName,
+            "min": String(parameter.minValue),
+            "max": String(parameter.maxValue),
+            "value": String(parameter.value),
+        ]
+    }
+    if let data = try? JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted, .sortedKeys]) {
+        try? data.write(to: URL(fileURLWithPath: dumpPath))
+    }
+}
+
+if let parameterValues = request.parameters {
+    var lookup: [String: AUParameter] = [:]
+    for parameter in allParameters {
+        lookup[parameter.identifier.lowercased()] = parameter
+        lookup[parameter.displayName.lowercased()] = parameter
+        lookup[String(parameter.address)] = parameter
+    }
+    for (key, value) in parameterValues {
+        guard let parameter = lookup[key.lowercased()] else {
+            continue
+        }
+        let clipped = min(max(value, parameter.minValue), parameter.maxValue)
+        parameter.value = clipped
+    }
 }
 
 let engine = AVAudioEngine()
