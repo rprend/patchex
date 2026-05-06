@@ -160,6 +160,13 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
         amp = layer.get("amp_envelope", {})
         filt = layer.get("filter", {})
         effects = layer.get("effects", {})
+        compression_payload = effects.get("compression", effects.get("compressor", {}))
+        compression = compression_payload if isinstance(compression_payload, dict) else {}
+        compression_mix = compression.get("mix", compression.get("amount", effects.get("compression_mix", effects.get("compressor_mix", 0.0))))
+        compression_threshold_db = compression.get("threshold_db", effects.get("compression_threshold_db", effects.get("threshold_db", -18.0)))
+        compression_ratio = compression.get("ratio", effects.get("compression_ratio", effects.get("ratio", 2.0)))
+        compression_attack = compression.get("attack", effects.get("compression_attack", effects.get("attack", 0.01)))
+        compression_release = compression.get("release", effects.get("compression_release", effects.get("release", 0.16)))
         notes = layer.get("notes", [])
         if not isinstance(notes, list) or not notes:
             notes = [{"note": synth.get("note", 48), "start": 0.0, "duration": duration, "velocity": 0.7}]
@@ -254,6 +261,11 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                     "low_gain_db": float(np.clip(float(effects.get("low_gain_db", 0.0)), -18.0, 18.0)),
                     "mid_gain_db": float(np.clip(float(effects.get("mid_gain_db", 0.0)), -18.0, 18.0)),
                     "high_gain_db": float(np.clip(float(effects.get("high_gain_db", 0.0)), -18.0, 18.0)),
+                    "compression_mix": float(np.clip(float(compression_mix), 0.0, 1.0)),
+                    "compression_threshold_db": float(np.clip(float(compression_threshold_db), -60.0, 0.0)),
+                    "compression_ratio": float(np.clip(float(compression_ratio), 1.0, 20.0)),
+                    "compression_attack": float(np.clip(float(compression_attack), 0.001, 0.5)),
+                    "compression_release": float(np.clip(float(compression_release), 0.01, 2.0)),
                     "return_send": float(np.clip(float(effects.get("return_send", 0.0)), 0.0, 1.0)),
                 },
             }
@@ -383,6 +395,31 @@ def apply_saturation(stereo: np.ndarray, amount: float) -> np.ndarray:
     return (np.tanh(stereo * drive) / np.tanh(drive)).astype(np.float32)
 
 
+def apply_compressor(stereo: np.ndarray, sr: int, effects: dict[str, Any]) -> np.ndarray:
+    mix = float(effects.get("compression_mix", 0.0))
+    if mix <= 0:
+        return stereo
+    threshold = db_to_amp(float(effects.get("compression_threshold_db", -18.0)))
+    ratio = max(1.0, float(effects.get("compression_ratio", 2.0)))
+    attack = max(0.001, float(effects.get("compression_attack", 0.01)))
+    release = max(0.01, float(effects.get("compression_release", 0.16)))
+    attack_coeff = math.exp(-1.0 / (attack * sr))
+    release_coeff = math.exp(-1.0 / (release * sr))
+    envelope_follow = np.zeros(stereo.shape[1], dtype=np.float32)
+    level = 0.0
+    mono_level = np.max(np.abs(stereo), axis=0)
+    for index, sample_level in enumerate(mono_level):
+        coeff = attack_coeff if sample_level > level else release_coeff
+        level = coeff * level + (1.0 - coeff) * float(sample_level)
+        envelope_follow[index] = level
+    gain = np.ones_like(envelope_follow)
+    over = envelope_follow > threshold
+    compressed_level = threshold + (envelope_follow[over] - threshold) / ratio
+    gain[over] = compressed_level / np.maximum(envelope_follow[over], 1e-8)
+    compressed = stereo * gain[None, :]
+    return (stereo * (1.0 - mix) + compressed * mix).astype(np.float32)
+
+
 def apply_pan_width(stereo: np.ndarray, pan: float, width: float) -> np.ndarray:
     pan = float(np.clip(pan, -1.0, 1.0))
     width = float(np.clip(width, 0.0, 2.0))
@@ -484,6 +521,10 @@ def build_vital_parameters(layer: dict[str, Any]) -> dict[str, float]:
         "Distortion Switch": 1.0 if float(effects.get("saturation", 0.0)) > 0.001 else 0.0,
         "Distortion Drive": float(np.clip(effects.get("saturation", 0.0), 0.0, 1.0)),
         "Distortion Mix": 1.0,
+        "Compressor Switch": 1.0 if float(effects.get("compression_mix", 0.0)) > 0.001 else 0.0,
+        "Compressor Mix": float(np.clip(effects.get("compression_mix", 0.0), 0.0, 1.0)),
+        "Compressor Attack": float(np.clip(effects.get("compression_attack", 0.01) / 0.5, 0.0, 1.0)),
+        "Compressor Release": float(np.clip(effects.get("compression_release", 0.16) / 2.0, 0.0, 1.0)),
         "Reverb Switch": 1.0 if float(effects.get("reverb_mix", 0.0)) > 0.001 else 0.0,
         "Reverb Mix": float(np.clip(effects.get("reverb_mix", 0.0), 0.0, 1.0)),
         "Volume": 0.8,
@@ -611,6 +652,7 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
         stereo *= np.power(10.0, gain_curve / 20.0)[None, :]
         stereo = stereo_layer_eq(stereo, sr, layer["effects"])
         stereo = apply_saturation(stereo, float(layer["effects"].get("saturation", 0.0)))
+        stereo = apply_compressor(stereo, sr, layer["effects"])
         stereo = apply_chorus(stereo, sr, float(layer["effects"].get("chorus_mix", 0.0)), float(layer.get("width", 1.0)))
         stereo = apply_phaser(stereo, sr, float(layer["effects"].get("phaser_mix", 0.0)), float(mod.get("lfo_rate_hz", 0.23)) or 0.23)
         stereo = apply_delay(stereo, sr, float(layer["effects"].get("delay_time", 0.18)), float(layer["effects"].get("delay_mix", 0.0)))
@@ -657,6 +699,8 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     saturation = float(layer["effects"].get("saturation", 0.0))
     if saturation:
         mono = np.tanh(mono * (1.0 + 6.0 * saturation)) / np.tanh(1.0 + 6.0 * saturation)
+    mono_stereo = np.vstack([mono, mono])
+    mono = apply_compressor(mono_stereo, sr, layer["effects"]).mean(axis=0)
     peak = float(np.max(np.abs(mono))) if mono.size else 0.0
     if peak > 1.0:
         mono *= 1.0 / peak
@@ -801,9 +845,9 @@ Allowed action for this run: {phase}
 
 Renderer capabilities:
 - Up to {max_layers} synth layers.
-- Each layer has note events, gain/pan/width, wavetable synth params, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, optional filter.cutoff_points, optional layer gain_points, optional modulation.gate_points, LFO tremolo, chorus_mix, phaser_mix, delay_mix, saturation, EQ, reverb_mix.
+- Each layer has note events, gain/pan/width, wavetable synth params, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, optional filter.cutoff_points, optional layer gain_points, optional modulation.gate_points, LFO tremolo, chorus_mix, phaser_mix, delay_mix, saturation, EQ, compression, and reverb_mix.
 - Synth engine defaults to engine=vital for every layer.
-- Vital layers render through the native Vital AudioUnit path. Normalized JSON controls are active: MIDI notes/velocity, oscillator blend/voices/detune/sub/wavetable position, ADSR envelope, filter cutoff/resonance/drive plus cutoff_points automation, gain_points, gate_points, LFO tremolo, pan/width, chorus/phaser/delay/reverb, saturation, and EQ. Use synth.vital_parameters only for explicit raw Vital AU overrides; keys may be Vital parameter display names, identifiers, or numeric AudioUnit parameter addresses.
+- Vital layers render through the native Vital AudioUnit path. Normalized JSON controls are active: MIDI notes/velocity, oscillator blend/voices/detune/sub/wavetable position, ADSR envelope, filter cutoff/resonance/drive plus cutoff_points automation, gain_points, gate_points, LFO tremolo, pan/width, chorus/phaser/delay/reverb, saturation, compression, and EQ. Use synth.vital_parameters only for explicit raw Vital AU overrides; keys may be Vital parameter display names, identifiers, or numeric AudioUnit parameter addresses.
 - Wavetable fields are renderer controls: wavetable/waveform choose a default Vital wave-frame region, and wavetable_position, warp, fm_amount, fm_ratio, blend, voices, detune_cents, stereo_spread, and sub_level are mapped into Vital oscillator parameters where available.
 - Each layer can send to session returns through effects.return_send. Returns currently support reverb with id/type/gain_db/decay/width.
 - waveform may be sine, triangle, saw, square, noise, air, or transient for fallback/noise layers.
