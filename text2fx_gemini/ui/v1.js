@@ -13,12 +13,19 @@ const statusEl = document.getElementById("serviceStatus");
 const scoreboardEl = document.getElementById("scoreboard");
 const refreshRuns = document.getElementById("refreshRuns");
 const runHistory = document.getElementById("runHistory");
+const comparisonPanel = document.getElementById("comparisonPanel");
+const sourceCompareWaveform = document.getElementById("sourceCompareWaveform");
+const finalCompareWaveform = document.getElementById("finalCompareWaveform");
+const sourceCompareAudio = document.getElementById("sourceCompareAudio");
+const finalCompareAudio = document.getElementById("finalCompareAudio");
 
 let currentFile = null;
 let currentClip = null;
 let wavesurfer = null;
 let regionsPlugin = null;
 let activeRegion = null;
+let sourceCompareWave = null;
+let finalCompareWave = null;
 const CLIP_SECONDS = 5;
 
 function setStatus(text) {
@@ -36,6 +43,51 @@ function appendClipLog(line) {
 
 function appendRunLog(line) {
   appendToLog(runLogEl, line);
+}
+
+function clearComparison() {
+  if (sourceCompareWave) {
+    sourceCompareWave.destroy();
+    sourceCompareWave = null;
+  }
+  if (finalCompareWave) {
+    finalCompareWave.destroy();
+    finalCompareWave = null;
+  }
+  sourceCompareWaveform.innerHTML = "";
+  finalCompareWaveform.innerHTML = "";
+  sourceCompareAudio.removeAttribute("src");
+  finalCompareAudio.removeAttribute("src");
+  comparisonPanel.hidden = true;
+}
+
+function createComparisonWave(container, url, progressColor) {
+  return WaveSurfer.create({
+    container,
+    url,
+    height: 108,
+    waveColor: "#cfdaf2",
+    progressColor,
+    cursorColor: "#262626",
+    cursorWidth: 1,
+    barWidth: 2,
+    barGap: 1,
+    barRadius: 1,
+    normalize: true,
+  });
+}
+
+function renderComparison(sourceUrl, finalUrl) {
+  if (!sourceUrl || !finalUrl) {
+    clearComparison();
+    return;
+  }
+  clearComparison();
+  comparisonPanel.hidden = false;
+  sourceCompareAudio.src = sourceUrl;
+  finalCompareAudio.src = finalUrl;
+  sourceCompareWave = createComparisonWave(sourceCompareWaveform, sourceUrl, "#323a85");
+  finalCompareWave = createComparisonWave(finalCompareWaveform, finalUrl, "#657cc2");
 }
 
 async function api(path, options = {}) {
@@ -73,6 +125,7 @@ async function selectFile(name) {
   stepLogsEl.innerHTML = "";
   clipLogEl.textContent = "";
   runLogEl.textContent = "";
+  clearComparison();
   const url = `/media/references/${encodeURIComponent(name)}`;
   audio.src = url;
   setStatus("Loading");
@@ -254,6 +307,7 @@ async function loadPastRun(run) {
   stepLogsEl.innerHTML = "";
   artifactsEl.innerHTML = "";
   scoreboardEl.innerHTML = "";
+  clearComparison();
   setStatus("Loaded run");
   appendRunLog(`loaded v1 run: ${run.id}`);
   appendRunLog(`status: ${run.status}`);
@@ -303,6 +357,7 @@ async function extractSelectedClip() {
   stepLogsEl.innerHTML = "";
   artifactsEl.innerHTML = "";
   scoreboardEl.innerHTML = "";
+  clearComparison();
   const { start } = selectedRange();
   appendClipLog(`extracting exact clip: ${currentFile} @ ${start.toFixed(2)}s-${(start + CLIP_SECONDS).toFixed(2)}s`);
   try {
@@ -344,6 +399,7 @@ async function startAutonomousRun() {
   stepLogsEl.innerHTML = "";
   artifactsEl.innerHTML = "";
   scoreboardEl.innerHTML = "";
+  clearComparison();
   setStatus("Running");
   startReconstruction.disabled = true;
   appendRunLog(`starting v1 reconstruction for ${currentClip}`);
@@ -426,6 +482,9 @@ function renderScoreboard(report) {
 
 async function renderArtifacts(artifacts) {
   artifactsEl.innerHTML = "";
+  const sourceArtifact = artifacts.find((artifact) => artifact.name === "source_clip.wav");
+  const finalArtifact = artifacts.find((artifact) => artifact.name === "final_reconstruction.wav");
+  renderComparison(sourceArtifact?.url, finalArtifact?.url);
   for (const artifact of artifacts) {
     const item = document.createElement("div");
     item.className = "artifact";

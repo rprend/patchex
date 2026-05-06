@@ -439,6 +439,56 @@ textarea {
   margin-top: .7rem;
 }
 
+.comparison-panel {
+  margin-top: 1rem;
+}
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.comparison-item {
+  min-width: 0;
+  padding: .95rem;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+
+.comparison-head {
+  display: grid;
+  gap: .3rem;
+}
+
+.comparison-head span {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.comparison-head strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.compare-waveform {
+  min-height: 108px;
+  margin: .85rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #f8f9fd;
+}
+
+.comparison-item audio {
+  width: 100%;
+}
+
 .scoreboard {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
@@ -552,6 +602,9 @@ textarea {
 @media (max-width: 860px) {
   .page-header,
   .reference-grid {
+    grid-template-columns: 1fr;
+  }
+  .comparison-grid {
     grid-template-columns: 1fr;
   }
   .panel-head,

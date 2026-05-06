@@ -84,6 +84,26 @@
             <p>Final reconstruction audio, scored report, session JSON, layer analysis, step renders, and raw logs.</p>
           </div>
         </div>
+        <div id="comparisonPanel" class="comparison-panel" hidden>
+          <div class="comparison-grid">
+            <section class="comparison-item">
+              <div class="comparison-head">
+                <span>Source</span>
+                <strong>Selected 5s clip</strong>
+              </div>
+              <div id="sourceCompareWaveform" class="compare-waveform"></div>
+              <audio id="sourceCompareAudio" controls></audio>
+            </section>
+            <section class="comparison-item">
+              <div class="comparison-head">
+                <span>Output</span>
+                <strong>Final reconstruction</strong>
+              </div>
+              <div id="finalCompareWaveform" class="compare-waveform"></div>
+              <audio id="finalCompareAudio" controls></audio>
+            </section>
+          </div>
+        </div>
         <div id="artifacts" class="artifacts"></div>
       </section>
 
