@@ -450,7 +450,13 @@ function stopVoice(code) {
   document.querySelector(`.key[data-code="${code}"]`)?.classList.remove("active");
 }
 
+function isTextEditingTarget(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
 window.addEventListener("keydown", (event) => {
+  if (isTextEditingTarget(event.target)) return;
   if (event.repeat) return;
   const found = KEYBOARD.find(([code]) => code === event.code);
   if (!found) return;
@@ -459,6 +465,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("keyup", (event) => {
+  if (isTextEditingTarget(event.target)) return;
   const found = KEYBOARD.find(([code]) => code === event.code);
   if (!found) return;
   event.preventDefault();
