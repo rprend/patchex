@@ -349,6 +349,7 @@ startRun.addEventListener("click", async () => {
         clip: currentClip,
         prompt: promptBox.value,
         instrument_type: selectedInstrument,
+        target_part: targetPart.value.trim(),
         candidates: 2,
         axis_trials: 1,
       }),

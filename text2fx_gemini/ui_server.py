@@ -303,7 +303,7 @@ def compact_log_line(line: str, state: dict[str, int]) -> str | None:
     return stripped
 
 
-def start_run(reference: str, prompt: str, instrument_type: str, candidates: int, axis_trials: int) -> str:
+def start_run(reference: str, prompt: str, instrument_type: str, candidates: int, axis_trials: int, target_part: str = "") -> str:
     reference_path = safe_reference_path(reference)
     run_id = time.strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
     out_dir = RUNS / run_id
@@ -325,6 +325,8 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
         "--instrument-type",
         instrument_type,
     ]
+    if target_part:
+        cmd.extend(["--target-part", target_part])
     jobs[run_id] = {
         "id": run_id,
         "status": "running",
@@ -468,6 +470,7 @@ class Handler(BaseHTTPRequestHandler):
                     instrument_type=payload["instrument_type"],
                     candidates=int(payload.get("candidates", 4)),
                     axis_trials=int(payload.get("axis_trials", 1)),
+                    target_part=str(payload.get("target_part", "")),
                 )
                 json_response(self, {"run_id": run_id})
                 return

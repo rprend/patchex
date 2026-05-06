@@ -289,22 +289,42 @@ def with_fixed_pattern(recipe: Recipe, pattern: PatternParams) -> Recipe:
     )
 
 
-def fixed_pattern_for_analysis(analysis: dict[str, Any]) -> PatternParams:
+def fixed_pattern_for_analysis(analysis: dict[str, Any], target_prompt: str = "", target_part: str = "") -> PatternParams:
     instrument_type = analysis.get("instrument_type", "lead_synth")
     features = analysis.get("features", {})
     onset_density = float(features.get("onset_density", 2.0))
+    axes_text = " ".join(
+        phrase
+        for values in analysis.get("axes", {}).values()
+        for phrase in values
+    ).lower()
+    explicit_text = f"{target_prompt} {target_part}".lower()
+    intent_text = f"{explicit_text} {axes_text}".lower()
     tempo = 128.0
-    if onset_density > 8.0 or instrument_type == "arp_synth":
+
+    if instrument_type == "pad_synth":
+        is_background_swell = any(word in intent_text for word in ["swelling", "swell", "wash", "background", "behind", "sustained", "soft attack"])
+        explicit_pulsing = any(word in explicit_text for word in ["pulse", "pulsing", "sidechain", "rhythmic", "lfo"])
+        axis_pulsing = any(word in axes_text for word in ["pulse", "pulsing", "sidechain", "rhythmic", "lfo"])
+        if is_background_swell and not explicit_pulsing:
+            steps = [0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5]
+            velocity = [0.78, 0.78, 0.78, 0.78, 0.82, 0.82, 0.82, 0.82, 0.74, 0.74, 0.74, 0.74, 0.80, 0.80, 0.80, 0.80]
+            tempo = 84.0
+        elif explicit_pulsing or axis_pulsing:
+            steps = [0, 0, 0, 0, 5, 5, 5, 5, 7, 7, 7, 7, 5, 5, 5, 5]
+            velocity = [0.82, 0.42, 0.74, 0.38, 0.82, 0.42, 0.74, 0.38, 0.78, 0.40, 0.70, 0.36, 0.78, 0.40, 0.70, 0.36]
+            tempo = 104.0
+        else:
+            steps = [0, 0, 0, 0, 5, 5, 5, 5, 7, 7, 7, 7, 5, 5, 5, 5]
+            velocity = [0.72] * 16
+            tempo = 96.0
+    elif instrument_type == "arp_synth" or (onset_density > 8.0 and "arpeggio" in intent_text):
         steps = [0, 4, 7, 12, 7, 4, 0, -5, 0, 4, 7, 12, 7, 4, 0, -5]
         velocity = [0.9, 0.82, 0.88, 0.84, 0.9, 0.82, 0.88, 0.78, 0.9, 0.82, 0.88, 0.84, 0.9, 0.82, 0.88, 0.78]
         tempo = 132.0
     elif instrument_type == "bass_synth":
         steps = [0, 0, 7, 0, -5, 0, 7, 0, 0, 0, 7, 0, -5, 0, 7, 0]
         velocity = [0.96, 0.0, 0.88, 0.0, 0.9, 0.0, 0.86, 0.0, 0.96, 0.0, 0.88, 0.0, 0.9, 0.0, 0.86, 0.0]
-    elif instrument_type == "pad_synth":
-        steps = [0, 0, 0, 0, 5, 5, 5, 5, 7, 7, 7, 7, 5, 5, 5, 5]
-        velocity = [0.72] * 16
-        tempo = 96.0
     elif instrument_type == "pluck_synth":
         steps = [0, 7, 12, 7, 5, 12, 7, 5, 0, 7, 12, 7, 5, 12, 7, 5]
         velocity = [0.94, 0.8, 0.88, 0.78, 0.9, 0.82, 0.86, 0.76, 0.94, 0.8, 0.88, 0.78, 0.9, 0.82, 0.86, 0.76]
@@ -972,6 +992,7 @@ def main() -> None:
     parser.add_argument("--axis-trials", type=int, default=2)
     parser.add_argument("--candidate-iterations", type=int, default=3)
     parser.add_argument("--instrument-type", choices=["bass_synth", "lead_synth", "pad_synth", "pluck_synth", "arp_synth", "texture_synth"])
+    parser.add_argument("--target-part", default="")
     args = parser.parse_args()
 
     runtime()
@@ -979,6 +1000,8 @@ def main() -> None:
     analysis = analyze_reference(reference_audio, reference_sr)
     if args.instrument_type:
         analysis["instrument_type"] = args.instrument_type
+    if args.target_part:
+        analysis["target_part"] = args.target_part
     target_prompt = args.prompt or phrase_summary(analysis["axes"])
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -987,7 +1010,8 @@ def main() -> None:
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
     proposal_status: dict[str, Any] = {"source": "codex_cli", "codex_path": CODEX_PATH}
     codex_candidates: list[dict[str, Any]] = []
-    fixed_pattern = fixed_pattern_for_analysis(analysis)
+    fixed_pattern = fixed_pattern_for_analysis(analysis, target_prompt=target_prompt, target_part=args.target_part)
+    print(f"fixed_pattern {json.dumps(asdict(fixed_pattern))}", flush=True)
     seed_recipe: Recipe | None = None
 
     results: list[dict[str, Any]] = []
