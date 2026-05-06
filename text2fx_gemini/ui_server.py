@@ -363,8 +363,10 @@ def compact_log_line(line: str, state: dict[str, int]) -> str | None:
         return None
     if stripped.startswith("codex_log "):
         state["suppressed_codex"] = state.get("suppressed_codex", 0) + 1
-        if state["suppressed_codex"] in {1, 25, 100, 500}:
-            return f"codex internal logs hidden from UI ({state['suppressed_codex']} lines); full raw log is saved as an artifact"
+        return None
+    if "FutureWarning:" in stripped or stripped.startswith("warnings.warn(") or "/site-packages/" in stripped:
+        return None
+    if stripped.startswith("codex_prompt_hidden") or stripped.startswith("codex_prompt_path"):
         return None
     if any(pattern.search(stripped) for pattern in IMPORTANT_LOG_PATTERNS):
         return stripped[:1200] + (" ... [truncated]" if len(stripped) > 1200 else "")
@@ -475,8 +477,7 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
                     enqueue_compacted(event_queue, compacted)
         returncode = process.wait()
         if filter_state.get("suppressed_codex"):
-            event_queue.put({"type": "log", "line": f"total Codex internal log lines hidden from UI: {filter_state['suppressed_codex']}"})
-        event_queue.put({"type": "log", "line": f"raw subprocess log saved: {raw_log_path}"})
+            pass
         jobs[run_id]["returncode"] = returncode
         jobs[run_id]["status"] = "completed" if returncode == 0 else "failed"
         if returncode != 0:
@@ -547,8 +548,7 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 4, 
                     enqueue_compacted(event_queue, compacted)
         returncode = process.wait()
         if filter_state.get("suppressed_codex"):
-            event_queue.put({"type": "log", "line": f"total Codex internal log lines hidden from UI: {filter_state['suppressed_codex']}"})
-        event_queue.put({"type": "log", "line": f"raw subprocess log saved: {raw_log_path}"})
+            pass
         reconstruction_jobs[run_id]["returncode"] = returncode
         reconstruction_jobs[run_id]["status"] = "completed" if returncode == 0 else "failed"
         if returncode != 0:

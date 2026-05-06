@@ -26,7 +26,34 @@ let regionsPlugin = null;
 let activeRegion = null;
 let sourceCompareWave = null;
 let finalCompareWave = null;
+let activeRunId = localStorage.getItem("v1ActiveRunId");
 const CLIP_SECONDS = 5;
+const AGENT_NAMES = {
+  analyzer: "Analyzer",
+  layer_builder: "Producer",
+  residual_critic: "Critic",
+  mixer: "Mixer",
+  simplifier: "Simplifier",
+  loss: "Calculate Accuracy",
+  session: "Session",
+};
+const ROLE_NAMES = {
+  source_profile: "Source measurements",
+  prompt: "Prompt",
+  answer: "Agent output",
+  parsed_answer: "Parsed plan",
+  layer_analysis: "Layer plan",
+  recommendation_initial: "Starting recommendation",
+  recommendation: "Recommendation",
+  session_proposal: "Proposed session",
+  accepted_session: "Accepted session",
+  premix_session: "Pre-mix session",
+  mixed_session: "Mixed session",
+  audio_diff: "Accuracy report",
+  winner_audio_diff: "Winning accuracy report",
+  winner_render: "Listen to winning clip",
+  render: "Listen",
+};
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -242,6 +269,21 @@ function agentPanel(id, label) {
   return panel;
 }
 
+function friendlyAgent(agent) {
+  const base = agent.replace(/_step_\d+$/, "");
+  const step = agent.match(/_step_(\d+)/)?.[1];
+  const name = AGENT_NAMES[base] || agent.replaceAll("_", " ");
+  return step === undefined ? name : `${name} ${Number(step) + 1}`;
+}
+
+function friendlyRole(role) {
+  if (role.startsWith("premix_audio_diff")) return "Pre-mix accuracy";
+  if (role.startsWith("premix_render")) return "Listen pre-mix";
+  if (role.startsWith("audio_diff")) return "Accuracy report";
+  if (role.startsWith("render")) return "Listen";
+  return ROLE_NAMES[role] || role.replaceAll("_", " ");
+}
+
 function fileUrlFromTracePath(path) {
   const match = path.match(/\/ui_runs\/([^/]+)\/(.+)$/);
   if (!match) return null;
@@ -257,20 +299,25 @@ function tracePanelId(agent, step) {
 async function addTraceFile(payload) {
   const agent = payload.agent || "trace";
   const role = payload.role || "file";
+  if (agent === "session" && role === "current") return;
   const step = payload.step ?? null;
   const path = payload.path || "";
   const url = payload.url || fileUrlFromTracePath(path);
   const fileName = payload.name || path.split("/").pop();
   const line = payload.line || `trace_file agent=${agent} role=${role} path=${path}`;
-  const panel = agentPanel(tracePanelId(agent, step), agent.replaceAll("_", " "));
-  panel.querySelector(".candidate-axis").textContent = role.replaceAll("_", " ");
+  const panel = agentPanel(tracePanelId(agent, step), friendlyAgent(agent));
+  panel.querySelector(".candidate-axis").textContent = friendlyRole(role);
   const log = panel.querySelector(".candidate-log");
-  appendToLog(log, line);
+  if (role === "layer_analysis") appendToLog(log, "Layer plan ready.");
+  if (role === "session_proposal") appendToLog(log, "Producer wrote a session proposal.");
+  if (role === "mixed_session") appendToLog(log, "Mixer balanced the candidate for scoring.");
+  if (role === "recommendation") appendToLog(log, "Critic wrote the next Producer brief.");
+  if (role === "accepted_session") appendToLog(log, "Accepted as the current best session.");
 
   const trace = document.createElement("details");
   trace.className = "trace-file";
-  trace.open = role.includes("recommendation") || role.includes("audio_diff") || role.includes("answer");
-  trace.innerHTML = `<summary><span>${role.replaceAll("_", " ")}</span><a href="${url || "#"}" target="_blank">${fileName}</a></summary>`;
+  trace.open = fileName.endsWith(".wav") || role.includes("recommendation") || role.includes("winner_audio_diff");
+  trace.innerHTML = `<summary><span>${friendlyRole(role)}</span><a href="${url || "#"}" target="_blank">${fileName}</a></summary>`;
   const body = document.createElement("pre");
   body.textContent = "loading...";
   trace.appendChild(body);
@@ -314,6 +361,10 @@ async function addTraceFile(payload) {
   } catch (error) {
     body.textContent = error.stack || String(error);
   }
+  if (role === "answer" || role === "layer_analysis" || role === "recommendation" || role === "recommendation_initial" || role === "accepted_session" || role === "mixed_session") {
+    panel.classList.remove("running");
+    panel.classList.add("completed");
+  }
 }
 
 async function routeRunLog(line) {
@@ -325,7 +376,7 @@ async function routeRunLog(line) {
     const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
     const codexWon = line.match(/\bcodex_won=([^ ]+)/)?.[1] === "true";
     const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
-    const panel = agentPanel(`loss_${step}`, `loss ${step + 1}`);
+    const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
     appendToLog(panel.querySelector(".candidate-log"), codexWon ? `Codex proposal won pre-mix, then Mixer produced final step score ${score}.` : `Codex proposal lost pre-mix; ${winner} won after Mixer with score ${score}.`);
     panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
     return;
@@ -334,34 +385,51 @@ async function routeRunLog(line) {
     const step = Number(line.match(/\bstep=(\d+)/)?.[1] || 0);
     const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
     const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
-    const panel = agentPanel(`loss_${step}`, `loss ${step + 1}`);
+    const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
     appendToLog(panel.querySelector(".candidate-log"), `Pre-mix candidate winner: ${winner} (${score}); sending to Mixer.`);
     panel.querySelector(".candidate-axis").textContent = `premix ${winner}`;
+    return;
+  }
+  if (line.startsWith("codex_done")) {
+    const agent = line.match(/\bagent=([^ ]+)/)?.[1];
+    if (agent) {
+      const panel = agentPanel(tracePanelId(agent, null), friendlyAgent(agent));
+      panel.classList.remove("running");
+      panel.classList.add("completed");
+    }
     return;
   }
   const step = parseStepIndex(line);
   const agentMatch = line.match(/\bagent_stage ([a-z_]+)(?: step=(\d+))?/);
   if (agentMatch) {
     const id = agentMatch[2] ? `${agentMatch[1]}_${agentMatch[2]}` : agentMatch[1];
-    const panel = agentPanel(id, agentMatch[1].replaceAll("_", " "));
-    appendToLog(panel.querySelector(".candidate-log"), line);
+    const panel = agentPanel(id, friendlyAgent(agentMatch[1]));
     panel.querySelector(".candidate-axis").textContent = "running";
     return;
   }
   if (step === null) {
-    appendRunLog(line);
+    if (!line.includes("/Users/") && !line.startsWith("codex_") && !line.startsWith("analysis_start")) appendRunLog(line);
     return;
   }
-  const panel = agentPanel(`builder_${step}`, `builder ${step + 1}`);
-  appendToLog(panel.querySelector(".candidate-log"), line);
+  const panel = agentPanel(`builder_${step}`, `Producer ${step + 1}`);
+  if (line.includes("candidate=")) appendToLog(panel.querySelector(".candidate-log"), line.replace(`step=${step} `, ""));
   const scoreMatch = line.match(/\bscore=([0-9.]+)/);
   if (scoreMatch) {
     panel.querySelector(".candidate-axis").textContent = `score ${Number(scoreMatch[1]).toFixed(3)}`;
   }
   if (line.startsWith("step_complete")) {
-    panel.classList.remove("running");
-    panel.classList.add("completed");
+    markStepCompleted(step);
   }
+}
+
+function markStepCompleted(step) {
+  [`layer_builder_${step}`, `mixer_${step}`, `loss_${step}`, `residual_critic_${step}`, `builder_${step}`].forEach((id) => {
+    const panel = stepLogsEl.querySelector(`[data-step="${id}"]`);
+    if (panel) {
+      panel.classList.remove("running");
+      panel.classList.add("completed");
+    }
+  });
 }
 
 async function renderTraceArtifacts(artifacts, report = null) {
@@ -384,7 +452,8 @@ async function renderTraceArtifacts(artifacts, report = null) {
     const pseudoPath = `/ui_runs/${artifact.url.split("/")[3]}/${artifact.name}`;
     const role = artifact.name.startsWith("codex_")
       ? artifact.name.includes("_prompt") ? "prompt" : "answer"
-      : artifact.name.startsWith("audio_diff") || artifact.name.startsWith("premix_audio_diff") ? "audio_diff"
+      : artifact.name.startsWith("premix_audio_diff") ? "premix_audio_diff"
+      : artifact.name.startsWith("audio_diff") ? "audio_diff"
         : artifact.name.endsWith(".wav") ? "render"
         : artifact.name.startsWith("session") ? "session"
           : artifact.name.startsWith("recommendation") ? "recommendation"
@@ -402,7 +471,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
     const winner = item.winner;
     const score = Number(item.scores?.final || item.scores || 0);
     const premixWinner = item.premix_winner || winner;
-    const panel = agentPanel(`loss_${step}`, `loss ${step + 1}`);
+    const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
     appendToLog(panel.querySelector(".candidate-log"), premixWinner === "codex" ? `Codex proposal won pre-mix, then Mixer produced final step score ${score.toFixed(3)}.` : `Codex proposal lost pre-mix; ${premixWinner} won after Mixer with score ${score.toFixed(3)}.`);
     panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
     const audioName = item.audio_path?.split("/").pop();
@@ -553,8 +622,7 @@ async function startAutonomousRun() {
   clearComparison();
   setStatus("Running");
   startReconstruction.disabled = true;
-  appendRunLog(`starting v1 reconstruction for ${currentClip}`);
-  appendRunLog("defaults: 5 builder passes, 4 local trials per pass, max 5 layers, mixer pass, simplifier pass");
+  appendRunLog("Starting reconstruction. The timeline below will show each agent, accuracy pass, and audio preview.");
   try {
     const data = await api("/api/reconstruct", {
       method: "POST",
@@ -566,8 +634,40 @@ async function startAutonomousRun() {
         max_layers: 5,
       }),
     });
-    appendRunLog(`run id: ${data.run_id}`);
-    const events = new EventSource(`/api/reconstructions/${data.run_id}/events`);
+    appendRunLog("Run started. You can refresh this page and it will reconnect.");
+    activeRunId = data.run_id;
+    localStorage.setItem("v1ActiveRunId", activeRunId);
+    attachReconstructionEvents(data.run_id);
+  } catch (error) {
+    setStatus("Run failed");
+    startReconstruction.disabled = false;
+    appendRunLog(error.stack || String(error));
+  }
+}
+
+async function resumeActiveRun() {
+  if (!activeRunId) return;
+  try {
+    const job = await api(`/api/reconstructions/${activeRunId}`);
+    if (job.status !== "running") {
+      localStorage.removeItem("v1ActiveRunId");
+      activeRunId = null;
+      return;
+    }
+    setStatus("Running");
+    startReconstruction.disabled = true;
+    appendRunLog(`Reconnected to active V1 run ${activeRunId}.`);
+    await renderArtifacts(job.artifacts);
+    await renderTraceArtifacts(job.artifacts);
+    attachReconstructionEvents(activeRunId);
+  } catch (_error) {
+    localStorage.removeItem("v1ActiveRunId");
+    activeRunId = null;
+  }
+}
+
+function attachReconstructionEvents(runId) {
+    const events = new EventSource(`/api/reconstructions/${runId}/events`);
     events.onmessage = async (event) => {
       const payload = JSON.parse(event.data);
       if (payload.type === "trace_file") await addTraceFile(payload);
@@ -577,6 +677,7 @@ async function startAutonomousRun() {
         events.close();
         setStatus(payload.status);
         startReconstruction.disabled = false;
+        localStorage.removeItem("v1ActiveRunId");
         appendRunLog(`run ${payload.status} with return code ${payload.returncode}`);
         if (payload.status !== "completed") {
           stepLogsEl.querySelectorAll(".candidate-panel.running").forEach((panel) => {
@@ -584,17 +685,12 @@ async function startAutonomousRun() {
             panel.classList.add("failed");
           });
         }
-        const job = await api(`/api/reconstructions/${data.run_id}`);
+        const job = await api(`/api/reconstructions/${runId}`);
         await renderArtifacts(job.artifacts);
         loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
       }
     };
     events.onerror = () => appendRunLog("event stream error; check server process");
-  } catch (error) {
-    setStatus("Run failed");
-    startReconstruction.disabled = false;
-    appendRunLog(error.stack || String(error));
-  }
 }
 
 startReconstruction.addEventListener("click", extractSelectedClip);
@@ -674,7 +770,7 @@ refreshRuns.addEventListener("click", () => {
   loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
 });
 
-Promise.all([loadFiles(), loadRuns()]).catch((error) => {
+Promise.all([loadFiles(), loadRuns()]).then(resumeActiveRun).catch((error) => {
   setStatus("Error");
   runLogEl.textContent = error.stack || String(error);
 });

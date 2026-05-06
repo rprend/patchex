@@ -290,26 +290,24 @@ textarea {
 
 .candidate-logs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  border-top: 1px solid var(--line);
-  border-left: 1px solid var(--line);
+  grid-template-columns: 1fr;
+  gap: 1rem;
   margin-top: 1rem;
 }
 
 .candidate-panel {
-  min-height: 16rem;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  min-height: 0;
+  border: 1px solid var(--line);
   background: white;
 }
 
 .candidate-head {
-  min-height: 4.25rem;
+  min-height: 3.4rem;
   display: flex;
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
-  padding: .8rem;
+  padding: .7rem .8rem;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -325,13 +323,12 @@ textarea {
   display: block;
   margin-top: .15rem;
   color: var(--accent);
-  font-family: "Newsreader", ui-serif, Georgia, serif;
-  font-size: 1.25rem;
-  font-weight: 500;
+  font-size: .95rem;
+  font-weight: 650;
 }
 
 .candidate-log {
-  height: 13rem;
+  max-height: 8rem;
   overflow: auto;
   margin: 0;
   padding: .8rem;
@@ -362,7 +359,7 @@ textarea {
 }
 
 .trace-file {
-  margin-top: .7rem;
+  margin-top: 0;
   border-top: 1px solid var(--line);
   background: #fbfcff;
 }
@@ -393,7 +390,7 @@ textarea {
 }
 
 .trace-file pre {
-  max-height: 26rem;
+  max-height: 18rem;
   margin: 0;
   padding: .8rem;
   overflow: auto;
