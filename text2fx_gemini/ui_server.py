@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import shutil
 import subprocess
 import threading
@@ -27,6 +28,37 @@ FFMPEG = shutil.which("ffmpeg")
 
 jobs: dict[str, dict] = {}
 analysis_jobs: dict[str, dict] = {}
+
+NOISY_LOG_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r"\bwarn(ing)?\b",
+        r"futurewarning",
+        r"deprecationwarning",
+        r"^\s*\[?debug\]?",
+        r"^\s*\[?trace\]?",
+        r"token",
+        r"rate limit header",
+        r"rust_log",
+        r"telemetry",
+    ]
+]
+
+IMPORTANT_LOG_PATTERNS = [
+    re.compile(pattern)
+    for pattern in [
+        r"^codex_start",
+        r"^codex_done",
+        r"^codex_prompt_path",
+        r"^candidate=",
+        r"^wrote ",
+        r"^analysis ",
+        r"^Traceback",
+        r"^RuntimeError",
+        r"^ValueError",
+        r"^FileNotFoundError",
+    ]
+]
 
 
 def json_response(handler: BaseHTTPRequestHandler, payload: dict, status: int = 200) -> None:
@@ -243,6 +275,39 @@ def generate_clip_description_with_retry(client, contents, attempts: int = 4):
     raise RuntimeError("Gemini clip analysis failed after retries.") from last_error
 
 
+def compact_log_line(line: str, state: dict[str, int]) -> str | None:
+    stripped = line.rstrip()
+    if not stripped:
+        return None
+    if stripped == "codex_prompt_begin":
+        state["in_prompt"] = 1
+        state["prompt_lines"] = 0
+        return "codex_prompt_begin (full prompt saved to prompt_path artifact)"
+    if stripped == "codex_prompt_end":
+        skipped = state.get("prompt_lines", 0)
+        state["in_prompt"] = 0
+        state["prompt_lines"] = 0
+        return f"codex_prompt_end ({skipped} prompt lines hidden from UI)"
+    if state.get("in_prompt"):
+        state["prompt_lines"] = state.get("prompt_lines", 0) + 1
+        return None
+    if stripped.startswith("codex_log "):
+        message = stripped.split(" ", 4)[-1] if len(stripped.split(" ", 4)) >= 5 else stripped
+        if any(pattern.search(message) for pattern in NOISY_LOG_PATTERNS):
+            state["suppressed_codex"] = state.get("suppressed_codex", 0) + 1
+            if state["suppressed_codex"] in {1, 25, 100, 500}:
+                return f"suppressed {state['suppressed_codex']} noisy Codex log lines; full raw log is saved as an artifact"
+            return None
+        if len(stripped) > 600:
+            return stripped[:600] + " ... [truncated]"
+        return stripped
+    if any(pattern.search(stripped) for pattern in IMPORTANT_LOG_PATTERNS):
+        return stripped[:1200] + (" ... [truncated]" if len(stripped) > 1200 else "")
+    if len(stripped) > 600:
+        return stripped[:600] + " ... [truncated]"
+    return stripped
+
+
 def start_run(reference: str, prompt: str, instrument_type: str, candidates: int, axis_trials: int) -> str:
     reference_path = safe_reference_path(reference)
     run_id = time.strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
@@ -277,6 +342,8 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
     def worker() -> None:
         env = os.environ.copy()
         load_secrets_into_env(env)
+        raw_log_path = out_dir / "raw_subprocess.log"
+        filter_state = {"in_prompt": 0, "prompt_lines": 0, "suppressed_codex": 0}
         process = subprocess.Popen(
             cmd,
             cwd=str(WORKSPACE),
@@ -288,9 +355,17 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
         )
         jobs[run_id]["pid"] = process.pid
         assert process.stdout is not None
-        for line in process.stdout:
-            event_queue.put({"type": "log", "line": line.rstrip()})
+        with raw_log_path.open("w") as raw_log:
+            for line in process.stdout:
+                raw_log.write(line)
+                raw_log.flush()
+                compacted = compact_log_line(line, filter_state)
+                if compacted is not None:
+                    event_queue.put({"type": "log", "line": compacted})
         returncode = process.wait()
+        if filter_state.get("suppressed_codex"):
+            event_queue.put({"type": "log", "line": f"total noisy Codex log lines suppressed from UI: {filter_state['suppressed_codex']}"})
+        event_queue.put({"type": "log", "line": f"raw subprocess log saved: {raw_log_path}"})
         jobs[run_id]["returncode"] = returncode
         jobs[run_id]["status"] = "completed" if returncode == 0 else "failed"
         event_queue.put({"type": "done", "status": jobs[run_id]["status"], "returncode": returncode})

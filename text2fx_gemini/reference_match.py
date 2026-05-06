@@ -801,9 +801,12 @@ def codex_generate_candidate_recipe(
     prompt_path.write_text(prompt)
     print(f"codex_start candidate={candidate_index} axis={axis} iteration={iteration}", flush=True)
     print(f"codex_prompt_path {prompt_path}", flush=True)
-    print("codex_prompt_begin", flush=True)
-    print(prompt, flush=True)
-    print("codex_prompt_end", flush=True)
+    if os.environ.get("PATCHEX_STREAM_FULL_PROMPTS") == "1":
+        print("codex_prompt_begin", flush=True)
+        print(prompt, flush=True)
+        print("codex_prompt_end", flush=True)
+    else:
+        print(f"codex_prompt_hidden candidate={candidate_index} axis={axis} iteration={iteration} bytes={len(prompt.encode())}", flush=True)
     process = subprocess.Popen(
         [
             codex_path,
@@ -916,9 +919,12 @@ def codex_synthesize_patch(output_dir: Path, analysis: dict[str, Any], results: 
     prompt_path.write_text(prompt)
     print("codex_start synthesis", flush=True)
     print(f"codex_prompt_path {prompt_path}", flush=True)
-    print("codex_prompt_begin", flush=True)
-    print(prompt, flush=True)
-    print("codex_prompt_end", flush=True)
+    if os.environ.get("PATCHEX_STREAM_FULL_PROMPTS") == "1":
+        print("codex_prompt_begin", flush=True)
+        print(prompt, flush=True)
+        print("codex_prompt_end", flush=True)
+    else:
+        print(f"codex_prompt_hidden synthesis bytes={len(prompt.encode())}", flush=True)
     process = subprocess.Popen(
         [
             codex_path,
