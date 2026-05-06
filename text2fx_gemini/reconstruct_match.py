@@ -164,6 +164,20 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
         if not isinstance(notes, list) or not notes:
             notes = [{"note": synth.get("note", 48), "start": 0.0, "duration": duration, "velocity": 0.7}]
         waveform = str(synth.get("waveform", "saw")).lower()
+        wavetable_name = str(synth.get("wavetable", synth.get("waveform", "saw_stack"))).lower()
+        default_wavetable_position = {
+            "sine": 0.0,
+            "triangle": 0.22,
+            "tri": 0.22,
+            "digital": 0.38,
+            "formant": 0.45,
+            "saw": 0.55,
+            "saw_stack": 0.62,
+            "square_saw": 0.74,
+            "square": 0.82,
+            "noise": 0.95,
+            "air": 0.95,
+        }.get(wavetable_name, 0.5)
         requested_engine = str(synth.get("engine", "")).lower()
         engine = requested_engine or "vital"
         sanitized_notes = []
@@ -189,8 +203,8 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                 "synth": {
                     "waveform": waveform,
                     "engine": engine,
-                    "wavetable": str(synth.get("wavetable", synth.get("waveform", "saw_stack"))).lower(),
-                    "wavetable_position": float(np.clip(float(synth.get("wavetable_position", 0.5)), 0.0, 1.0)),
+                    "wavetable": wavetable_name,
+                    "wavetable_position": float(np.clip(float(synth.get("wavetable_position", default_wavetable_position)), 0.0, 1.0)),
                     "warp": float(np.clip(float(synth.get("warp", 0.0)), 0.0, 1.0)),
                     "fm_amount": float(np.clip(float(synth.get("fm_amount", 0.0)), 0.0, 1.0)),
                     "fm_ratio": float(np.clip(float(synth.get("fm_ratio", 2.0)), 0.25, 12.0)),
@@ -358,6 +372,132 @@ def layer_eq(audio: np.ndarray, sr: int, effects: dict[str, Any]) -> np.ndarray:
     ).astype(np.float32)
 
 
+def stereo_layer_eq(stereo: np.ndarray, sr: int, effects: dict[str, Any]) -> np.ndarray:
+    return np.vstack([layer_eq(stereo[0], sr, effects), layer_eq(stereo[1], sr, effects)]).astype(np.float32)
+
+
+def apply_saturation(stereo: np.ndarray, amount: float) -> np.ndarray:
+    if amount <= 0:
+        return stereo
+    drive = 1.0 + 6.0 * float(amount)
+    return (np.tanh(stereo * drive) / np.tanh(drive)).astype(np.float32)
+
+
+def apply_pan_width(stereo: np.ndarray, pan: float, width: float) -> np.ndarray:
+    pan = float(np.clip(pan, -1.0, 1.0))
+    width = float(np.clip(width, 0.0, 2.0))
+    mid = 0.5 * (stereo[0] + stereo[1])
+    side = 0.5 * (stereo[0] - stereo[1]) * width
+    widened = np.vstack([mid + side, mid - side])
+    angle = (pan + 1.0) * math.pi * 0.25
+    left_gain = math.cos(angle) * math.sqrt(2.0)
+    right_gain = math.sin(angle) * math.sqrt(2.0)
+    widened[0] *= left_gain
+    widened[1] *= right_gain
+    return widened.astype(np.float32)
+
+
+def apply_chorus(stereo: np.ndarray, sr: int, mix: float, width: float) -> np.ndarray:
+    if mix <= 0:
+        return stereo
+    delay = max(1, int(0.012 * sr))
+    if stereo.shape[1] <= delay:
+        return stereo
+    delayed = np.zeros_like(stereo)
+    delayed[0, delay:] = stereo[1, :-delay]
+    delayed[1, delay:] = -stereo[0, :-delay]
+    return (stereo * (1.0 - mix) + delayed * mix * max(0.1, width)).astype(np.float32)
+
+
+def apply_stereo_reverb(stereo: np.ndarray, sr: int, mix: float) -> np.ndarray:
+    if mix <= 0:
+        return stereo
+    tail = np.zeros_like(stereo)
+    samples = stereo.shape[1]
+    delays = [int(sr * 0.083), int(sr * 0.137), int(sr * 0.211)]
+    for delay_samples in delays:
+        if delay_samples < samples:
+            tail[:, delay_samples:] += stereo[:, :-delay_samples] * (0.35 / len(delays))
+    return (stereo * (1.0 - mix) + tail * mix).astype(np.float32)
+
+
+def hz_to_vital_norm(hz: float) -> float:
+    hz = float(np.clip(hz, 20.0, 20000.0))
+    return float(np.clip((math.log(hz) - math.log(20.0)) / (math.log(20000.0) - math.log(20.0)), 0.0, 1.0))
+
+
+def seconds_to_vital_norm(seconds: float) -> float:
+    seconds = max(0.0, float(seconds))
+    return float(np.clip(math.log1p(seconds * 20.0) / math.log1p(80.0), 0.0, 1.0))
+
+
+def build_vital_parameters(layer: dict[str, Any]) -> dict[str, float]:
+    synth = layer.get("synth", {})
+    amp = layer.get("amp_envelope", {})
+    filt = layer.get("filter", {})
+    effects = layer.get("effects", {})
+    waveform_positions = {
+        "sine": 0.0,
+        "triangle": 0.22,
+        "tri": 0.22,
+        "saw": 0.55,
+        "saw_stack": 0.62,
+        "square": 0.82,
+        "square_saw": 0.74,
+        "digital": 0.38,
+        "formant": 0.45,
+        "noise": 0.95,
+        "air": 0.95,
+    }
+    wave_position = float(synth.get("wavetable_position", waveform_positions.get(str(synth.get("waveform", "saw")), 0.55)))
+    stereo_spread = float(synth.get("stereo_spread", layer.get("width", 1.0)))
+    warp = float(synth.get("warp", 0.0))
+    fm_amount = float(synth.get("fm_amount", 0.0))
+    params: dict[str, float] = {
+        "Oscillator 1 Switch": 1.0,
+        "Oscillator 1 Level": float(np.clip(synth.get("blend", 0.8), 0.0, 1.0)),
+        "Oscillator 1 Blend": float(np.clip(wave_position, 0.0, 1.0)),
+        "Oscillator 1 Wave Frame": float(np.clip(wave_position, 0.0, 1.0)),
+        "Oscillator 1 Unison Voices": float(np.clip(int(synth.get("voices", 1)) - 1, 0, 15)),
+        "Oscillator 1 Unison Detune": float(np.clip(float(synth.get("detune_cents", 0.0)) / 50.0, 0.0, 1.0)),
+        "Oscillator 1 Stereo Spread": float(np.clip(stereo_spread, 0.0, 1.0)),
+        "Oscillator 1 Distortion Amount": float(np.clip(max(warp, fm_amount), 0.0, 1.0)),
+        "Oscillator 1 Frequency Morph Amount": float(np.clip(fm_amount, 0.0, 1.0)),
+        "Oscillator 1 Frequency Morph Spread": float(np.clip(float(synth.get("fm_ratio", 2.0)) / 12.0, 0.0, 1.0)),
+        "Oscillator 1 Pan": float(np.clip(0.5 + 0.5 * float(layer.get("pan", 0.0)), 0.0, 1.0)),
+        "Oscillator 2 Switch": 1.0 if float(synth.get("sub_level", 0.0)) > 0.001 else 0.0,
+        "Oscillator 2 Level": float(np.clip(synth.get("sub_level", 0.0), 0.0, 1.0)),
+        "Oscillator 2 Transpose": 36.0,
+        "Envelope 1 Attack": seconds_to_vital_norm(float(amp.get("attack", 0.01))),
+        "Envelope 1 Decay": seconds_to_vital_norm(float(amp.get("decay", 0.2))),
+        "Envelope 1 Sustain": float(np.clip(amp.get("sustain", 0.75), 0.0, 1.0)),
+        "Envelope 1 Release": seconds_to_vital_norm(float(amp.get("release", 0.2))),
+        "Filter 1 Switch": 1.0,
+        "Filter 1 Cutoff": hz_to_vital_norm(float(filt.get("cutoff_end_hz", filt.get("cutoff_start_hz", 1200.0)))),
+        "Filter 1 Resonance": float(np.clip(filt.get("resonance", 0.1), 0.0, 1.0)),
+        "Filter 1 Drive": float(np.clip(filt.get("drive", 0.0), 0.0, 1.0)),
+        "Filter 1 Mix": 1.0,
+        "Chorus Switch": 1.0 if float(effects.get("chorus_mix", 0.0)) > 0.001 else 0.0,
+        "Chorus Mix": float(np.clip(effects.get("chorus_mix", 0.0), 0.0, 1.0)),
+        "Delay Switch": 1.0 if float(effects.get("delay_mix", 0.0)) > 0.001 else 0.0,
+        "Delay Mix": float(np.clip(effects.get("delay_mix", 0.0), 0.0, 1.0)),
+        "Distortion Switch": 1.0 if float(effects.get("saturation", 0.0)) > 0.001 else 0.0,
+        "Distortion Drive": float(np.clip(effects.get("saturation", 0.0), 0.0, 1.0)),
+        "Distortion Mix": 1.0,
+        "Reverb Switch": 1.0 if float(effects.get("reverb_mix", 0.0)) > 0.001 else 0.0,
+        "Reverb Mix": float(np.clip(effects.get("reverb_mix", 0.0), 0.0, 1.0)),
+        "Volume": 0.8,
+    }
+    explicit = synth.get("vital_parameters", {})
+    if isinstance(explicit, dict):
+        for key, value in explicit.items():
+            try:
+                params[str(key)] = float(value)
+            except (TypeError, ValueError):
+                continue
+    return params
+
+
 def apply_delay(stereo: np.ndarray, sr: int, delay_time: float, mix: float) -> np.ndarray:
     if mix <= 0:
         return stereo
@@ -404,7 +544,7 @@ def render_vital_layer(layer: dict[str, Any], duration: float, sr: int) -> np.nd
                 "duration": duration,
                 "output_path": str(output_path),
                 "notes": notes,
-                "parameters": layer.get("synth", {}).get("vital_parameters", {}),
+                "parameters": build_vital_parameters(layer),
                 "dump_parameters_path": str(tmp_path / "vital_parameters.json"),
             },
         )
@@ -424,19 +564,27 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     synth = layer["synth"]
     if synth.get("engine") == "vital":
         stereo = render_vital_layer(layer, duration, sr)
+        mod = layer["modulation"]
+        filt = layer["filter"]
         gain_curve = automation_curve(layer.get("gain_points", [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}]), "db", samples, duration)
+        gate_curve = automation_curve(mod.get("gate_points", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}]), "level", samples, duration)
+        cutoff_curve = automation_curve(filt.get("cutoff_points", [{"time": 0.0, "hz": filt["cutoff_start_hz"]}, {"time": duration, "hz": filt["cutoff_end_hz"]}]), "hz", samples, duration)
+        for channel in range(2):
+            stereo[channel] = moving_lowpass(stereo[channel].astype(np.float32), sr, filt["cutoff_start_hz"], filt["cutoff_end_hz"], filt["resonance"], cutoff_curve)
+        if float(mod.get("lfo_depth", 0.0)) > 0 and float(mod.get("lfo_rate_hz", 0.0)) > 0:
+            t = np.arange(samples) / sr
+            tremolo = 1.0 + float(mod["lfo_depth"]) * 0.15 * np.sin(2.0 * np.pi * float(mod["lfo_rate_hz"]) * t)
+            stereo *= tremolo[None, :].astype(np.float32)
+        stereo *= gate_curve[None, :]
         stereo *= np.power(10.0, gain_curve / 20.0)[None, :]
-        stereo = apply_phaser(stereo, sr, float(layer["effects"].get("phaser_mix", 0.0)), float(layer["modulation"].get("lfo_rate_hz", 0.23)) or 0.23)
+        stereo = stereo_layer_eq(stereo, sr, layer["effects"])
+        stereo = apply_saturation(stereo, float(layer["effects"].get("saturation", 0.0)))
+        stereo = apply_chorus(stereo, sr, float(layer["effects"].get("chorus_mix", 0.0)), float(layer.get("width", 1.0)))
+        stereo = apply_phaser(stereo, sr, float(layer["effects"].get("phaser_mix", 0.0)), float(mod.get("lfo_rate_hz", 0.23)) or 0.23)
         stereo = apply_delay(stereo, sr, float(layer["effects"].get("delay_time", 0.18)), float(layer["effects"].get("delay_mix", 0.0)))
+        stereo = apply_pan_width(stereo, float(layer.get("pan", 0.0)), float(layer.get("width", 1.0)))
         stereo *= db_to_amp(layer["gain_db"])
-        reverb_mix = layer["effects"]["reverb_mix"]
-        if reverb_mix > 0:
-            tail = np.zeros_like(stereo)
-            delays = [int(sr * 0.083), int(sr * 0.137), int(sr * 0.211)]
-            for delay_samples in delays:
-                if delay_samples < samples:
-                    tail[:, delay_samples:] += stereo[:, :-delay_samples] * (0.35 / len(delays))
-            stereo = stereo * (1.0 - reverb_mix) + tail * reverb_mix
+        stereo = apply_stereo_reverb(stereo, sr, float(layer["effects"].get("reverb_mix", 0.0)))
         return stereo.astype(np.float32)
     mono = np.zeros(samples, dtype=np.float32)
     amp = layer["amp_envelope"]
@@ -623,8 +771,8 @@ Renderer capabilities:
 - Up to {max_layers} synth layers.
 - Each layer has note events, gain/pan/width, wavetable synth params, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, optional filter.cutoff_points, optional layer gain_points, optional modulation.gate_points, LFO tremolo, chorus_mix, phaser_mix, delay_mix, saturation, EQ, reverb_mix.
 - Synth engine defaults to engine=vital for every layer.
-- Vital layers support MIDI notes, velocity, gain automation, width/mix effects after render, and arbitrary Vital AU parameters through synth.vital_parameters. Keys may be Vital parameter display names, identifiers, or numeric AudioUnit parameter addresses; values are raw AU parameter values and will be clipped to the parameter's min/max.
-- Internal wavetable fields are fallback-only: wavetable=saw_stack|square_saw|formant|digital|triangle|sine, wavetable_position, warp, fm_amount, fm_ratio, blend, voices, detune_cents, stereo_spread, sub_level.
+- Vital layers render through the native Vital AudioUnit path. Normalized JSON controls are active: MIDI notes/velocity, oscillator blend/voices/detune/sub/wavetable position, ADSR envelope, filter cutoff/resonance/drive plus cutoff_points automation, gain_points, gate_points, LFO tremolo, pan/width, chorus/phaser/delay/reverb, saturation, and EQ. Use synth.vital_parameters only for explicit raw Vital AU overrides; keys may be Vital parameter display names, identifiers, or numeric AudioUnit parameter addresses.
+- Wavetable fields are renderer controls: wavetable/waveform choose a default Vital wave-frame region, and wavetable_position, warp, fm_amount, fm_ratio, blend, voices, detune_cents, stereo_spread, and sub_level are mapped into Vital oscillator parameters where available.
 - Each layer can send to session returns through effects.return_send. Returns currently support reverb with id/type/gain_db/decay/width.
 - waveform may be sine, triangle, saw, square, noise, air, or transient for fallback/noise layers.
 - Session has returns and master fields. Preserve them even if empty.
