@@ -797,8 +797,14 @@ def codex_generate_candidate_recipe(
     codex_path = require_codex_path()
     prompt_path = output_dir / f"codex_candidate_{candidate_index:03d}_{axis}_iter_{iteration:02d}_prompt.txt"
     answer_path = output_dir / f"codex_candidate_{candidate_index:03d}_{axis}_iter_{iteration:02d}_answer.txt"
-    prompt_path.write_text(codex_recipe_prompt(analysis, target_prompt, instrument_type, fixed_pattern, candidate_index, axis, objective, prior_recipe, benchmark_history))
-    completed = subprocess.run(
+    prompt = codex_recipe_prompt(analysis, target_prompt, instrument_type, fixed_pattern, candidate_index, axis, objective, prior_recipe, benchmark_history)
+    prompt_path.write_text(prompt)
+    print(f"codex_start candidate={candidate_index} axis={axis} iteration={iteration}", flush=True)
+    print(f"codex_prompt_path {prompt_path}", flush=True)
+    print("codex_prompt_begin", flush=True)
+    print(prompt, flush=True)
+    print("codex_prompt_end", flush=True)
+    process = subprocess.Popen(
         [
             codex_path,
             "exec",
@@ -809,16 +815,28 @@ def codex_generate_candidate_recipe(
             str(Path.cwd()),
             "-",
         ],
-        input=prompt_path.read_text(),
-        text=True,
-        check=True,
-        timeout=120,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
     )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    process.stdin.write(prompt)
+    process.stdin.close()
+    for line in process.stdout:
+        print(f"codex_log candidate={candidate_index} axis={axis} iteration={iteration} {line.rstrip()}", flush=True)
+    try:
+        returncode = process.wait(timeout=120)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        raise RuntimeError(f"Codex candidate {candidate_index} iteration {iteration} timed out.")
+    if returncode != 0:
+        raise RuntimeError(f"Codex candidate {candidate_index} iteration {iteration} failed with return code {returncode}.")
+    print(f"codex_done candidate={candidate_index} axis={axis} iteration={iteration} answer_path={answer_path}", flush=True)
     answer = answer_path.read_text()
     if not answer.strip():
-        raise RuntimeError(f"Codex candidate {candidate_index} iteration {iteration} returned an empty answer. stdout={completed.stdout} stderr={completed.stderr}")
+        raise RuntimeError(f"Codex candidate {candidate_index} iteration {iteration} returned an empty answer.")
     return with_fixed_pattern(sanitize_recipe_payload(extract_json_object(answer)), fixed_pattern), {
         "used": True,
         "candidate_index": candidate_index,
@@ -887,14 +905,21 @@ def codex_synthesize_patch(output_dir: Path, analysis: dict[str, Any], results: 
         {"axis": item.get("axis"), "scores": item["scores"], "recipe": recipe_to_json(item["recipe"])}
         for item in results[:8]
     ]
-    prompt_path.write_text(
+    prompt = (
         "You are synthesizing a playable synth patch from axis-specific candidate results.\n"
         "Return ONLY JSON matching the recipe shape. Preserve playable keyboard mapping.\n\n"
         f"Analysis:\n{json.dumps(analysis, indent=2)}\n\n"
         f"Top candidates:\n{json.dumps(top_payload, indent=2)}\n\n"
         f"Merged candidate recipe to improve:\n{json.dumps(recipe_to_json(merged_recipe), indent=2)}\n",
     )
-    completed = subprocess.run(
+    prompt = "".join(prompt)
+    prompt_path.write_text(prompt)
+    print("codex_start synthesis", flush=True)
+    print(f"codex_prompt_path {prompt_path}", flush=True)
+    print("codex_prompt_begin", flush=True)
+    print(prompt, flush=True)
+    print("codex_prompt_end", flush=True)
+    process = subprocess.Popen(
         [
             codex_path,
             "exec",
@@ -905,16 +930,28 @@ def codex_synthesize_patch(output_dir: Path, analysis: dict[str, Any], results: 
             str(Path.cwd()),
             "-",
         ],
-        input=prompt_path.read_text(),
-        text=True,
-        check=True,
-        timeout=90,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
     )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    process.stdin.write(prompt)
+    process.stdin.close()
+    for line in process.stdout:
+        print(f"codex_log synthesis {line.rstrip()}", flush=True)
+    try:
+        returncode = process.wait(timeout=90)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        raise RuntimeError("Codex synthesis timed out.")
+    if returncode != 0:
+        raise RuntimeError(f"Codex synthesis failed with return code {returncode}.")
+    print(f"codex_done synthesis answer_path={answer_path}", flush=True)
     answer = answer_path.read_text()
     if not answer.strip():
-        raise RuntimeError(f"Codex synthesis returned an empty answer. stdout={completed.stdout} stderr={completed.stderr}")
+        raise RuntimeError("Codex synthesis returned an empty answer.")
     return sanitize_recipe_payload(extract_json_object(answer)), {"used": True, "answer_path": str(answer_path), "prompt_path": str(prompt_path)}
 
 
