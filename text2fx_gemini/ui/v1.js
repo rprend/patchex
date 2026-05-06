@@ -39,7 +39,7 @@ const AGENT_NAMES = {
 };
 const ROLE_NAMES = {
   source_profile: "Source measurements",
-  prompt: "Prompt",
+  prompt: "Agent instructions",
   answer: "Agent output",
   parsed_answer: "Parsed plan",
   layer_analysis: "Layer plan",
@@ -252,6 +252,7 @@ function parseStepIndex(line) {
 function agentPanel(id, label) {
   let panel = stepLogsEl.querySelector(`[data-step="${id}"]`);
   if (panel) return panel;
+  const host = timelineHost(id);
   panel = document.createElement("section");
   panel.className = "candidate-panel running";
   panel.dataset.step = String(id);
@@ -265,8 +266,33 @@ function agentPanel(id, label) {
     </div>
     <pre class="candidate-log"></pre>
   `;
-  stepLogsEl.appendChild(panel);
+  host.appendChild(panel);
   return panel;
+}
+
+function stepFromPanelId(id) {
+  const direct = String(id).match(/_(\d+)$/);
+  return direct ? Number(direct[1]) : null;
+}
+
+function timelineHost(id) {
+  const step = stepFromPanelId(id);
+  if (step === null) return stepLogsEl;
+  let group = stepLogsEl.querySelector(`[data-loop="${step}"]`);
+  if (group) return group.querySelector(".loop-body");
+  group = document.createElement("details");
+  group.className = "loop-group";
+  group.dataset.loop = String(step);
+  group.open = true;
+  group.innerHTML = `
+    <summary>
+      <span>Loop ${step + 1}</span>
+      <strong>Produce, mix, calculate accuracy, critique</strong>
+    </summary>
+    <div class="loop-body"></div>
+  `;
+  stepLogsEl.appendChild(group);
+  return group.querySelector(".loop-body");
 }
 
 function friendlyAgent(agent) {
@@ -276,11 +302,19 @@ function friendlyAgent(agent) {
   return step === undefined ? name : `${name} ${Number(step) + 1}`;
 }
 
-function friendlyRole(role) {
+function friendlyRole(role, agent = "") {
   if (role.startsWith("premix_audio_diff")) return "Pre-mix accuracy";
   if (role.startsWith("premix_render")) return "Listen pre-mix";
   if (role.startsWith("audio_diff")) return "Accuracy report";
   if (role.startsWith("render")) return "Listen";
+  if (role === "prompt") {
+    if (agent.startsWith("layer_builder")) return "Producer instructions";
+    if (agent.startsWith("residual_critic")) return "Critic instructions";
+    if (agent.startsWith("mixer")) return "Mixer instructions";
+    if (agent.startsWith("simplifier")) return "Simplifier instructions";
+    if (agent === "analyzer") return "Analyzer instructions";
+    return "Agent instructions";
+  }
   return ROLE_NAMES[role] || role.replaceAll("_", " ");
 }
 
@@ -306,7 +340,7 @@ async function addTraceFile(payload) {
   const fileName = payload.name || path.split("/").pop();
   const line = payload.line || `trace_file agent=${agent} role=${role} path=${path}`;
   const panel = agentPanel(tracePanelId(agent, step), friendlyAgent(agent));
-  panel.querySelector(".candidate-axis").textContent = friendlyRole(role);
+  panel.querySelector(".candidate-axis").textContent = friendlyRole(role, agent);
   const log = panel.querySelector(".candidate-log");
   if (role === "layer_analysis") appendToLog(log, "Layer plan ready.");
   if (role === "session_proposal") appendToLog(log, "Producer wrote a session proposal.");
@@ -317,7 +351,7 @@ async function addTraceFile(payload) {
   const trace = document.createElement("details");
   trace.className = "trace-file";
   trace.open = fileName.endsWith(".wav") || role.includes("recommendation") || role.includes("winner_audio_diff");
-  trace.innerHTML = `<summary><span>${friendlyRole(role)}</span><a href="${url || "#"}" target="_blank">${fileName}</a></summary>`;
+  trace.innerHTML = `<summary><span>${friendlyRole(role, agent)}</span><a href="${url || "#"}" target="_blank">Open details</a></summary>`;
   const body = document.createElement("pre");
   body.textContent = "loading...";
   trace.appendChild(body);

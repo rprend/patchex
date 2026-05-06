@@ -295,6 +295,42 @@ textarea {
   margin-top: 1rem;
 }
 
+.loop-group {
+  border: 1px solid var(--line);
+  background: #f8f9fd;
+}
+
+.loop-group > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: .85rem 1rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--line);
+}
+
+.loop-group > summary span {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.loop-group > summary strong {
+  color: var(--text);
+  font-size: .92rem;
+  font-weight: 650;
+}
+
+.loop-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .75rem;
+  padding: .75rem;
+}
+
 .candidate-panel {
   min-height: 0;
   border: 1px solid var(--line);

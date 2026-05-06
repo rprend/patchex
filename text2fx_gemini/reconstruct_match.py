@@ -405,17 +405,17 @@ def codex_layer_builder_prompt(
         "make a conservative reconstruction pass before mixing",
     ][min(step, 4)]
     return f"""
-You are the Layer Builder agent in an autonomous audio reconstruction pipeline.
+You are the Producer agent in an autonomous audio reconstruction pipeline.
 
 Read these files before answering:
 - Analyzer layer plan: {analyzer_path}
 - Current best reconstruction session JSON: {current_session_path}
-- Previous Residual Critic recommendation JSON: {recommendation_path}
+- Previous Critic recommendation JSON: {recommendation_path}
 - Score/history JSON: {history_path}
 
 Task: Given those files, make the smallest concrete full-session JSON change that should reduce reconstruction error.
 
-Current builder run: {step + 1}
+Current Producer run: {step + 1}
 Allowed action for this run: {phase}
 
 Renderer capabilities:
@@ -430,7 +430,7 @@ Rules:
 - Preserve useful existing layers and stable layer ids.
 - Add at most one new layer unless the residual clearly demands a paired support/noise layer.
 - Use synth/noise-like approximation only; do not reference external samples.
-- The previous Residual Critic recommendation is binding: address its highest-priority missing items first and avoid its do_not guidance if present.
+- The previous Critic recommendation is binding: address its highest-priority missing items first and avoid its do_not guidance if present.
 - Optimize actual reconstruction metrics: multi-resolution spectral, mel spectrogram, envelope, segment_envelope, late_energy_ratio, sustain_coverage, frontload_balance, band_envelope_by_time, pitch chroma, spectral motion, transient/onset, stereo width, embedding.
 
 Return full JSON session with this shape:
@@ -440,7 +440,7 @@ Return full JSON session with this shape:
 
 def codex_residual_critic_prompt(analyzer_path: Path, session_path: Path, history_item_path: Path, audio_diff_path: Path) -> str:
     return f"""
-You are the Residual Critic agent in an audio reconstruction pipeline.
+You are the Critic agent in an audio reconstruction pipeline.
 
 Read these files before answering:
 - Analyzer layer plan: {analyzer_path}
@@ -448,14 +448,14 @@ Read these files before answering:
 - Latest builder history item JSON: {history_item_path}
 - Latest audio similarity/diff JSON: {audio_diff_path}
 
-Task: Produce a measurable recommendation file for the next Codex run. Do not suggest vibes. Tie every critique to reconstruction metrics, source analysis, or session structure.
+Task: Produce a measurable recommendation file for the next Producer run. Do not suggest vibes. Tie every critique to reconstruction metrics, source analysis, or session structure.
 
 Return ONLY JSON:
 {{
   "missing": ["specific measurable mismatches"],
-  "recommendations": ["concrete next actions for the Layer Builder or Mixer"],
-  "must_fix": ["highest priority concrete measurable fixes for the next Builder prompt"],
-  "do_not": ["specific changes the next Builder should avoid"],
+  "recommendations": ["concrete next actions for the Producer or Mixer"],
+  "must_fix": ["highest priority concrete measurable fixes for the next Producer prompt"],
+  "do_not": ["specific changes the next Producer should avoid"],
   "success_criteria": ["numbers the next score should move toward"],
   "priority": "layer|automation|pitch|envelope|stereo|mix",
   "stop_layer_building": true_or_false
@@ -470,7 +470,7 @@ You are the Mixer agent in an audio reconstruction pipeline.
 Read these files before answering:
 - Analyzer layer plan: {analyzer_path}
 - Current best reconstruction session JSON: {session_path}
-- Latest Residual Critic recommendation JSON: {recommendation_path}
+- Latest Critic recommendation JSON: {recommendation_path}
 - Score/history JSON: {history_path}
 
 Task: Balance the accepted layers, stereo width, layer gains, pan, reverb/chorus mix, and master gain/width. Do not add new musical content unless the session is empty. Return a full JSON session.
@@ -486,11 +486,11 @@ You are the Mixer agent inside the reconstruction loop.
 
 Read these files before answering:
 - Analyzer layer plan: {analyzer_path}
-- Current Builder candidate session JSON: {candidate_session_path}
-- Latest Residual Critic recommendation JSON: {recommendation_path}
+- Current Producer candidate session JSON: {candidate_session_path}
+- Latest Critic recommendation JSON: {recommendation_path}
 - Score/history JSON: {history_path}
 
-Task: Mix this step's Builder candidate before scoring. Balance layer gains, pan, width, chorus/reverb, return_send, returns, and master gain/width so the reconstruction loss has a fair mixed candidate to evaluate. Do not remove musical layers and do not add new notes unless required to prevent an empty session.
+Task: Mix this step's Producer candidate before scoring. Balance layer gains, pan, width, chorus/reverb, return_send, returns, and master gain/width so the reconstruction loss has a fair mixed candidate to evaluate. Do not remove musical layers and do not add new notes unless required to prevent an empty session.
 
 Current loop step: {step + 1}
 
