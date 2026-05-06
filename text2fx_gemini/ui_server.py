@@ -59,6 +59,7 @@ IMPORTANT_LOG_PATTERNS = [
         r"^analysis_done",
         r"^agent_stage",
         r"^trace_file",
+        r"^winner_summary",
         r"^layer_building_stopped",
         r"^wrote ",
         r"^analysis ",
@@ -371,6 +372,41 @@ def compact_log_line(line: str, state: dict[str, int]) -> str | None:
     return stripped
 
 
+def run_media_url(path: Path) -> str | None:
+    try:
+        resolved = path.resolve()
+        runs = RUNS.resolve()
+    except FileNotFoundError:
+        return None
+    if runs not in resolved.parents:
+        return None
+    run_dir = resolved.parent
+    return f"/media/runs/{run_dir.name}/{resolved.name}"
+
+
+def parse_trace_event(line: str) -> dict | None:
+    stripped = line.strip()
+    if not stripped.startswith("trace_file "):
+        return None
+    payload: dict[str, str | int | None] = {"type": "trace_file", "line": stripped}
+    for key, value in re.findall(r"\b(agent|role|step)=([^ ]+)", stripped):
+        payload[key] = int(value) if key == "step" else value
+    if " path=" in stripped:
+        payload["path"] = stripped.split(" path=", 1)[1]
+    path = payload.get("path")
+    if isinstance(path, str):
+        payload["url"] = run_media_url(Path(path))
+        payload["name"] = Path(path).name
+    return payload
+
+
+def enqueue_compacted(event_queue: queue.Queue[dict], compacted: str) -> None:
+    trace_event = parse_trace_event(compacted)
+    if trace_event is not None:
+        event_queue.put(trace_event)
+    event_queue.put({"type": "log", "line": compacted})
+
+
 def start_run(reference: str, prompt: str, instrument_type: str, candidates: int, axis_trials: int, target_part: str = "", analysis: dict | None = None) -> str:
     reference_path = safe_reference_path(reference)
     run_id = time.strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
@@ -435,7 +471,7 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
                 recent_raw_lines = recent_raw_lines[-40:]
                 compacted = compact_log_line(line, filter_state)
                 if compacted is not None:
-                    event_queue.put({"type": "log", "line": compacted})
+                    enqueue_compacted(event_queue, compacted)
         returncode = process.wait()
         if filter_state.get("suppressed_codex"):
             event_queue.put({"type": "log", "line": f"total Codex internal log lines hidden from UI: {filter_state['suppressed_codex']}"})
@@ -507,7 +543,7 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 4, 
                 recent_raw_lines = recent_raw_lines[-40:]
                 compacted = compact_log_line(line, filter_state)
                 if compacted is not None:
-                    event_queue.put({"type": "log", "line": compacted})
+                    enqueue_compacted(event_queue, compacted)
         returncode = process.wait()
         if filter_state.get("suppressed_codex"):
             event_queue.put({"type": "log", "line": f"total Codex internal log lines hidden from UI: {filter_state['suppressed_codex']}"})

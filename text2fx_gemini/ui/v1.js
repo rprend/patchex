@@ -254,19 +254,14 @@ function tracePanelId(agent, step) {
   return match ? `${match[1]}_${Number(match[2])}` : agent;
 }
 
-async function addTraceFile(line) {
-  const agent = line.match(/\bagent=([^ ]+)/)?.[1] || "trace";
-  const role = line.match(/\brole=([^ ]+)/)?.[1] || "file";
-  const stepMatch = line.match(/\bstep=(\d+)/);
-  const step = stepMatch ? Number(stepMatch[1]) : null;
-  const pathMatch = line.match(/\bpath=(.+)$/);
-  if (!pathMatch) {
-    appendRunLog(line);
-    return;
-  }
-  const path = pathMatch[1];
-  const url = fileUrlFromTracePath(path);
-  const fileName = path.split("/").pop();
+async function addTraceFile(payload) {
+  const agent = payload.agent || "trace";
+  const role = payload.role || "file";
+  const step = payload.step ?? null;
+  const path = payload.path || "";
+  const url = payload.url || fileUrlFromTracePath(path);
+  const fileName = payload.name || path.split("/").pop();
+  const line = payload.line || `trace_file agent=${agent} role=${role} path=${path}`;
   const panel = agentPanel(tracePanelId(agent, step), agent.replaceAll("_", " "));
   panel.querySelector(".candidate-axis").textContent = role.replaceAll("_", " ");
   const log = panel.querySelector(".candidate-log");
@@ -287,6 +282,23 @@ async function addTraceFile(line) {
   }
   if (fileName.endsWith(".wav")) {
     body.remove();
+    if (role.includes("winner")) {
+      const wave = document.createElement("div");
+      wave.className = "trace-waveform";
+      trace.appendChild(wave);
+      WaveSurfer.create({
+        container: wave,
+        url,
+        height: 88,
+        waveColor: "#cfdaf2",
+        progressColor: "#323a85",
+        cursorColor: "#262626",
+        cursorWidth: 1,
+        barWidth: 2,
+        barGap: 1,
+        normalize: true,
+      });
+    }
     const player = document.createElement("audio");
     player.controls = true;
     player.src = url;
@@ -306,7 +318,16 @@ async function addTraceFile(line) {
 
 async function routeRunLog(line) {
   if (line.startsWith("trace_file")) {
-    await addTraceFile(line);
+    return;
+  }
+  if (line.startsWith("winner_summary")) {
+    const step = Number(line.match(/\bstep=(\d+)/)?.[1] || 0);
+    const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
+    const codexWon = line.match(/\bcodex_won=([^ ]+)/)?.[1] === "true";
+    const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
+    const panel = agentPanel(`loss_${step}`, `loss ${step + 1}`);
+    appendToLog(panel.querySelector(".candidate-log"), codexWon ? `Codex proposal won with score ${score}.` : `Codex proposal lost; ${winner} won with score ${score}.`);
+    panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
     return;
   }
   const step = parseStepIndex(line);
@@ -334,7 +355,7 @@ async function routeRunLog(line) {
   }
 }
 
-async function renderTraceArtifacts(artifacts) {
+async function renderTraceArtifacts(artifacts, report = null) {
   const traceArtifacts = artifacts.filter((artifact) => {
     const name = artifact.name;
     return (
@@ -363,7 +384,27 @@ async function renderTraceArtifacts(artifacts) {
       .replace(/^codex_/, "")
       .replace(/_(prompt|answer)\.txt$/, "")
       .replace(/\.json$/, "");
-    await addTraceFile(`trace_file agent=${agent} role=${role} path=${pseudoPath}`);
+    await addTraceFile({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name });
+  }
+  if (!report?.history) return;
+  for (const item of report.history) {
+    if (item.step === undefined || item.step === null || !item.winner) continue;
+    const step = Number(item.step);
+    const winner = item.winner;
+    const score = Number(item.scores?.final || item.scores || 0);
+    const panel = agentPanel(`loss_${step}`, `loss ${step + 1}`);
+    appendToLog(panel.querySelector(".candidate-log"), winner === "codex" ? `Codex proposal won with score ${score.toFixed(3)}.` : `Codex proposal lost; ${winner} won with score ${score.toFixed(3)}.`);
+    panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
+    const audioName = item.audio_path?.split("/").pop();
+    const diffName = item.audio_diff_path?.split("/").pop();
+    const audioArtifact = artifacts.find((artifact) => artifact.name === audioName);
+    const diffArtifact = artifacts.find((artifact) => artifact.name === diffName);
+    if (audioArtifact) {
+      await addTraceFile({ agent: `loss_step_${String(step).padStart(2, "0")}`, role: "winner_render", step, path: `/ui_runs/${audioArtifact.url.split("/")[3]}/${audioArtifact.name}`, url: audioArtifact.url, name: audioArtifact.name });
+    }
+    if (diffArtifact) {
+      await addTraceFile({ agent: `loss_step_${String(step).padStart(2, "0")}`, role: "winner_audio_diff", step, path: `/ui_runs/${diffArtifact.url.split("/")[3]}/${diffArtifact.name}`, url: diffArtifact.url, name: diffArtifact.name });
+    }
   }
 }
 
@@ -422,7 +463,7 @@ async function loadPastRun(run) {
   });
   renderScoreboard(report);
   renderHistoryTimeline(report.history || []);
-  await renderTraceArtifacts(run.artifacts);
+  await renderTraceArtifacts(run.artifacts, report);
   const scores = report.best_scores || {};
   appendRunLog(`final score: ${Number(scores.final || 0).toFixed(3)}`);
   appendRunLog(`final audio: ${report.final_path || "not recorded"}`);
@@ -519,6 +560,7 @@ async function startAutonomousRun() {
     const events = new EventSource(`/api/reconstructions/${data.run_id}/events`);
     events.onmessage = async (event) => {
       const payload = JSON.parse(event.data);
+      if (payload.type === "trace_file") await addTraceFile(payload);
       if (payload.type === "log") await routeRunLog(payload.line);
       if (payload.type === "heartbeat") appendRunLog("heartbeat: reconstruction still running");
       if (payload.type === "done") {

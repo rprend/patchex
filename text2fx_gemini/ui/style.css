@@ -410,6 +410,14 @@ textarea {
   margin: 0 .75rem .75rem;
 }
 
+.trace-waveform {
+  min-height: 88px;
+  margin: 0 .75rem .75rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #f8f9fd;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

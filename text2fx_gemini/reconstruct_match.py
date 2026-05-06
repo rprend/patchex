@@ -27,7 +27,7 @@ DEFAULT_SESSION = {
     "sample_rate": 44100,
     "duration": 5.0,
     "layers": [],
-    "returns": [],
+    "returns": [{"id": "space", "type": "reverb", "gain_db": -12.0, "decay": 0.35, "width": 1.0}],
     "master": {"gain_db": -1.0, "width": 1.0},
 }
 
@@ -100,8 +100,21 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
     session["duration"] = float(duration)
     session["sample_rate"] = int(sample_rate)
     session["layers"] = []
-    returns = payload.get("returns", [])
-    session["returns"] = returns if isinstance(returns, list) else []
+    returns = payload.get("returns", DEFAULT_SESSION["returns"])
+    session["returns"] = []
+    if isinstance(returns, list):
+        for index, ret in enumerate(returns[:3]):
+            if not isinstance(ret, dict):
+                continue
+            session["returns"].append(
+                {
+                    "id": str(ret.get("id") or f"return_{index + 1}"),
+                    "type": str(ret.get("type", "reverb")).lower(),
+                    "gain_db": float(np.clip(float(ret.get("gain_db", -12.0)), -48.0, 6.0)),
+                    "decay": float(np.clip(float(ret.get("decay", 0.35)), 0.05, 1.0)),
+                    "width": float(np.clip(float(ret.get("width", 1.0)), 0.0, 1.5)),
+                }
+            )
     for index, layer in enumerate(payload.get("layers", [])[:6]):
         synth = layer.get("synth", {})
         amp = layer.get("amp_envelope", {})
@@ -168,6 +181,7 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                 "effects": {
                     "chorus_mix": float(np.clip(float(effects.get("chorus_mix", 0.18)), 0.0, 1.0)),
                     "reverb_mix": float(np.clip(float(effects.get("reverb_mix", 0.18)), 0.0, 0.7)),
+                    "return_send": float(np.clip(float(effects.get("return_send", 0.0)), 0.0, 1.0)),
                 },
             }
         )
@@ -287,13 +301,35 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     return stereo.astype(np.float32)
 
 
+def apply_return_effect(audio: np.ndarray, ret: dict[str, Any], sr: int) -> np.ndarray:
+    if ret.get("type", "reverb") != "reverb":
+        return audio * db_to_amp(ret.get("gain_db", -12.0))
+    samples = audio.shape[1]
+    tail = np.zeros_like(audio)
+    decay = float(ret.get("decay", 0.35))
+    delays = [int(sr * 0.061), int(sr * 0.127), int(sr * 0.193), int(sr * 0.311)]
+    for index, delay_samples in enumerate(delays):
+        if delay_samples < samples:
+            tail[:, delay_samples:] += audio[:, :-delay_samples] * (decay ** (index + 1)) / len(delays)
+    width = float(ret.get("width", 1.0))
+    mid = tail.mean(axis=0)
+    side = (tail[0] - tail[1]) * 0.5 * width
+    widened = np.vstack([mid + side, mid - side])
+    return widened * db_to_amp(ret.get("gain_db", -12.0))
+
+
 def render_session(session: dict[str, Any]) -> np.ndarray:
     sr = int(session["sample_rate"])
     duration = float(session["duration"])
     samples = int(duration * sr)
     mix = np.zeros((2, samples), dtype=np.float32)
+    return_input = np.zeros((2, samples), dtype=np.float32)
     for layer in session.get("layers", []):
-        mix += render_layer(layer, duration, sr)
+        rendered = render_layer(layer, duration, sr)
+        mix += rendered
+        return_input += rendered * float(layer.get("effects", {}).get("return_send", 0.0))
+    for ret in session.get("returns", []):
+        mix += apply_return_effect(return_input, ret, sr)
     width = session.get("master", {}).get("width", 1.0)
     mid = mix.mean(axis=0)
     side = (mix[0] - mix[1]) * 0.5 * width
@@ -385,6 +421,7 @@ Allowed action for this run: {phase}
 Renderer capabilities:
 - Up to {max_layers} synth layers.
 - Each layer has note events, gain/pan/width, oscillator waveform/blend/voices/detune/sub, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, optional filter.cutoff_points, optional layer gain_points, optional modulation.gate_points, LFO tremolo, chorus_mix, reverb_mix.
+- Each layer can send to session returns through effects.return_send. Returns currently support reverb with id/type/gain_db/decay/width.
 - waveform may be sine, triangle, saw, square, noise, air, or transient.
 - Session has returns and master fields. Preserve them even if empty.
 
@@ -551,6 +588,20 @@ def trace_file(agent: str, role: str, path: Path) -> Path:
     return path
 
 
+def temporal_scores_ok(score: AudioScore) -> bool:
+    thresholds = {
+        "segment_envelope": 0.72,
+        "late_energy_ratio": 0.72,
+        "sustain_coverage": 0.72,
+        "frontload_balance": 0.72,
+        "band_envelope_by_time": 0.68,
+        "onset_count": 0.72,
+        "onset_timing": 0.72,
+        "centroid_trajectory": 0.68,
+    }
+    return all(float(getattr(score, name)) >= threshold for name, threshold in thresholds.items())
+
+
 def score_from_json(payload: dict[str, float]) -> AudioScore:
     return AudioScore(**{field: float(payload.get(field, 0.0)) for field in AudioScore.__dataclass_fields__})
 
@@ -705,6 +756,9 @@ def main() -> None:
             )
         step_results.sort(key=lambda item: item[0], reverse=True)
         _, label, session, score, diagnostics, candidate_residual, out_path, diff_path = step_results[0]
+        print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(label == 'codex').lower()} score={score.final:.4f}", flush=True)
+        trace_file(f"loss_step_{step:02d}", "winner_render", out_path)
+        trace_file(f"loss_step_{step:02d}", "winner_audio_diff", diff_path)
         accepted = score.final >= best_score.final
         if accepted:
             best_session = session
@@ -743,11 +797,13 @@ def main() -> None:
             "stop_layer_building": bool(critic.get("stop_layer_building", False)),
             "diagnostics": deterministic_residual.get("diagnostics", {}),
         }
-        forced_continue = step + 1 < min_builder_steps or best_score.final < 0.78
+        temporal_ok = temporal_scores_ok(best_score)
+        forced_continue = step + 1 < min_builder_steps or best_score.final < 0.78 or not temporal_ok
         if forced_continue and recommendation["stop_layer_building"]:
             recommendation["stop_layer_building"] = False
-            recommendation.setdefault("do_not", []).append("do not stop yet; the orchestrator requires more builder passes before mixer")
+            recommendation.setdefault("do_not", []).append("do not stop yet; the orchestrator requires more builder passes, a higher final score, and passing temporal scores before mixer")
             recommendation.setdefault("recommendations", []).append("continue the Builder/Critic loop and address the weakest temporal and spectral metrics")
+            recommendation.setdefault("success_criteria", []).append("before stopping, final >= 0.78 and temporal scores pass: segment_envelope, late_energy_ratio, sustain_coverage, frontload_balance, onset_count, onset_timing")
         recommendation_path = trace_file(f"residual_critic_step_{step:02d}", "recommendation", write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation))
         history_item["recommendation_path"] = str(recommendation_path)
         history_item["residual_critic"] = recommendation
@@ -755,7 +811,7 @@ def main() -> None:
         history_path = write_json(args.output_dir / "history.json", history)
         trace_file(f"layer_builder_step_{step:02d}", "accepted_session", write_json(args.output_dir / f"session_step_{step:02d}_accepted.json", best_session))
         print(f"step_complete index={step} winner={label} accepted={str(accepted).lower()} best_score={best_score.final:.4f}", flush=True)
-        if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1 and step + 1 >= min_builder_steps and best_score.final >= 0.78:
+        if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1 and step + 1 >= min_builder_steps and best_score.final >= 0.78 and temporal_scores_ok(best_score):
             print(f"layer_building_stopped step={step} reason=residual_critic", flush=True)
             break
 
