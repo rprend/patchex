@@ -161,6 +161,12 @@ button:disabled {
   color: white;
 }
 
+.inline-primary {
+  width: auto;
+  min-width: 16rem;
+  margin-top: 0;
+}
+
 audio { width: 100%; }
 
 .wave-wrap {
@@ -182,12 +188,6 @@ audio { width: 100%; }
 .clip-readout {
   padding: .85rem 0;
   border-top: 1px solid var(--line-soft);
-}
-
-.grid-two {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-  gap: 2rem;
 }
 
 .advanced {
@@ -238,7 +238,7 @@ textarea {
 }
 
 .log {
-  height: 28rem;
+  height: 26rem;
   overflow: auto;
   margin: 1rem 0 0;
   padding: .8rem 0;
@@ -248,6 +248,14 @@ textarea {
   color: var(--soft);
   font: .82rem/1.55 "Geist", ui-sans-serif, system-ui;
   white-space: pre-wrap;
+}
+
+.analysis-log {
+  height: 12rem;
+}
+
+.run-log {
+  height: 34rem;
 }
 
 .keyboard-panel {
@@ -390,9 +398,16 @@ textarea {
 
 @media (max-width: 860px) {
   .page-header,
-  .reference-grid,
-  .grid-two {
+  .reference-grid {
     grid-template-columns: 1fr;
+  }
+  .panel-head,
+  .section-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .inline-primary {
+    width: 100%;
   }
   .clip-readout {
     align-items: stretch;

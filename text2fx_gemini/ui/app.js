@@ -10,7 +10,8 @@ const targetPart = document.getElementById("targetPart");
 const promptBox = document.getElementById("prompt");
 const axesEl = document.getElementById("axes");
 const startRun = document.getElementById("startRun");
-const logEl = document.getElementById("log");
+const analysisLogEl = document.getElementById("analysisLog");
+const runLogEl = document.getElementById("runLog");
 const artifactsEl = document.getElementById("artifacts");
 const statusEl = document.getElementById("serviceStatus");
 const keyboardPanel = document.getElementById("keyboardPanel");
@@ -48,9 +49,17 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
-function appendLog(line) {
-  logEl.textContent += `${line}\n`;
-  logEl.scrollTop = logEl.scrollHeight;
+function appendToLog(element, line) {
+  element.textContent += `${line}\n`;
+  element.scrollTop = element.scrollHeight;
+}
+
+function appendAnalysisLog(line) {
+  appendToLog(analysisLogEl, line);
+}
+
+function appendRunLog(line) {
+  appendToLog(runLogEl, line);
 }
 
 async function api(path, options = {}) {
@@ -228,16 +237,17 @@ function renderRunHistory(runs) {
 }
 
 async function loadPastRun(run) {
-  logEl.textContent = "";
+  analysisLogEl.textContent = "";
+  runLogEl.textContent = "";
   artifactsEl.innerHTML = "";
   keyboardPanel.hidden = true;
   activePatch = null;
   setStatus("Loaded run");
-  appendLog(`loaded past run: ${run.id}`);
-  appendLog(`status: ${run.status}`);
+  appendRunLog(`loaded past run: ${run.id}`);
+  appendRunLog(`status: ${run.status}`);
   const reportArtifact = run.artifacts.find((artifact) => artifact.name === "match_report.json");
   if (!reportArtifact) {
-    appendLog("match_report.json is missing for this run");
+    appendRunLog("match_report.json is missing for this run");
     renderArtifacts(run.artifacts);
     return;
   }
@@ -252,14 +262,14 @@ async function loadPastRun(run) {
   instrument.value = "";
   promptBox.value = report.prompt || run.prompt || "";
   if (analysis.axes) renderAxes(analysis.axes);
-  appendLog(`instrument: ${instrumentType || "not recorded"}`);
-  appendLog(`prompt: ${promptBox.value || "not recorded"}`);
+  appendAnalysisLog(`instrument: ${instrumentType || "not recorded"}`);
+  appendAnalysisLog(`prompt: ${promptBox.value || "not recorded"}`);
   if (Array.isArray(report.best_candidates) && report.best_candidates.length) {
     const best = report.best_candidates[0];
-    appendLog(`best candidate: ${best.name || "candidate"} / ${best.axis || "axis"} / ${JSON.stringify(best.scores || {})}`);
+    appendRunLog(`best candidate: ${best.name || "candidate"} / ${best.axis || "axis"} / ${JSON.stringify(best.scores || {})}`);
   }
   if (report.codex_synthesis?.answer_path) {
-    appendLog("codex synthesis answer is available in the artifacts below");
+    appendRunLog("codex synthesis answer is available in the artifacts below");
   }
   await renderArtifacts(run.artifacts);
 }
@@ -268,12 +278,13 @@ analyzeClip.addEventListener("click", async () => {
   if (!currentFile || !activeRegion) return;
   setStatus("Extracting");
   startRun.disabled = true;
-  logEl.textContent = "";
+  analysisLogEl.textContent = "";
+  runLogEl.textContent = "";
   const { start } = selectedRange();
-  appendLog(`extracting exact clip: ${currentFile} @ ${start.toFixed(2)}s-${(start + CLIP_SECONDS).toFixed(2)}s`);
+  appendAnalysisLog(`extracting exact clip: ${currentFile} @ ${start.toFixed(2)}s-${(start + CLIP_SECONDS).toFixed(2)}s`);
   const focus = targetPart.value.trim();
-  appendLog(`target part: ${focus || "model should infer the main synth part"}`);
-  appendLog("sending extracted WAV to Gemini for focused per-axis audio analysis...");
+  appendAnalysisLog(`target part: ${focus || "model should infer the main synth part"}`);
+  appendAnalysisLog("sending extracted WAV to Gemini for focused per-axis audio analysis...");
   try {
     const data = await api("/api/clip", {
       method: "POST",
@@ -285,15 +296,15 @@ analyzeClip.addEventListener("click", async () => {
     instrument.value = "";
     renderAxes(data.analysis.axes);
     promptBox.value = data.analysis.prompt;
-    appendLog(`clip extracted: ${data.clip}`);
-    appendLog(`analysis source: ${data.analysis.analysis_source}`);
-    appendLog(`detected instrument: ${currentInstrument}`);
-    appendLog(`target prompt: ${data.analysis.prompt}`);
+    appendAnalysisLog(`clip extracted: ${data.clip}`);
+    appendAnalysisLog(`analysis source: ${data.analysis.analysis_source}`);
+    appendAnalysisLog(`detected instrument: ${currentInstrument}`);
+    appendAnalysisLog(`target prompt: ${data.analysis.prompt}`);
     startRun.disabled = false;
     setStatus(`Clip ${start.toFixed(2)}s`);
   } catch (error) {
     setStatus("Analyze failed");
-    appendLog(error.stack || String(error));
+    appendAnalysisLog(error.stack || String(error));
   }
 });
 
@@ -301,14 +312,14 @@ playClipButton.addEventListener("click", playRegion);
 
 startRun.addEventListener("click", async () => {
   if (!currentClip) return;
-  logEl.textContent = "";
+  runLogEl.textContent = "";
   artifactsEl.innerHTML = "";
   setStatus("Running");
   startRun.disabled = true;
   const selectedInstrument = instrument.value || currentInstrument;
-  appendLog(`starting strict run for ${currentClip}`);
-  appendLog(`instrument: ${selectedInstrument}`);
-  appendLog("waiting for subprocess log stream...");
+  appendRunLog(`starting strict run for ${currentClip}`);
+  appendRunLog(`instrument: ${selectedInstrument}`);
+  appendRunLog("waiting for subprocess log stream...");
   try {
     const data = await api("/api/run", {
       method: "POST",
@@ -322,33 +333,33 @@ startRun.addEventListener("click", async () => {
       }),
     });
     const runId = data.run_id;
-    appendLog(`run id: ${runId}`);
+    appendRunLog(`run id: ${runId}`);
     const events = new EventSource(`/api/jobs/${runId}/events`);
     events.onmessage = async (event) => {
       const payload = JSON.parse(event.data);
       if (payload.type === "log") {
-        appendLog(payload.line);
+        appendRunLog(payload.line);
       }
       if (payload.type === "heartbeat") {
-        appendLog("heartbeat: process still running");
+        appendRunLog("heartbeat: process still running");
       }
       if (payload.type === "done") {
         events.close();
         setStatus(payload.status);
         startRun.disabled = false;
-        appendLog(`run ${payload.status} with return code ${payload.returncode}`);
+        appendRunLog(`run ${payload.status} with return code ${payload.returncode}`);
         const job = await api(`/api/jobs/${runId}`);
         renderArtifacts(job.artifacts);
-        loadRuns().catch((error) => appendLog(error.stack || String(error)));
+        loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
       }
     };
     events.onerror = () => {
-      appendLog("event stream error; check server process");
+      appendRunLog("event stream error; check server process");
     };
   } catch (error) {
     setStatus("Run failed");
     startRun.disabled = false;
-    appendLog(error.stack || String(error));
+    appendRunLog(error.stack || String(error));
   }
 });
 
@@ -484,10 +495,10 @@ document.addEventListener("click", (event) => {
 fileSelect.addEventListener("change", () => selectFile(fileSelect.value));
 refreshFiles.addEventListener("click", loadFiles);
 refreshRuns.addEventListener("click", () => {
-  loadRuns().catch((error) => appendLog(error.stack || String(error)));
+  loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
 });
 
 Promise.all([loadFiles(), loadRuns()]).catch((error) => {
   setStatus("Error");
-  logEl.textContent = error.stack || String(error);
+  runLogEl.textContent = error.stack || String(error);
 });

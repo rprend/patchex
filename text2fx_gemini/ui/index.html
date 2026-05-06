@@ -20,7 +20,7 @@
       <section class="panel reference-panel">
         <div class="panel-head">
           <div>
-            <h2>Reference</h2>
+            <h2>Audio File</h2>
             <p>Select a source file and drag the 5-second capture window.</p>
           </div>
           <button id="refreshFiles">Refresh</button>
@@ -37,7 +37,6 @@
           <div class="clip-readout">
             <span id="clipRange">0.00s - 5.00s</span>
             <button id="playClip">Play Selected 5s</button>
-            <button id="analyzeClip">Analyze Clip</button>
           </div>
         </div>
         <label class="field focus-field">
@@ -46,56 +45,74 @@
         </label>
       </section>
 
-      <section class="grid-two">
-        <section class="panel">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Analyze</h2>
+            <p>Extract the selected five seconds and describe the target part.</p>
+          </div>
+          <button id="analyzeClip">Analyze Clip</button>
+        </div>
+        <pre id="analysisLog" class="log analysis-log"></pre>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>Axes</h2>
+            <p>The model describes the extracted clip and chooses the target synth family.</p>
+          </div>
+        </div>
+        <details class="advanced">
+          <summary>Advanced target prompt and instrument override</summary>
+          <label class="field">
+            <span>Override instrument</span>
+            <select id="instrument">
+              <option value="">Use detected instrument</option>
+              <option value="arp_synth">arp_synth</option>
+              <option value="bass_synth">bass_synth</option>
+              <option value="lead_synth">lead_synth</option>
+              <option value="pad_synth">pad_synth</option>
+              <option value="pluck_synth">pluck_synth</option>
+              <option value="texture_synth">texture_synth</option>
+            </select>
+          </label>
+          <label class="field prompt-field">
+            <span>Prompt</span>
+            <textarea id="prompt" rows="4" placeholder="Analyze a clip first."></textarea>
+          </label>
+        </details>
+        <div id="axes" class="axes"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Build</h2>
+            <p>Run the Codex candidate loop and stream every prompt, log line, score, and artifact.</p>
+          </div>
+          <button id="startRun" class="primary inline-primary" disabled>Build Patch From This Clip</button>
+        </div>
+        <pre id="runLog" class="log run-log"></pre>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>Output Results</h2>
+            <p>Embedded candidate audio, final render, report files, and playable keyboard patch.</p>
+          </div>
+        </div>
+        <section id="keyboardPanel" class="keyboard-panel" hidden>
           <div class="section-head">
             <div>
-              <h2>Axes</h2>
-              <p>The model describes the extracted clip and chooses the target synth family.</p>
+              <h2>Playable Patch</h2>
+              <p>Use the physical home row like a keyboard: A W S E D F T G Y H U J K.</p>
             </div>
           </div>
-          <details class="advanced">
-            <summary>Advanced target prompt and instrument override</summary>
-            <label class="field">
-              <span>Override instrument</span>
-              <select id="instrument">
-                <option value="">Use detected instrument</option>
-                <option value="arp_synth">arp_synth</option>
-                <option value="bass_synth">bass_synth</option>
-                <option value="lead_synth">lead_synth</option>
-                <option value="pad_synth">pad_synth</option>
-                <option value="pluck_synth">pluck_synth</option>
-                <option value="texture_synth">texture_synth</option>
-              </select>
-            </label>
-            <label class="field prompt-field">
-              <span>Prompt</span>
-              <textarea id="prompt" rows="4" placeholder="Analyze a clip first."></textarea>
-            </label>
-          </details>
-          <div id="axes" class="axes"></div>
-          <button id="startRun" class="primary" disabled>Build Patch From This Clip</button>
+          <div id="keyboard" class="keyboard"></div>
         </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Run</h2>
-              <p>Live subprocess output from the matcher.</p>
-            </div>
-          </div>
-          <pre id="log" class="log"></pre>
-          <section id="keyboardPanel" class="keyboard-panel" hidden>
-            <div class="section-head">
-              <div>
-                <h2>Playable Patch</h2>
-                <p>Use the home row like a keyboard: A W S E D F T G Y H U J K.</p>
-              </div>
-            </div>
-            <div id="keyboard" class="keyboard"></div>
-          </section>
-          <div id="artifacts" class="artifacts"></div>
-        </section>
+        <div id="artifacts" class="artifacts"></div>
       </section>
 
       <section class="panel history-panel">
