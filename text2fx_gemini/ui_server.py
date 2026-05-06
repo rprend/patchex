@@ -292,15 +292,10 @@ def compact_log_line(line: str, state: dict[str, int]) -> str | None:
         state["prompt_lines"] = state.get("prompt_lines", 0) + 1
         return None
     if stripped.startswith("codex_log "):
-        message = stripped.split(" ", 4)[-1] if len(stripped.split(" ", 4)) >= 5 else stripped
-        if any(pattern.search(message) for pattern in NOISY_LOG_PATTERNS):
-            state["suppressed_codex"] = state.get("suppressed_codex", 0) + 1
-            if state["suppressed_codex"] in {1, 25, 100, 500}:
-                return f"suppressed {state['suppressed_codex']} noisy Codex log lines; full raw log is saved as an artifact"
-            return None
-        if len(stripped) > 600:
-            return stripped[:600] + " ... [truncated]"
-        return stripped
+        state["suppressed_codex"] = state.get("suppressed_codex", 0) + 1
+        if state["suppressed_codex"] in {1, 25, 100, 500}:
+            return f"codex internal logs hidden from UI ({state['suppressed_codex']} lines); full raw log is saved as an artifact"
+        return None
     if any(pattern.search(stripped) for pattern in IMPORTANT_LOG_PATTERNS):
         return stripped[:1200] + (" ... [truncated]" if len(stripped) > 1200 else "")
     if len(stripped) > 600:
@@ -344,6 +339,7 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
         load_secrets_into_env(env)
         raw_log_path = out_dir / "raw_subprocess.log"
         filter_state = {"in_prompt": 0, "prompt_lines": 0, "suppressed_codex": 0}
+        recent_raw_lines: list[str] = []
         process = subprocess.Popen(
             cmd,
             cwd=str(WORKSPACE),
@@ -359,15 +355,22 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
             for line in process.stdout:
                 raw_log.write(line)
                 raw_log.flush()
+                recent_raw_lines.append(line.rstrip())
+                recent_raw_lines = recent_raw_lines[-40:]
                 compacted = compact_log_line(line, filter_state)
                 if compacted is not None:
                     event_queue.put({"type": "log", "line": compacted})
         returncode = process.wait()
         if filter_state.get("suppressed_codex"):
-            event_queue.put({"type": "log", "line": f"total noisy Codex log lines suppressed from UI: {filter_state['suppressed_codex']}"})
+            event_queue.put({"type": "log", "line": f"total Codex internal log lines hidden from UI: {filter_state['suppressed_codex']}"})
         event_queue.put({"type": "log", "line": f"raw subprocess log saved: {raw_log_path}"})
         jobs[run_id]["returncode"] = returncode
         jobs[run_id]["status"] = "completed" if returncode == 0 else "failed"
+        if returncode != 0:
+            event_queue.put({"type": "log", "line": "last raw subprocess lines before failure:"})
+            for raw_line in recent_raw_lines:
+                if raw_line:
+                    event_queue.put({"type": "log", "line": raw_line[:1200] + (" ... [truncated]" if len(raw_line) > 1200 else "")})
         event_queue.put({"type": "done", "status": jobs[run_id]["status"], "returncode": returncode})
 
     threading.Thread(target=worker, daemon=True).start()
