@@ -480,6 +480,25 @@ Return ONLY full JSON session with this shape:
 """
 
 
+def codex_step_mixer_prompt(analyzer_path: Path, candidate_session_path: Path, recommendation_path: Path, history_path: Path, step: int) -> str:
+    return f"""
+You are the Mixer agent inside the reconstruction loop.
+
+Read these files before answering:
+- Analyzer layer plan: {analyzer_path}
+- Current Builder candidate session JSON: {candidate_session_path}
+- Latest Residual Critic recommendation JSON: {recommendation_path}
+- Score/history JSON: {history_path}
+
+Task: Mix this step's Builder candidate before scoring. Balance layer gains, pan, width, chorus/reverb, return_send, returns, and master gain/width so the reconstruction loss has a fair mixed candidate to evaluate. Do not remove musical layers and do not add new notes unless required to prevent an empty session.
+
+Current loop step: {step + 1}
+
+Return ONLY full JSON session with this shape:
+{session_shape()}
+"""
+
+
 def codex_simplifier_prompt(analyzer_path: Path, session_path: Path, history_path: Path) -> str:
     return f"""
 You are the Simplifier agent in an audio reconstruction pipeline.
@@ -743,20 +762,44 @@ def main() -> None:
             candidates.append((f"local_{trial}", local_mutation(proposed, rng, 0.22, args.seconds, args.sample_rate)))
         step_results = []
         for label, candidate_session in candidates:
-            out_path = args.output_dir / f"reconstruction_step_{step:02d}_{label}.wav"
-            diff_path = args.output_dir / f"audio_diff_step_{step:02d}_{label}.json"
+            out_path = args.output_dir / f"premix_reconstruction_step_{step:02d}_{label}.wav"
+            diff_path = args.output_dir / f"premix_audio_diff_step_{step:02d}_{label}.json"
             score, diagnostics, candidate_residual = write_audio_diff(reference_audio, candidate_session, args.sample_rate, out_path, diff_path)
             write_json(args.output_dir / f"session_step_{step:02d}_{label}.json", candidate_session)
-            print(f"trace_file agent=loss step={step} role=audio_diff_{label} path={diff_path}", flush=True)
-            print(f"trace_file agent=loss step={step} role=render_{label} path={out_path}", flush=True)
+            print(f"trace_file agent=loss step={step} role=premix_audio_diff_{label} path={diff_path}", flush=True)
+            print(f"trace_file agent=loss step={step} role=premix_render_{label} path={out_path}", flush=True)
             step_results.append((score.final, label, candidate_session, score, diagnostics, candidate_residual, out_path, diff_path))
             print(
-                f"step={step} candidate={label} score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+                f"step={step} candidate={label} phase=premix score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
                 flush=True,
             )
         step_results.sort(key=lambda item: item[0], reverse=True)
-        _, label, session, score, diagnostics, candidate_residual, out_path, diff_path = step_results[0]
-        print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(label == 'codex').lower()} score={score.final:.4f}", flush=True)
+        premix_score_value, premix_label, premix_session, premix_score, premix_diagnostics, premix_residual, premix_out_path, premix_diff_path = step_results[0]
+        print(f"premix_winner step={step} winner={premix_label} score={premix_score_value:.4f}", flush=True)
+        print(f"agent_stage mixer step={step}", flush=True)
+        premix_session_path = trace_file(f"mixer_step_{step:02d}", "premix_session", write_json(args.output_dir / f"session_step_{step:02d}_premix_winner.json", premix_session))
+        mixed_candidate = run_codex_json(
+            args.output_dir,
+            f"mixer_step_{step:02d}",
+            codex_step_mixer_prompt(analyzer_path, premix_session_path, recommendation_path, history_path, step),
+            args.seconds,
+            args.sample_rate,
+        )
+        mixed_session_path = trace_file(f"mixer_step_{step:02d}", "mixed_session", write_json(args.output_dir / f"session_step_{step:02d}_mixed.json", mixed_candidate))
+        mixed_out_path = args.output_dir / f"reconstruction_step_{step:02d}_mixed.wav"
+        mixed_diff_path = args.output_dir / f"audio_diff_step_{step:02d}_mixed.json"
+        score, diagnostics, candidate_residual = write_audio_diff(reference_audio, mixed_candidate, args.sample_rate, mixed_out_path, mixed_diff_path)
+        label = f"{premix_label}+mixer"
+        session = mixed_candidate
+        out_path = mixed_out_path
+        diff_path = mixed_diff_path
+        print(f"trace_file agent=loss step={step} role=audio_diff_mixed path={mixed_diff_path}", flush=True)
+        print(f"trace_file agent=loss step={step} role=render_mixed path={mixed_out_path}", flush=True)
+        print(
+            f"step={step} candidate=mixed_from_{premix_label} phase=mixed score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+            flush=True,
+        )
+        print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(premix_label == 'codex').lower()} score={score.final:.4f}", flush=True)
         trace_file(f"loss_step_{step:02d}", "winner_render", out_path)
         trace_file(f"loss_step_{step:02d}", "winner_audio_diff", diff_path)
         accepted = score.final >= best_score.final
@@ -775,6 +818,10 @@ def main() -> None:
             "audio_path": str(out_path),
             "audio_diff_path": str(diff_path),
             "proposal_session_path": str(proposed_session_path),
+            "premix_winner": premix_label,
+            "premix_audio_path": str(premix_out_path),
+            "premix_audio_diff_path": str(premix_diff_path),
+            "mixer_session_path": str(mixed_session_path),
             "scores": score_to_json(score),
             "best_scores": score_to_json(best_score),
             "layers": [{"id": layer["id"], "role": layer["role"]} for layer in best_session.get("layers", [])],

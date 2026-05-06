@@ -60,6 +60,7 @@ IMPORTANT_LOG_PATTERNS = [
         r"^agent_stage",
         r"^trace_file",
         r"^winner_summary",
+        r"^premix_winner",
         r"^layer_building_stopped",
         r"^wrote ",
         r"^analysis ",

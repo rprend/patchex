@@ -326,8 +326,17 @@ async function routeRunLog(line) {
     const codexWon = line.match(/\bcodex_won=([^ ]+)/)?.[1] === "true";
     const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
     const panel = agentPanel(`loss_${step}`, `loss ${step + 1}`);
-    appendToLog(panel.querySelector(".candidate-log"), codexWon ? `Codex proposal won with score ${score}.` : `Codex proposal lost; ${winner} won with score ${score}.`);
+    appendToLog(panel.querySelector(".candidate-log"), codexWon ? `Codex proposal won pre-mix, then Mixer produced final step score ${score}.` : `Codex proposal lost pre-mix; ${winner} won after Mixer with score ${score}.`);
     panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
+    return;
+  }
+  if (line.startsWith("premix_winner")) {
+    const step = Number(line.match(/\bstep=(\d+)/)?.[1] || 0);
+    const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
+    const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
+    const panel = agentPanel(`loss_${step}`, `loss ${step + 1}`);
+    appendToLog(panel.querySelector(".candidate-log"), `Pre-mix candidate winner: ${winner} (${score}); sending to Mixer.`);
+    panel.querySelector(".candidate-axis").textContent = `premix ${winner}`;
     return;
   }
   const step = parseStepIndex(line);
@@ -361,7 +370,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
     return (
       name.startsWith("codex_") ||
       name.startsWith("audio_diff_") ||
-      name.match(/^reconstruction_step_\d+_.+\.wav$/) ||
+      name.match(/^(premix_)?reconstruction_step_\d+_.+\.wav$/) ||
       name === "mixer_reconstruction.wav" ||
       name === "simplifier_reconstruction.wav" ||
       name.startsWith("recommendation_step_") ||
@@ -375,7 +384,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
     const pseudoPath = `/ui_runs/${artifact.url.split("/")[3]}/${artifact.name}`;
     const role = artifact.name.startsWith("codex_")
       ? artifact.name.includes("_prompt") ? "prompt" : "answer"
-      : artifact.name.startsWith("audio_diff") ? "audio_diff"
+      : artifact.name.startsWith("audio_diff") || artifact.name.startsWith("premix_audio_diff") ? "audio_diff"
         : artifact.name.endsWith(".wav") ? "render"
         : artifact.name.startsWith("session") ? "session"
           : artifact.name.startsWith("recommendation") ? "recommendation"
@@ -392,8 +401,9 @@ async function renderTraceArtifacts(artifacts, report = null) {
     const step = Number(item.step);
     const winner = item.winner;
     const score = Number(item.scores?.final || item.scores || 0);
+    const premixWinner = item.premix_winner || winner;
     const panel = agentPanel(`loss_${step}`, `loss ${step + 1}`);
-    appendToLog(panel.querySelector(".candidate-log"), winner === "codex" ? `Codex proposal won with score ${score.toFixed(3)}.` : `Codex proposal lost; ${winner} won with score ${score.toFixed(3)}.`);
+    appendToLog(panel.querySelector(".candidate-log"), premixWinner === "codex" ? `Codex proposal won pre-mix, then Mixer produced final step score ${score.toFixed(3)}.` : `Codex proposal lost pre-mix; ${premixWinner} won after Mixer with score ${score.toFixed(3)}.`);
     panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
     const audioName = item.audio_path?.split("/").pop();
     const diffName = item.audio_diff_path?.split("/").pop();
