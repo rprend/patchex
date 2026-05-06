@@ -7,32 +7,20 @@ import math
 import os
 import subprocess
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 try:
+    from audio_diff import AudioScore, compare_audio, score_to_json
     from text2fx import LLM_MODEL, extract_json_object, load_runtime_dependencies
 except ModuleNotFoundError:
+    from .audio_diff import AudioScore, compare_audio, score_to_json
     from .text2fx import LLM_MODEL, extract_json_object, load_runtime_dependencies
 
 sf: Any = None
 genai: Any = None
-
-
-@dataclass
-class Score:
-    final: float
-    multi_resolution_spectral: float
-    mel_spectrogram: float
-    envelope: float
-    pitch_chroma: float
-    spectral_motion: float
-    transient_onset: float
-    stereo_width: float
-    embedding: float
 
 
 DEFAULT_SESSION = {
@@ -269,171 +257,6 @@ def render_session(session: dict[str, Any]) -> np.ndarray:
     if peak > 0.98:
         mix *= 0.98 / peak
     return mix.astype(np.float32)
-
-
-def mono(audio: np.ndarray) -> np.ndarray:
-    return audio.mean(axis=0) if audio.ndim == 2 else audio
-
-
-def stft_mag(y: np.ndarray, frame: int = 2048, hop: int = 512) -> np.ndarray:
-    if y.size < frame:
-        y = np.pad(y, (0, frame - y.size))
-    frames = []
-    window = np.hanning(frame)
-    for start in range(0, y.size - frame + 1, hop):
-        frames.append(np.abs(np.fft.rfft(y[start : start + frame] * window)) + 1e-8)
-    return np.asarray(frames)
-
-
-def frame_rms(y: np.ndarray, frame: int = 1024, hop: int = 512) -> np.ndarray:
-    if y.size < frame:
-        y = np.pad(y, (0, frame - y.size))
-    values = []
-    for start in range(0, y.size - frame + 1, hop):
-        chunk = y[start : start + frame]
-        values.append(float(np.sqrt(np.mean(chunk**2) + 1e-12)))
-    return np.asarray(values)
-
-
-def mel_like_bands(mag: np.ndarray, bands: int = 32) -> np.ndarray:
-    if mag.size == 0:
-        return mag
-    edges = np.geomspace(1, mag.shape[1], bands + 1).astype(int) - 1
-    edges[0] = 0
-    out = []
-    for start, end in zip(edges[:-1], edges[1:]):
-        end = max(start + 1, end)
-        out.append(np.mean(mag[:, start:end], axis=1))
-    return np.asarray(out).T
-
-
-def onset_curve(env: np.ndarray) -> np.ndarray:
-    if env.size < 2:
-        return np.zeros_like(env)
-    diff = np.maximum(0, np.diff(env, prepend=env[0]))
-    peak = float(np.max(diff))
-    return diff / peak if peak > 0 else diff
-
-
-def band_chroma(mag: np.ndarray, sr: int) -> np.ndarray:
-    freqs = np.fft.rfftfreq((mag.shape[1] - 1) * 2, 1.0 / sr)
-    chroma = np.zeros(12)
-    for idx, freq in enumerate(freqs):
-        if 40 <= freq <= 5000:
-            midi = int(round(69 + 12 * math.log2(freq / 440.0)))
-            chroma[midi % 12] += float(np.mean(mag[:, idx]))
-    norm = np.linalg.norm(chroma)
-    return chroma / norm if norm else chroma
-
-
-def cosine(a: np.ndarray, b: np.ndarray) -> float:
-    denom = np.linalg.norm(a) * np.linalg.norm(b)
-    return float(np.dot(a, b) / denom) if denom else 0.0
-
-
-def score_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> tuple[Score, dict[str, Any]]:
-    ref = mono(reference)
-    cand = mono(candidate)
-    size = min(ref.size, cand.size)
-    ref = ref[:size]
-    cand = cand[:size]
-    ref_mag = stft_mag(ref)
-    cand_mag = stft_mag(cand)
-    frames = min(ref_mag.shape[0], cand_mag.shape[0])
-    bins = min(ref_mag.shape[1], cand_mag.shape[1])
-    ref_mag = ref_mag[:frames, :bins]
-    cand_mag = cand_mag[:frames, :bins]
-    spectral_distances = []
-    for frame, hop in [(1024, 256), (2048, 512), (4096, 1024)]:
-        r = stft_mag(ref, frame, hop)
-        c = stft_mag(cand, frame, hop)
-        f = min(r.shape[0], c.shape[0])
-        b = min(r.shape[1], c.shape[1])
-        r = r[:f, :b]
-        c = c[:f, :b]
-        spectral_distances.append(float(np.mean(np.abs(np.log1p(r) - np.log1p(c))) / (np.mean(np.log1p(r)) + 1e-8)))
-    multi_resolution_spectral = math.exp(-float(np.mean(spectral_distances)))
-    ref_mel = mel_like_bands(ref_mag)
-    cand_mel = mel_like_bands(cand_mag)
-    mel_spectrogram = math.exp(-float(np.mean(np.abs(np.log1p(ref_mel) - np.log1p(cand_mel))) / (np.mean(np.log1p(ref_mel)) + 1e-8)))
-    ref_env = frame_rms(ref)
-    cand_env = frame_rms(cand)
-    env_frames = min(ref_env.size, cand_env.size)
-    ref_env = ref_env[:env_frames]
-    cand_env = cand_env[:env_frames]
-    envelope_score = math.exp(-float(np.mean(np.abs(ref_env - cand_env)) / (np.mean(ref_env) + 1e-8)))
-    pitch_chroma = max(0.0, cosine(band_chroma(ref_mag, sr), band_chroma(cand_mag, sr)))
-    freqs = np.fft.rfftfreq((bins - 1) * 2, 1.0 / sr)[:bins]
-    ref_centroid = np.sum(ref_mag * freqs[None, :], axis=1) / (np.sum(ref_mag, axis=1) + 1e-8)
-    cand_centroid = np.sum(cand_mag * freqs[None, :], axis=1) / (np.sum(cand_mag, axis=1) + 1e-8)
-    spectral_motion = math.exp(-float(np.mean(np.abs(ref_centroid - cand_centroid)) / (np.mean(ref_centroid) + 1e-8)))
-    transient_onset = math.exp(-float(np.mean(np.abs(onset_curve(ref_env) - onset_curve(cand_env)))))
-    if reference.ndim == 2 and candidate.ndim == 2:
-        ref_side = float(np.std(reference[0, :size] - reference[1, :size]) / (np.std(reference[:, :size]) + 1e-8))
-        cand_side = float(np.std(candidate[0, :size] - candidate[1, :size]) / (np.std(candidate[:, :size]) + 1e-8))
-        stereo_width = math.exp(-abs(ref_side - cand_side) / max(ref_side, cand_side, 1e-6))
-    else:
-        stereo_width = 1.0
-    embedding = float(np.clip(0.50 * multi_resolution_spectral + 0.25 * pitch_chroma + 0.25 * envelope_score, 0.0, 1.0))
-    final = (
-        0.24 * multi_resolution_spectral
-        + 0.20 * mel_spectrogram
-        + 0.16 * envelope_score
-        + 0.13 * pitch_chroma
-        + 0.12 * spectral_motion
-        + 0.07 * transient_onset
-        + 0.06 * stereo_width
-        + 0.02 * embedding
-    )
-    diagnostics = {
-        "reference_centroid_start": float(ref_centroid[0]) if ref_centroid.size else 0.0,
-        "reference_centroid_end": float(ref_centroid[-1]) if ref_centroid.size else 0.0,
-        "candidate_centroid_start": float(cand_centroid[0]) if cand_centroid.size else 0.0,
-        "candidate_centroid_end": float(cand_centroid[-1]) if cand_centroid.size else 0.0,
-        "reference_rms": float(np.sqrt(np.mean(ref**2) + 1e-12)),
-        "candidate_rms": float(np.sqrt(np.mean(cand**2) + 1e-12)),
-    }
-    return Score(final, multi_resolution_spectral, mel_spectrogram, envelope_score, pitch_chroma, spectral_motion, transient_onset, stereo_width, embedding), diagnostics
-
-
-def score_to_json(score: Score) -> dict[str, float]:
-    return {
-        "final": float(score.final),
-        "multi_resolution_spectral": float(score.multi_resolution_spectral),
-        "mel_spectrogram": float(score.mel_spectrogram),
-        "envelope": float(score.envelope),
-        "pitch_chroma": float(score.pitch_chroma),
-        "spectral_motion": float(score.spectral_motion),
-        "transient_onset": float(score.transient_onset),
-        "stereo_width": float(score.stereo_width),
-        "embedding": float(score.embedding),
-    }
-
-
-def residual_report(score: Score, diagnostics: dict[str, Any], current_layers: int) -> dict[str, Any]:
-    missing = []
-    recs = []
-    if score.multi_resolution_spectral < 0.62 or score.mel_spectrogram < 0.62:
-        missing.append("spectral balance still differs from the source")
-        recs.append("adjust oscillator blend, filter cutoff range, or add a support layer")
-    if score.envelope < 0.65:
-        missing.append("amplitude contour does not follow the source")
-        recs.append("change note durations, gain, attack, release, or layer timing")
-    if score.spectral_motion < 0.65:
-        missing.append("brightness motion does not track the source")
-        recs.append("add or adjust lowpass cutoff automation")
-    if score.pitch_chroma < 0.55:
-        missing.append("pitch/chord content appears mismatched")
-        recs.append("change layer notes or add a lower harmonic layer")
-    if score.transient_onset < 0.65:
-        missing.append("transient/onset contour does not match the source")
-        recs.append("reduce unwanted retriggers or adjust note starts")
-    if score.stereo_width < 0.6:
-        missing.append("stereo width differs from the source")
-        recs.append("adjust width, pan, chorus, or reverb mix")
-    if current_layers < 2 and score.final < 0.72:
-        recs.append("prefer adding one concrete layer over overfitting the first layer")
-    return {"missing": missing or ["largest remaining error is subtle parameter mismatch"], "recommendations": recs or ["make a conservative local adjustment"], "diagnostics": diagnostics}
 
 
 def gemini_client() -> Any:
@@ -703,10 +526,19 @@ def local_mutation(session: dict[str, Any], rng: np.random.Generator, amount: fl
     return sanitize_session(mutated, duration, sample_rate)
 
 
-def score_session(reference_audio: np.ndarray, session: dict[str, Any], sample_rate: int, output_path: Path) -> tuple[Score, dict[str, Any]]:
+def local_mono(audio: np.ndarray) -> np.ndarray:
+    return audio.mean(axis=0) if audio.ndim == 2 else audio
+
+
+def score_from_json(payload: dict[str, float]) -> AudioScore:
+    return AudioScore(**{field: float(payload.get(field, 0.0)) for field in AudioScore.__dataclass_fields__})
+
+
+def score_session(reference_audio: np.ndarray, session: dict[str, Any], sample_rate: int, output_path: Path) -> tuple[AudioScore, dict[str, Any], dict[str, Any]]:
     rendered = render_session(session)
     sf.write(output_path, rendered.T, sample_rate)
-    return score_audio(reference_audio, rendered, sample_rate)
+    diff = compare_audio(reference_audio, rendered, sample_rate)
+    return score_from_json(diff["scores"]), diff["diagnostics"], diff["residual"]
 
 
 def distilled_playable_patch(session: dict[str, Any]) -> dict[str, Any]:
@@ -773,7 +605,7 @@ def main() -> None:
     client = gemini_client()
 
     local_features = {
-        "rms": float(np.sqrt(np.mean(mono(reference_audio) ** 2) + 1e-12)),
+        "rms": float(np.sqrt(np.mean(local_mono(reference_audio) ** 2) + 1e-12)),
         "duration": args.seconds,
     }
     print("analysis_start layer_plan", flush=True)
@@ -785,7 +617,7 @@ def main() -> None:
     session = sanitize_session(DEFAULT_SESSION, args.seconds, args.sample_rate)
     history: list[dict[str, Any]] = []
     best_session = session
-    best_score = Score(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    best_score = AudioScore(**{field: 0.0 for field in AudioScore.__dataclass_fields__})
     residual = {"missing": ["empty session"], "recommendations": ["add the dominant audible layer first"], "diagnostics": local_features}
     rng = np.random.default_rng(20260506)
 
@@ -804,19 +636,21 @@ def main() -> None:
         step_results = []
         for label, candidate_session in candidates:
             out_path = args.output_dir / f"reconstruction_step_{step:02d}_{label}.wav"
-            score, diagnostics = score_session(reference_audio, candidate_session, args.sample_rate, out_path)
-            step_results.append((score.final, label, candidate_session, score, diagnostics, out_path))
+            score, diagnostics, candidate_residual = score_session(reference_audio, candidate_session, args.sample_rate, out_path)
+            step_results.append((score.final, label, candidate_session, score, diagnostics, candidate_residual, out_path))
             print(
                 f"step={step} candidate={label} score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset={score.transient_onset:.4f} stereo={score.stereo_width:.4f}",
                 flush=True,
             )
         step_results.sort(key=lambda item: item[0], reverse=True)
-        _, label, session, score, diagnostics, out_path = step_results[0]
+        _, label, session, score, diagnostics, candidate_residual, out_path = step_results[0]
         accepted = score.final >= best_score.final
         if accepted:
             best_session = session
             best_score = score
-        deterministic_residual = residual_report(best_score, diagnostics, len(best_session.get("layers", [])))
+        deterministic_residual = candidate_residual
+        if len(best_session.get("layers", [])) < 2 and best_score.final < 0.72:
+            deterministic_residual.setdefault("recommendations", []).append("prefer adding one concrete layer over overfitting the first layer")
         history_item = {
             "stage": "layer_builder",
             "step": step,
@@ -857,7 +691,7 @@ def main() -> None:
         args.seconds,
         args.sample_rate,
     )
-    mixed_score, mixed_diagnostics = score_session(reference_audio, mixed_session, args.sample_rate, args.output_dir / "mixer_reconstruction.wav")
+    mixed_score, mixed_diagnostics, _mixed_residual = score_session(reference_audio, mixed_session, args.sample_rate, args.output_dir / "mixer_reconstruction.wav")
     mixed_accepted = mixed_score.final >= best_score.final
     if mixed_accepted:
         best_session = mixed_session
@@ -872,7 +706,7 @@ def main() -> None:
         args.seconds,
         args.sample_rate,
     )
-    simplified_score, simplified_diagnostics = score_session(reference_audio, simplified_session, args.sample_rate, args.output_dir / "simplifier_reconstruction.wav")
+    simplified_score, simplified_diagnostics, _simplified_residual = score_session(reference_audio, simplified_session, args.sample_rate, args.output_dir / "simplifier_reconstruction.wav")
     simplified_accepted = simplified_score.final >= best_score.final * 0.97
     if simplified_accepted:
         best_session = simplified_session

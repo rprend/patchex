@@ -307,7 +307,24 @@ startReconstruction.addEventListener("click", extractSelectedClip);
 function renderScoreboard(report) {
   const scores = report.best_scores || {};
   scoreboardEl.innerHTML = "";
-  ["final", "mel_spectrogram", "envelope", "pitch_chroma", "spectral_motion", "transient_onset", "stereo_width", "embedding"].forEach((name) => {
+  [
+    "final",
+    "multi_resolution_spectral",
+    "mel_spectrogram",
+    "a_weighted_spectral",
+    "envelope",
+    "pitch_chroma",
+    "f0_contour",
+    "spectral_motion",
+    "spectral_features",
+    "transient_onset",
+    "stereo_width",
+    "modulation",
+    "harmonic_noise",
+    "cepstral",
+    "embedding",
+    "codec_latent",
+  ].forEach((name) => {
     const value = Number(scores[name] || 0);
     const item = document.createElement("div");
     item.className = "score-card";
