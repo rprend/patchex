@@ -284,24 +284,45 @@ analyzeClip.addEventListener("click", async () => {
   appendAnalysisLog(`extracting exact clip: ${currentFile} @ ${start.toFixed(2)}s-${(start + CLIP_SECONDS).toFixed(2)}s`);
   const focus = targetPart.value.trim();
   appendAnalysisLog(`target part: ${focus || "model should infer the main synth part"}`);
-  appendAnalysisLog("sending extracted WAV to Gemini for focused per-axis audio analysis...");
+  appendAnalysisLog("starting asynchronous clip analysis job...");
   try {
     const data = await api("/api/clip", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reference: currentFile, start, duration: CLIP_SECONDS, target_part: focus }),
     });
-    currentClip = data.clip;
-    currentInstrument = data.analysis.instrument_type;
-    instrument.value = "";
-    renderAxes(data.analysis.axes);
-    promptBox.value = data.analysis.prompt;
-    appendAnalysisLog(`clip extracted: ${data.clip}`);
-    appendAnalysisLog(`analysis source: ${data.analysis.analysis_source}`);
-    appendAnalysisLog(`detected instrument: ${currentInstrument}`);
-    appendAnalysisLog(`target prompt: ${data.analysis.prompt}`);
-    startRun.disabled = false;
-    setStatus(`Clip ${start.toFixed(2)}s`);
+    const analysisId = data.analysis_id;
+    appendAnalysisLog(`analysis id: ${analysisId}`);
+    const events = new EventSource(`/api/analysis/${analysisId}/events`);
+    events.onmessage = (event) => {
+      const payload = JSON.parse(event.data);
+      if (payload.type === "log") {
+        appendAnalysisLog(payload.line);
+      }
+      if (payload.type === "heartbeat") {
+        appendAnalysisLog("heartbeat: analysis still running");
+      }
+      if (payload.type === "done") {
+        events.close();
+        if (payload.status !== "completed") {
+          setStatus("Analyze failed");
+          appendAnalysisLog(payload.error || "analysis failed");
+          return;
+        }
+        const result = payload.result;
+        currentClip = result.clip;
+        currentInstrument = result.analysis.instrument_type;
+        instrument.value = "";
+        renderAxes(result.analysis.axes);
+        promptBox.value = result.analysis.prompt;
+        appendAnalysisLog(`analysis source: ${result.analysis.analysis_source}`);
+        startRun.disabled = false;
+        setStatus(`Clip ${start.toFixed(2)}s`);
+      }
+    };
+    events.onerror = () => {
+      appendAnalysisLog("analysis event stream error; check server process");
+    };
   } catch (error) {
     setStatus("Analyze failed");
     appendAnalysisLog(error.stack || String(error));

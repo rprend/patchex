@@ -26,6 +26,7 @@ RUNS = ROOT / "ui_runs"
 FFMPEG = shutil.which("ffmpeg")
 
 jobs: dict[str, dict] = {}
+analysis_jobs: dict[str, dict] = {}
 
 
 def json_response(handler: BaseHTTPRequestHandler, payload: dict, status: int = 200) -> None:
@@ -108,6 +109,46 @@ def analyze_clip(path: Path, target_part: str = "") -> dict:
     audio, sr = load_audio(path)
     local = analyze_reference(audio, sr)
     return describe_clip_with_gemini(path, local, target_part)
+
+
+def start_clip_analysis(reference: str, start: float, duration: float, target_part: str) -> str:
+    analysis_id = time.strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
+    event_queue: queue.Queue[dict] = queue.Queue()
+    analysis_jobs[analysis_id] = {
+        "id": analysis_id,
+        "status": "running",
+        "queue": event_queue,
+        "result": None,
+        "error": None,
+    }
+
+    def worker() -> None:
+        try:
+            event_queue.put({"type": "log", "line": f"extracting exact clip: {reference} @ {start:.2f}s-{(start + duration):.2f}s"})
+            clip = make_clip(reference, start, duration)
+            event_queue.put({"type": "log", "line": f"clip written: {clip.name}"})
+            event_queue.put({"type": "log", "line": "loading extracted WAV and computing local DSP features"})
+            runtime()
+            audio, sr = load_audio(clip)
+            local = analyze_reference(audio, sr)
+            event_queue.put({"type": "log", "line": f"local preliminary instrument: {local['instrument_type']}"})
+            event_queue.put({"type": "log", "line": "starting Gemini audio analysis"})
+            analysis = describe_clip_with_gemini(clip, local, target_part)
+            event_queue.put({"type": "log", "line": "Gemini response parsed and validated"})
+            event_queue.put({"type": "log", "line": f"detected instrument: {analysis['instrument_type']}"})
+            event_queue.put({"type": "log", "line": f"target prompt: {analysis['prompt']}"})
+            result = {"clip": clip.name, "url": f"/media/references/{clip.name}", "analysis": analysis}
+            analysis_jobs[analysis_id]["result"] = result
+            analysis_jobs[analysis_id]["status"] = "completed"
+            event_queue.put({"type": "done", "status": "completed", "result": result})
+        except Exception as exc:
+            analysis_jobs[analysis_id]["status"] = "failed"
+            analysis_jobs[analysis_id]["error"] = str(exc)
+            event_queue.put({"type": "log", "line": f"analysis failed: {exc}"})
+            event_queue.put({"type": "done", "status": "failed", "error": str(exc)})
+
+    threading.Thread(target=worker, daemon=True).start()
+    return analysis_id
 
 
 def load_secrets_into_env(env: dict[str, str]) -> None:
@@ -274,6 +315,23 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/runs":
                 json_response(self, {"runs": list_runs()})
                 return
+            if path.startswith("/api/analysis/") and path.endswith("/events"):
+                analysis_id = path.split("/")[-2]
+                self.stream_analysis_events(analysis_id)
+                return
+            if path.startswith("/api/analysis/"):
+                analysis_id = path.split("/")[-1]
+                job = analysis_jobs[analysis_id]
+                json_response(
+                    self,
+                    {
+                        "id": analysis_id,
+                        "status": job["status"],
+                        "result": job["result"],
+                        "error": job["error"],
+                    },
+                )
+                return
             if path.startswith("/api/jobs/") and path.endswith("/events"):
                 run_id = path.split("/")[-2]
                 self.stream_events(run_id)
@@ -316,9 +374,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/api/clip":
                 payload = read_json(self)
-                clip = make_clip(payload["reference"], float(payload["start"]), float(payload.get("duration", 5)))
-                analysis = analyze_clip(clip, str(payload.get("target_part", "")))
-                json_response(self, {"clip": clip.name, "url": f"/media/references/{clip.name}", "analysis": analysis})
+                analysis_id = start_clip_analysis(
+                    reference=payload["reference"],
+                    start=float(payload["start"]),
+                    duration=float(payload.get("duration", 5)),
+                    target_part=str(payload.get("target_part", "")),
+                )
+                json_response(self, {"analysis_id": analysis_id})
                 return
             if parsed.path == "/api/run":
                 payload = read_json(self)
@@ -356,6 +418,25 @@ class Handler(BaseHTTPRequestHandler):
         while True:
             try:
                 event = q.get(timeout=15)
+            except queue.Empty:
+                event = {"type": "heartbeat"}
+            data = f"data: {json.dumps(event)}\n\n".encode()
+            self.wfile.write(data)
+            self.wfile.flush()
+            if event.get("type") == "done":
+                break
+
+    def stream_analysis_events(self, analysis_id: str) -> None:
+        job = analysis_jobs[analysis_id]
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        q: queue.Queue[dict] = job["queue"]
+        while True:
+            try:
+                event = q.get(timeout=5)
             except queue.Empty:
                 event = {"type": "heartbeat"}
             data = f"data: {json.dumps(event)}\n\n".encode()
