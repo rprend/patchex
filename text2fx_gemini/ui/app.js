@@ -12,6 +12,7 @@ const axesEl = document.getElementById("axes");
 const startRun = document.getElementById("startRun");
 const analysisLogEl = document.getElementById("analysisLog");
 const runLogEl = document.getElementById("runLog");
+const candidateLogsEl = document.getElementById("candidateLogs");
 const artifactsEl = document.getElementById("artifacts");
 const statusEl = document.getElementById("serviceStatus");
 const keyboardPanel = document.getElementById("keyboardPanel");
@@ -60,6 +61,62 @@ function appendAnalysisLog(line) {
 
 function appendRunLog(line) {
   appendToLog(runLogEl, line);
+}
+
+function parseCandidateIndex(line) {
+  const match = line.match(/\bcandidate(?:=|_complete index=)(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function axisFromLine(line) {
+  const match = line.match(/\baxis=([a-z_]+)/);
+  return match ? match[1] : "";
+}
+
+function candidatePanel(index, axis = "") {
+  let panel = candidateLogsEl.querySelector(`[data-candidate="${index}"]`);
+  if (panel) {
+    if (axis && !panel.dataset.axis) {
+      panel.dataset.axis = axis;
+      panel.querySelector(".candidate-axis").textContent = axis;
+    }
+    return panel;
+  }
+  panel = document.createElement("section");
+  panel.className = "candidate-panel running";
+  panel.dataset.candidate = String(index);
+  panel.dataset.axis = axis;
+  panel.innerHTML = `
+    <div class="candidate-head">
+      <div>
+        <span>Candidate ${index}</span>
+        <strong class="candidate-axis">${axis || "pending"}</strong>
+      </div>
+      <div class="spinner" aria-label="running"></div>
+    </div>
+    <pre class="candidate-log"></pre>
+  `;
+  candidateLogsEl.appendChild(panel);
+  return panel;
+}
+
+function appendCandidateLog(index, line) {
+  const panel = candidatePanel(index, axisFromLine(line));
+  const log = panel.querySelector(".candidate-log");
+  appendToLog(log, line);
+  if (line.startsWith("candidate_complete")) {
+    panel.classList.remove("running");
+    panel.classList.add("completed");
+  }
+}
+
+function routeRunLog(line) {
+  const candidateIndex = parseCandidateIndex(line);
+  if (candidateIndex !== null) {
+    appendCandidateLog(candidateIndex, line);
+    return;
+  }
+  appendRunLog(line);
 }
 
 async function api(path, options = {}) {
@@ -239,6 +296,7 @@ function renderRunHistory(runs) {
 async function loadPastRun(run) {
   analysisLogEl.textContent = "";
   runLogEl.textContent = "";
+  candidateLogsEl.innerHTML = "";
   artifactsEl.innerHTML = "";
   keyboardPanel.hidden = true;
   activePatch = null;
@@ -280,6 +338,7 @@ analyzeClip.addEventListener("click", async () => {
   startRun.disabled = true;
   analysisLogEl.textContent = "";
   runLogEl.textContent = "";
+  candidateLogsEl.innerHTML = "";
   const { start } = selectedRange();
   appendAnalysisLog(`extracting exact clip: ${currentFile} @ ${start.toFixed(2)}s-${(start + CLIP_SECONDS).toFixed(2)}s`);
   const focus = targetPart.value.trim();
@@ -334,6 +393,7 @@ playClipButton.addEventListener("click", playRegion);
 startRun.addEventListener("click", async () => {
   if (!currentClip) return;
   runLogEl.textContent = "";
+  candidateLogsEl.innerHTML = "";
   artifactsEl.innerHTML = "";
   setStatus("Running");
   startRun.disabled = true;
@@ -360,7 +420,7 @@ startRun.addEventListener("click", async () => {
     events.onmessage = async (event) => {
       const payload = JSON.parse(event.data);
       if (payload.type === "log") {
-        appendRunLog(payload.line);
+        routeRunLog(payload.line);
       }
       if (payload.type === "heartbeat") {
         appendRunLog("heartbeat: process still running");
@@ -370,6 +430,12 @@ startRun.addEventListener("click", async () => {
         setStatus(payload.status);
         startRun.disabled = false;
         appendRunLog(`run ${payload.status} with return code ${payload.returncode}`);
+        if (payload.status !== "completed") {
+          candidateLogsEl.querySelectorAll(".candidate-panel.running").forEach((panel) => {
+            panel.classList.remove("running");
+            panel.classList.add("failed");
+          });
+        }
         const job = await api(`/api/jobs/${runId}`);
         renderArtifacts(job.artifacts);
         loadRuns().catch((error) => appendRunLog(error.stack || String(error)));

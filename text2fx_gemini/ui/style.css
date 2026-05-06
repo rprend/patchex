@@ -255,7 +255,84 @@ textarea {
 }
 
 .run-log {
-  height: 34rem;
+  height: 14rem;
+}
+
+.candidate-logs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  margin-top: 1rem;
+}
+
+.candidate-panel {
+  min-height: 16rem;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+
+.candidate-head {
+  min-height: 4.25rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: .8rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.candidate-head span {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.candidate-head strong {
+  display: block;
+  margin-top: .15rem;
+  color: var(--accent);
+  font-family: "Newsreader", ui-serif, Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.candidate-log {
+  height: 13rem;
+  overflow: auto;
+  margin: 0;
+  padding: .8rem;
+  color: var(--soft);
+  font: .78rem/1.5 "Geist", ui-sans-serif, system-ui;
+  white-space: pre-wrap;
+}
+
+.spinner {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid var(--blue-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+.candidate-panel.completed .spinner {
+  animation: none;
+  border-color: var(--blue-4);
+  background: var(--blue-4);
+}
+
+.candidate-panel.failed .spinner {
+  animation: none;
+  border-color: #b45353;
+  background: #b45353;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .keyboard-panel {

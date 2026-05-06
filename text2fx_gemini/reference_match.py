@@ -9,6 +9,7 @@ import subprocess
 import time
 import tempfile
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -1021,8 +1022,13 @@ def main() -> None:
         sf.write(reference_clip, reference_audio.T, reference_sr)
         reference_embedding = embed_wav(client, reference_clip)
         text_embedding = embed_text(client, target_prompt)
-        for candidate_index, (axis, objective) in enumerate(build_candidate_specs(args.candidates, args.axis_trials)):
-            result, codex_runs = run_iterative_codex_candidate(
+        specs = list(enumerate(build_candidate_specs(args.candidates, args.axis_trials)))
+        max_workers = max(1, min(4, len(specs)))
+        print(f"parallel_candidates count={len(specs)} max_workers={max_workers}", flush=True)
+
+        def run_candidate(spec: tuple[int, tuple[str, str]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+            candidate_index, (axis, objective) = spec
+            return run_iterative_codex_candidate(
                 output_dir=args.output_dir,
                 client=client,
                 analysis=analysis,
@@ -1038,10 +1044,17 @@ def main() -> None:
                 reference_embedding=reference_embedding,
                 text_embedding=text_embedding,
             )
-            if seed_recipe is None:
-                seed_recipe = result["recipe"]
-            results.append(result)
-            codex_candidates.extend(codex_runs)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_index = {executor.submit(run_candidate, spec): spec[0] for spec in specs}
+            for future in as_completed(future_to_index):
+                candidate_index = future_to_index[future]
+                result, codex_runs = future.result()
+                results.append(result)
+                codex_candidates.extend(codex_runs)
+                print(f"candidate_complete index={candidate_index} axis={result['axis']} best_loss={result['loss']:.4f} best_score={result['scores']['final']:.4f}", flush=True)
+    results.sort(key=lambda item: item["index"])
+    seed_recipe = results[0]["recipe"] if results else None
     if seed_recipe is None:
         raise RuntimeError("No candidate recipes were generated.")
 
