@@ -498,6 +498,28 @@ def build_vital_parameters(layer: dict[str, Any]) -> dict[str, float]:
     return params
 
 
+def build_vital_parameter_automation(layer: dict[str, Any], duration: float) -> list[dict[str, Any]]:
+    filt = layer.get("filter", {})
+    mod = layer.get("modulation", {})
+    cutoff_points = filt.get("cutoff_points", [{"time": 0.0, "hz": filt.get("cutoff_start_hz", 1200.0)}, {"time": duration, "hz": filt.get("cutoff_end_hz", 1200.0)}])
+    gain_points = layer.get("gain_points", [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}])
+    gate_points = mod.get("gate_points", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}])
+    cutoff_automation = [
+        {"time": float(point.get("time", 0.0)), "value": hz_to_vital_norm(float(point.get("hz", filt.get("cutoff_end_hz", 1200.0))))}
+        for point in cutoff_points
+    ]
+    volume_automation = []
+    for point in gain_points:
+        time = float(point.get("time", 0.0))
+        gate_level = float(np.interp(time, [float(p["time"]) for p in gate_points], [float(p["level"]) for p in gate_points])) if gate_points else 1.0
+        db = float(point.get("db", 0.0))
+        volume_automation.append({"time": time, "value": float(np.clip(0.8 * db_to_amp(db) * gate_level, 0.0, 1.0))})
+    return [
+        {"parameter": "Filter 1 Cutoff", "points": cutoff_automation},
+        {"parameter": "Volume", "points": volume_automation},
+    ]
+
+
 def apply_delay(stereo: np.ndarray, sr: int, delay_time: float, mix: float) -> np.ndarray:
     if mix <= 0:
         return stereo
@@ -528,6 +550,7 @@ def render_vital_layer(layer: dict[str, Any], duration: float, sr: int) -> np.nd
         tmp_path = Path(tmp)
         request_path = tmp_path / "request.json"
         output_path = tmp_path / "vital.wav"
+        applied_path = tmp_path / "applied_parameters.json"
         notes = [
             {
                 "note": int(note.get("note", 60)),
@@ -545,10 +568,19 @@ def render_vital_layer(layer: dict[str, Any], duration: float, sr: int) -> np.nd
                 "output_path": str(output_path),
                 "notes": notes,
                 "parameters": build_vital_parameters(layer),
+                "parameter_automation": build_vital_parameter_automation(layer, duration),
                 "dump_parameters_path": str(tmp_path / "vital_parameters.json"),
+                "applied_parameters_path": str(applied_path),
             },
         )
         subprocess.run([str(renderer), str(request_path)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30)
+        if applied_path.exists():
+            report = json.loads(applied_path.read_text())
+            ignored = report.get("ignored", [])
+            explicit = set((layer.get("synth", {}).get("vital_parameters") or {}).keys())
+            ignored_explicit = [name for name in ignored if name in explicit]
+            if ignored_explicit:
+                raise RuntimeError(f"Vital ignored unknown synth.vital_parameters keys: {ignored_explicit}")
         audio, rendered_sr = sf.read(output_path, always_2d=True)
         if int(rendered_sr) != int(sr):
             raise RuntimeError(f"Vital AU rendered at {rendered_sr} Hz, expected {sr} Hz")

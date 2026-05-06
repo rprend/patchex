@@ -15,7 +15,19 @@ struct RenderRequest: Codable {
     let notes: [Note]
     let output_path: String
     let parameters: [String: Float]?
+    let parameter_automation: [ParameterAutomation]?
     let dump_parameters_path: String?
+    let applied_parameters_path: String?
+}
+
+struct AutomationPoint: Codable {
+    let time: Double
+    let value: Float
+}
+
+struct ParameterAutomation: Codable {
+    let parameter: String
+    let points: [AutomationPoint]
 }
 
 func fourCC(_ text: String) -> OSType {
@@ -87,20 +99,88 @@ if let dumpPath = request.dump_parameters_path {
     }
 }
 
+var lookup: [String: AUParameter] = [:]
+for parameter in allParameters {
+    lookup[parameter.identifier.lowercased()] = parameter
+    lookup[parameter.displayName.lowercased()] = parameter
+    lookup[String(parameter.address)] = parameter
+}
+
+var appliedParameters: [[String: String]] = []
+var ignoredParameters: [String] = []
+
 if let parameterValues = request.parameters {
-    var lookup: [String: AUParameter] = [:]
-    for parameter in allParameters {
-        lookup[parameter.identifier.lowercased()] = parameter
-        lookup[parameter.displayName.lowercased()] = parameter
-        lookup[String(parameter.address)] = parameter
-    }
     for (key, value) in parameterValues {
         guard let parameter = lookup[key.lowercased()] else {
+            ignoredParameters.append(key)
             continue
         }
         let clipped = min(max(value, parameter.minValue), parameter.maxValue)
         parameter.value = clipped
+        appliedParameters.append([
+            "requested": key,
+            "display_name": parameter.displayName,
+            "identifier": parameter.identifier,
+            "address": String(parameter.address),
+            "value": String(clipped),
+        ])
     }
+}
+
+struct AutomationRuntime {
+    let requested: String
+    let parameter: AUParameter
+    let points: [AutomationPoint]
+}
+
+var automationRuntimes: [AutomationRuntime] = []
+if let automations = request.parameter_automation {
+    for automation in automations {
+        guard let parameter = lookup[automation.parameter.lowercased()] else {
+            ignoredParameters.append(automation.parameter)
+            continue
+        }
+        let sortedPoints = automation.points.sorted { $0.time < $1.time }
+        if sortedPoints.isEmpty {
+            continue
+        }
+        automationRuntimes.append(AutomationRuntime(requested: automation.parameter, parameter: parameter, points: sortedPoints))
+        appliedParameters.append([
+            "requested": automation.parameter,
+            "display_name": parameter.displayName,
+            "identifier": parameter.identifier,
+            "address": String(parameter.address),
+            "automation_points": String(sortedPoints.count),
+        ])
+    }
+}
+
+if let reportPath = request.applied_parameters_path {
+    let report: [String: Any] = [
+        "applied": appliedParameters,
+        "ignored": ignoredParameters,
+    ]
+    if let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]) {
+        try? data.write(to: URL(fileURLWithPath: reportPath))
+    }
+}
+
+func automationValue(_ runtime: AutomationRuntime, at time: Double) -> Float {
+    let points = runtime.points
+    if points.count == 1 || time <= points[0].time {
+        return min(max(points[0].value, runtime.parameter.minValue), runtime.parameter.maxValue)
+    }
+    for index in 1..<points.count {
+        let previous = points[index - 1]
+        let next = points[index]
+        if time <= next.time {
+            let span = max(0.000001, next.time - previous.time)
+            let fraction = Float((time - previous.time) / span)
+            let value = previous.value + (next.value - previous.value) * fraction
+            return min(max(value, runtime.parameter.minValue), runtime.parameter.maxValue)
+        }
+    }
+    return min(max(points[points.count - 1].value, runtime.parameter.minValue), runtime.parameter.maxValue)
 }
 
 let engine = AVAudioEngine()
@@ -177,6 +257,10 @@ events.sort { lhs, rhs in
 var eventIndex = 0
 while engine.manualRenderingSampleTime < totalFrames {
     let currentFrame = engine.manualRenderingSampleTime
+    let currentTime = Double(currentFrame) / request.sample_rate
+    for runtime in automationRuntimes {
+        runtime.parameter.value = automationValue(runtime, at: currentTime)
+    }
     while eventIndex < events.count && events[eventIndex].frame <= currentFrame {
         let event = events[eventIndex]
         if event.on {
