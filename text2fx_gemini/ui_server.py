@@ -57,6 +57,8 @@ IMPORTANT_LOG_PATTERNS = [
         r"^step_complete",
         r"^analysis_start",
         r"^analysis_done",
+        r"^agent_stage",
+        r"^layer_building_stopped",
         r"^wrote ",
         r"^analysis ",
         r"^Traceback",
@@ -450,7 +452,7 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
     return run_id
 
 
-def start_reconstruction(reference: str, target_part: str = "", steps: int = 5, local_trials: int = 5, max_layers: int = 4) -> str:
+def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 4, max_layers: int = 5) -> str:
     reference_path = safe_reference_path(reference)
     run_id = time.strftime("%Y%m%d_%H%M%S_v1_") + uuid.uuid4().hex[:8]
     out_dir = RUNS / run_id
@@ -463,8 +465,6 @@ def start_reconstruction(reference: str, target_part: str = "", steps: int = 5, 
         str(reference_path),
         "--output-dir",
         str(out_dir),
-        "--target-part",
-        target_part,
         "--steps",
         str(max(1, min(10, steps))),
         "--local-trials",
@@ -611,7 +611,10 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Run media path escapes run directory.")
                 self.serve_file(target)
                 return
-            target = UI / ("index.html" if path == "/" else path.lstrip("/"))
+            if path in {"/v1_reconstruct", "/v1_reconstruct.html"}:
+                target = UI / "v1.html"
+            else:
+                target = UI / ("index.html" if path == "/" else path.lstrip("/"))
             self.serve_file(target)
         except Exception as exc:
             json_response(self, {"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -655,10 +658,9 @@ class Handler(BaseHTTPRequestHandler):
                 payload = read_json(self)
                 run_id = start_reconstruction(
                     reference=payload["clip"],
-                    target_part=str(payload.get("target_part", "")),
                     steps=int(payload.get("steps", 5)),
-                    local_trials=int(payload.get("local_trials", 5)),
-                    max_layers=int(payload.get("max_layers", 4)),
+                    local_trials=int(payload.get("local_trials", 4)),
+                    max_layers=int(payload.get("max_layers", 5)),
                 )
                 json_response(self, {"run_id": run_id})
                 return

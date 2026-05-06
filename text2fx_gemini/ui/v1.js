@@ -4,18 +4,13 @@ const waveformEl = document.getElementById("waveform");
 const clipRange = document.getElementById("clipRange");
 const playClipButton = document.getElementById("playClip");
 const refreshFiles = document.getElementById("refreshFiles");
-const extractClip = document.getElementById("extractClip");
 const startReconstruction = document.getElementById("startReconstruction");
-const targetPart = document.getElementById("targetPart");
 const clipLogEl = document.getElementById("clipLog");
 const runLogEl = document.getElementById("runLog");
 const stepLogsEl = document.getElementById("stepLogs");
 const artifactsEl = document.getElementById("artifacts");
 const statusEl = document.getElementById("serviceStatus");
 const scoreboardEl = document.getElementById("scoreboard");
-const stepsEl = document.getElementById("steps");
-const localTrialsEl = document.getElementById("localTrials");
-const maxLayersEl = document.getElementById("maxLayers");
 
 let currentFile = null;
 let currentClip = null;
@@ -65,7 +60,7 @@ async function loadFiles() {
 async function selectFile(name) {
   currentFile = name;
   currentClip = null;
-  startReconstruction.disabled = true;
+  startReconstruction.disabled = false;
   artifactsEl.innerHTML = "";
   scoreboardEl.innerHTML = "";
   stepLogsEl.innerHTML = "";
@@ -167,16 +162,16 @@ function parseStepIndex(line) {
   return done ? Number(done[1]) : null;
 }
 
-function stepPanel(index) {
-  let panel = stepLogsEl.querySelector(`[data-step="${index}"]`);
+function agentPanel(id, label) {
+  let panel = stepLogsEl.querySelector(`[data-step="${id}"]`);
   if (panel) return panel;
   panel = document.createElement("section");
   panel.className = "candidate-panel running";
-  panel.dataset.step = String(index);
+  panel.dataset.step = String(id);
   panel.innerHTML = `
     <div class="candidate-head">
       <div>
-        <span>Step ${index}</span>
+        <span>${label}</span>
         <strong class="candidate-axis">scoring</strong>
       </div>
       <div class="spinner" aria-label="running"></div>
@@ -189,11 +184,19 @@ function stepPanel(index) {
 
 function routeRunLog(line) {
   const step = parseStepIndex(line);
+  const agentMatch = line.match(/\bagent_stage ([a-z_]+)(?: step=(\d+))?/);
+  if (agentMatch) {
+    const id = agentMatch[2] ? `${agentMatch[1]}_${agentMatch[2]}` : agentMatch[1];
+    const panel = agentPanel(id, agentMatch[1].replaceAll("_", " "));
+    appendToLog(panel.querySelector(".candidate-log"), line);
+    panel.querySelector(".candidate-axis").textContent = "running";
+    return;
+  }
   if (step === null) {
     appendRunLog(line);
     return;
   }
-  const panel = stepPanel(step);
+  const panel = agentPanel(`builder_${step}`, `builder ${step + 1}`);
   appendToLog(panel.querySelector(".candidate-log"), line);
   const scoreMatch = line.match(/\bscore=([0-9.]+)/);
   if (scoreMatch) {
@@ -205,7 +208,7 @@ function routeRunLog(line) {
   }
 }
 
-extractClip.addEventListener("click", async () => {
+async function extractSelectedClip() {
   if (!currentFile || !activeRegion) return;
   setStatus("Extracting");
   startReconstruction.disabled = true;
@@ -215,9 +218,7 @@ extractClip.addEventListener("click", async () => {
   artifactsEl.innerHTML = "";
   scoreboardEl.innerHTML = "";
   const { start } = selectedRange();
-  const focus = targetPart.value.trim();
   appendClipLog(`extracting exact clip: ${currentFile} @ ${start.toFixed(2)}s-${(start + CLIP_SECONDS).toFixed(2)}s`);
-  appendClipLog(`focus: ${focus || "full prominent synth construction"}`);
   try {
     const data = await api("/api/extract", {
       method: "POST",
@@ -239,18 +240,19 @@ extractClip.addEventListener("click", async () => {
         }
         currentClip = payload.result.clip;
         appendClipLog(`source clip ready: ${currentClip}`);
-        startReconstruction.disabled = false;
         setStatus("Clip ready");
+        startAutonomousRun();
       }
     };
     events.onerror = () => appendClipLog("event stream error; check server process");
   } catch (error) {
     setStatus("Extract failed");
+    startReconstruction.disabled = false;
     appendClipLog(error.stack || String(error));
   }
-});
+}
 
-startReconstruction.addEventListener("click", async () => {
+async function startAutonomousRun() {
   if (!currentClip) return;
   runLogEl.textContent = "";
   stepLogsEl.innerHTML = "";
@@ -259,17 +261,16 @@ startReconstruction.addEventListener("click", async () => {
   setStatus("Running");
   startReconstruction.disabled = true;
   appendRunLog(`starting v1 reconstruction for ${currentClip}`);
-  appendRunLog(`steps=${stepsEl.value} local_trials=${localTrialsEl.value} max_layers=${maxLayersEl.value}`);
+  appendRunLog("defaults: 5 builder passes, 4 local trials per pass, max 5 layers, mixer pass, simplifier pass");
   try {
     const data = await api("/api/reconstruct", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         clip: currentClip,
-        target_part: targetPart.value.trim(),
-        steps: Number(stepsEl.value),
-        local_trials: Number(localTrialsEl.value),
-        max_layers: Number(maxLayersEl.value),
+        steps: 5,
+        local_trials: 4,
+        max_layers: 5,
       }),
     });
     appendRunLog(`run id: ${data.run_id}`);
@@ -299,12 +300,14 @@ startReconstruction.addEventListener("click", async () => {
     startReconstruction.disabled = false;
     appendRunLog(error.stack || String(error));
   }
-});
+}
+
+startReconstruction.addEventListener("click", extractSelectedClip);
 
 function renderScoreboard(report) {
   const scores = report.best_scores || {};
   scoreboardEl.innerHTML = "";
-  ["final", "spectral", "envelope", "chroma", "trajectory", "stereo"].forEach((name) => {
+  ["final", "mel_spectrogram", "envelope", "pitch_chroma", "spectral_motion", "transient_onset", "stereo_width", "embedding"].forEach((name) => {
     const value = Number(scores[name] || 0);
     const item = document.createElement("div");
     item.className = "score-card";

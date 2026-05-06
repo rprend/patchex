@@ -43,44 +43,25 @@
             <button id="playClip">Play Selected 5s</button>
           </div>
         </div>
-        <label class="field focus-field">
-          <span>Reconstruction focus</span>
-          <input id="targetPart" placeholder="whole synth passage, main swelling pad, bass and pad only..." />
-        </label>
       </section>
 
       <section class="panel">
         <div class="panel-head">
           <div>
-            <h2>Extract</h2>
-            <p>Write the selected clip as a normalized WAV for exact source scoring.</p>
+            <h2>Autonomous Pipeline</h2>
+            <p>Extract the selected clip, analyze its layers, run Builder/Critic passes, mix, simplify, score, and export the reconstruction plus playable patch.</p>
           </div>
-          <button id="extractClip">Extract Clip</button>
+          <button id="startReconstruction" class="primary inline-primary">Start V1 Reconstruction</button>
         </div>
         <pre id="clipLog" class="log analysis-log"></pre>
       </section>
 
       <section class="panel">
-        <div class="panel-head">
+        <div class="section-head">
           <div>
-            <h2>Reconstruct</h2>
-            <p>Run sequential Codex reconstruction steps. Each step renders, scores, mutates locally, and accepts only the best version.</p>
+            <h2>Agent Timeline</h2>
+            <p>Analyzer, Layer Builder, Residual Critic, Mixer, and Simplifier stages stream here with score deltas and accepted sessions.</p>
           </div>
-          <button id="startReconstruction" class="primary inline-primary" disabled>Start V1 Reconstruction</button>
-        </div>
-        <div class="controls-grid">
-          <label class="field">
-            <span>Codex steps</span>
-            <input id="steps" type="number" min="1" max="10" value="5" />
-          </label>
-          <label class="field">
-            <span>Local trials per step</span>
-            <input id="localTrials" type="number" min="0" max="24" value="5" />
-          </label>
-          <label class="field">
-            <span>Max layers</span>
-            <input id="maxLayers" type="number" min="1" max="6" value="4" />
-          </label>
         </div>
         <pre id="runLog" class="log run-log"></pre>
         <div id="stepLogs" class="candidate-logs"></div>

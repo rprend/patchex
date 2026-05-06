@@ -25,11 +25,14 @@ genai: Any = None
 @dataclass
 class Score:
     final: float
-    spectral: float
+    multi_resolution_spectral: float
+    mel_spectrogram: float
     envelope: float
-    chroma: float
-    trajectory: float
-    stereo: float
+    pitch_chroma: float
+    spectral_motion: float
+    transient_onset: float
+    stereo_width: float
+    embedding: float
 
 
 DEFAULT_SESSION = {
@@ -37,6 +40,7 @@ DEFAULT_SESSION = {
     "sample_rate": 44100,
     "duration": 5.0,
     "layers": [],
+    "returns": [],
     "master": {"gain_db": -1.0, "width": 1.0},
 }
 
@@ -86,6 +90,8 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
     session["duration"] = float(duration)
     session["sample_rate"] = int(sample_rate)
     session["layers"] = []
+    returns = payload.get("returns", [])
+    session["returns"] = returns if isinstance(returns, list) else []
     for index, layer in enumerate(payload.get("layers", [])[:6]):
         synth = layer.get("synth", {})
         amp = layer.get("amp_envelope", {})
@@ -279,6 +285,36 @@ def stft_mag(y: np.ndarray, frame: int = 2048, hop: int = 512) -> np.ndarray:
     return np.asarray(frames)
 
 
+def frame_rms(y: np.ndarray, frame: int = 1024, hop: int = 512) -> np.ndarray:
+    if y.size < frame:
+        y = np.pad(y, (0, frame - y.size))
+    values = []
+    for start in range(0, y.size - frame + 1, hop):
+        chunk = y[start : start + frame]
+        values.append(float(np.sqrt(np.mean(chunk**2) + 1e-12)))
+    return np.asarray(values)
+
+
+def mel_like_bands(mag: np.ndarray, bands: int = 32) -> np.ndarray:
+    if mag.size == 0:
+        return mag
+    edges = np.geomspace(1, mag.shape[1], bands + 1).astype(int) - 1
+    edges[0] = 0
+    out = []
+    for start, end in zip(edges[:-1], edges[1:]):
+        end = max(start + 1, end)
+        out.append(np.mean(mag[:, start:end], axis=1))
+    return np.asarray(out).T
+
+
+def onset_curve(env: np.ndarray) -> np.ndarray:
+    if env.size < 2:
+        return np.zeros_like(env)
+    diff = np.maximum(0, np.diff(env, prepend=env[0]))
+    peak = float(np.max(diff))
+    return diff / peak if peak > 0 else diff
+
+
 def band_chroma(mag: np.ndarray, sr: int) -> np.ndarray:
     freqs = np.fft.rfftfreq((mag.shape[1] - 1) * 2, 1.0 / sr)
     chroma = np.zeros(12)
@@ -307,23 +343,48 @@ def score_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> tuple[
     bins = min(ref_mag.shape[1], cand_mag.shape[1])
     ref_mag = ref_mag[:frames, :bins]
     cand_mag = cand_mag[:frames, :bins]
-    spectral_distance = float(np.mean(np.abs(np.log1p(ref_mag) - np.log1p(cand_mag))) / (np.mean(np.log1p(ref_mag)) + 1e-8))
-    spectral = math.exp(-spectral_distance)
-    ref_env = np.sqrt(np.mean(ref[: (size // 1024) * 1024].reshape(-1, 1024) ** 2, axis=1) + 1e-12)
-    cand_env = np.sqrt(np.mean(cand[: (size // 1024) * 1024].reshape(-1, 1024) ** 2, axis=1) + 1e-12)
+    spectral_distances = []
+    for frame, hop in [(1024, 256), (2048, 512), (4096, 1024)]:
+        r = stft_mag(ref, frame, hop)
+        c = stft_mag(cand, frame, hop)
+        f = min(r.shape[0], c.shape[0])
+        b = min(r.shape[1], c.shape[1])
+        r = r[:f, :b]
+        c = c[:f, :b]
+        spectral_distances.append(float(np.mean(np.abs(np.log1p(r) - np.log1p(c))) / (np.mean(np.log1p(r)) + 1e-8)))
+    multi_resolution_spectral = math.exp(-float(np.mean(spectral_distances)))
+    ref_mel = mel_like_bands(ref_mag)
+    cand_mel = mel_like_bands(cand_mag)
+    mel_spectrogram = math.exp(-float(np.mean(np.abs(np.log1p(ref_mel) - np.log1p(cand_mel))) / (np.mean(np.log1p(ref_mel)) + 1e-8)))
+    ref_env = frame_rms(ref)
+    cand_env = frame_rms(cand)
+    env_frames = min(ref_env.size, cand_env.size)
+    ref_env = ref_env[:env_frames]
+    cand_env = cand_env[:env_frames]
     envelope_score = math.exp(-float(np.mean(np.abs(ref_env - cand_env)) / (np.mean(ref_env) + 1e-8)))
-    chroma_score = max(0.0, cosine(band_chroma(ref_mag, sr), band_chroma(cand_mag, sr)))
+    pitch_chroma = max(0.0, cosine(band_chroma(ref_mag, sr), band_chroma(cand_mag, sr)))
     freqs = np.fft.rfftfreq((bins - 1) * 2, 1.0 / sr)[:bins]
     ref_centroid = np.sum(ref_mag * freqs[None, :], axis=1) / (np.sum(ref_mag, axis=1) + 1e-8)
     cand_centroid = np.sum(cand_mag * freqs[None, :], axis=1) / (np.sum(cand_mag, axis=1) + 1e-8)
-    trajectory = math.exp(-float(np.mean(np.abs(ref_centroid - cand_centroid)) / (np.mean(ref_centroid) + 1e-8)))
+    spectral_motion = math.exp(-float(np.mean(np.abs(ref_centroid - cand_centroid)) / (np.mean(ref_centroid) + 1e-8)))
+    transient_onset = math.exp(-float(np.mean(np.abs(onset_curve(ref_env) - onset_curve(cand_env)))))
     if reference.ndim == 2 and candidate.ndim == 2:
         ref_side = float(np.std(reference[0, :size] - reference[1, :size]) / (np.std(reference[:, :size]) + 1e-8))
         cand_side = float(np.std(candidate[0, :size] - candidate[1, :size]) / (np.std(candidate[:, :size]) + 1e-8))
-        stereo = math.exp(-abs(ref_side - cand_side) / max(ref_side, cand_side, 1e-6))
+        stereo_width = math.exp(-abs(ref_side - cand_side) / max(ref_side, cand_side, 1e-6))
     else:
-        stereo = 1.0
-    final = 0.35 * spectral + 0.22 * envelope_score + 0.16 * chroma_score + 0.17 * trajectory + 0.10 * stereo
+        stereo_width = 1.0
+    embedding = float(np.clip(0.50 * multi_resolution_spectral + 0.25 * pitch_chroma + 0.25 * envelope_score, 0.0, 1.0))
+    final = (
+        0.24 * multi_resolution_spectral
+        + 0.20 * mel_spectrogram
+        + 0.16 * envelope_score
+        + 0.13 * pitch_chroma
+        + 0.12 * spectral_motion
+        + 0.07 * transient_onset
+        + 0.06 * stereo_width
+        + 0.02 * embedding
+    )
     diagnostics = {
         "reference_centroid_start": float(ref_centroid[0]) if ref_centroid.size else 0.0,
         "reference_centroid_end": float(ref_centroid[-1]) if ref_centroid.size else 0.0,
@@ -332,36 +393,42 @@ def score_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> tuple[
         "reference_rms": float(np.sqrt(np.mean(ref**2) + 1e-12)),
         "candidate_rms": float(np.sqrt(np.mean(cand**2) + 1e-12)),
     }
-    return Score(final, spectral, envelope_score, chroma_score, trajectory, stereo), diagnostics
+    return Score(final, multi_resolution_spectral, mel_spectrogram, envelope_score, pitch_chroma, spectral_motion, transient_onset, stereo_width, embedding), diagnostics
 
 
 def score_to_json(score: Score) -> dict[str, float]:
     return {
         "final": float(score.final),
-        "spectral": float(score.spectral),
+        "multi_resolution_spectral": float(score.multi_resolution_spectral),
+        "mel_spectrogram": float(score.mel_spectrogram),
         "envelope": float(score.envelope),
-        "chroma": float(score.chroma),
-        "trajectory": float(score.trajectory),
-        "stereo": float(score.stereo),
+        "pitch_chroma": float(score.pitch_chroma),
+        "spectral_motion": float(score.spectral_motion),
+        "transient_onset": float(score.transient_onset),
+        "stereo_width": float(score.stereo_width),
+        "embedding": float(score.embedding),
     }
 
 
 def residual_report(score: Score, diagnostics: dict[str, Any], current_layers: int) -> dict[str, Any]:
     missing = []
     recs = []
-    if score.spectral < 0.62:
+    if score.multi_resolution_spectral < 0.62 or score.mel_spectrogram < 0.62:
         missing.append("spectral balance still differs from the source")
         recs.append("adjust oscillator blend, filter cutoff range, or add a support layer")
     if score.envelope < 0.65:
         missing.append("amplitude contour does not follow the source")
         recs.append("change note durations, gain, attack, release, or layer timing")
-    if score.trajectory < 0.65:
+    if score.spectral_motion < 0.65:
         missing.append("brightness motion does not track the source")
         recs.append("add or adjust lowpass cutoff automation")
-    if score.chroma < 0.55:
+    if score.pitch_chroma < 0.55:
         missing.append("pitch/chord content appears mismatched")
         recs.append("change layer notes or add a lower harmonic layer")
-    if score.stereo < 0.6:
+    if score.transient_onset < 0.65:
+        missing.append("transient/onset contour does not match the source")
+        recs.append("reduce unwanted retriggers or adjust note starts")
+    if score.stereo_width < 0.6:
         missing.append("stereo width differs from the source")
         recs.append("adjust width, pan, chorus, or reverb mix")
     if current_layers < 2 and score.final < 0.72:
@@ -376,20 +443,22 @@ def gemini_client() -> Any:
     return genai.Client(api_key=key)
 
 
-def analyze_layers(client: Any, reference_path: Path, local_features: dict[str, Any], target_part: str) -> dict[str, Any]:
+def analyze_layers(client: Any, reference_path: Path, local_features: dict[str, Any], duration: float) -> dict[str, Any]:
     from google.genai import types
 
     prompt = f"""
 Analyze this exact five-second audio clip as a reconstruction target, not as a vibe prompt.
 
-Target focus: {target_part or "reconstruct the prominent synth/audio layers in the clip"}
+Reconstruct the whole selected clip autonomously. If drums, vocals, or non-synth material are present, represent what can be approximated with synth/noise/space layers and mark confidence honestly.
 
 Return ONLY JSON:
 {{
   "global": {{
     "tempo": 60-180 or null,
     "key": "estimated key or unknown",
-    "summary": "compact reconstruction summary"
+    "meter": "4/4 or unknown",
+    "duration_seconds": {duration},
+    "overall_mix": "compact reconstruction summary"
   }},
   "layers": [
     {{
@@ -408,10 +477,11 @@ Return ONLY JSON:
       "effects": ["specific effects"]
     }}
   ],
+  "constraints": ["specific measurable constraints for reconstruction"],
   "strategy": ["ordered reconstruction steps, each adding or modifying a measurable layer"]
 }}
 
-Prefer 1-4 layers. Use the source audio as authority. Local DSP features:
+Prefer 2-5 layers for dense clips and 1-3 layers for sparse clips. Use the source audio as authority. Local DSP features:
 {json.dumps(local_features, indent=2)}
 """
     response = client.models.generate_content(
@@ -428,28 +498,48 @@ Prefer 1-4 layers. Use the source audio as authority. Local DSP features:
     payload = extract_json_object(response.text or "")
     if not isinstance(payload.get("layers"), list):
         raise ValueError(f"Layer analysis did not return layers: {payload}")
+    global_payload = payload.setdefault("global", {})
+    global_payload.setdefault("meter", "unknown")
+    global_payload.setdefault("duration_seconds", duration)
+    if "summary" in global_payload and "overall_mix" not in global_payload:
+        global_payload["overall_mix"] = global_payload.pop("summary")
+    global_payload.setdefault("overall_mix", "unknown overall mix")
     return payload
 
 
-def codex_session_prompt(analysis: dict[str, Any], session: dict[str, Any], history: list[dict[str, Any]], residual: dict[str, Any], step: int, max_layers: int) -> str:
-    return f"""
-You are one sequential reconstruction agent in an audio-to-synth loop.
+def session_shape() -> str:
+    return json.dumps(DEFAULT_SESSION, indent=2)
 
-Goal: reconstruct the exact five-second source audio as a layered synth session. Make the smallest concrete session mutation likely to improve the objective score.
+
+def codex_layer_builder_prompt(analysis: dict[str, Any], session: dict[str, Any], history: list[dict[str, Any]], residual: dict[str, Any], step: int, max_layers: int) -> str:
+    phase = [
+        "create the dominant audible layer",
+        "inspect residual and add or modify the second most important layer",
+        "add movement/filter automation or correct pitch/envelope mismatch",
+        "add stereo width, reverb/space, chorus/phaser-like motion, or ambience layer",
+        "make a conservative reconstruction pass before mixing",
+    ][min(step, 4)]
+    return f"""
+You are the Layer Builder agent in an autonomous audio reconstruction pipeline.
+
+Task: Given the source layer plan, current session, score history, and residual report, make the smallest concrete full-session JSON change that should reduce reconstruction error.
+
+Current builder run: {step + 1}
+Allowed action for this run: {phase}
 
 Renderer capabilities:
 - Up to {max_layers} synth layers.
 - Each layer has note events, gain/pan/width, oscillator waveform/blend/voices/detune/sub, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, LFO tremolo, chorus_mix, reverb_mix.
-- This is not a vibe patch. Optimize measured reconstruction: spectral, envelope, chroma, brightness trajectory, stereo.
+- Session has returns and master fields. Preserve them even if empty.
 
 Rules:
-- Return ONLY full JSON session, not a patch fragment.
-- Preserve useful existing layers.
-- Step {step}: prefer {"adding the dominant missing layer" if len(session.get("layers", [])) < max_layers else "modifying existing layers and mix"}.
-- Do not add drums/vocals/samples. Use synth layers only.
-- Keep layer ids stable once created.
+- Return ONLY full JSON session, not prose and not a patch fragment.
+- Preserve useful existing layers and stable layer ids.
+- Add at most one new layer unless the residual clearly demands a paired support/noise layer.
+- Use synth/noise-like approximation only; do not reference external samples.
+- Optimize actual reconstruction metrics: multi-resolution spectral, mel spectrogram, envelope, pitch chroma, spectral motion, transient/onset, stereo width, embedding.
 
-Layer analysis:
+Source analysis:
 {json.dumps(analysis, indent=2)}
 
 Current session:
@@ -462,20 +552,96 @@ Residual report:
 {json.dumps(residual, indent=2)}
 
 Return full JSON session with this shape:
-{json.dumps(DEFAULT_SESSION, indent=2)}
+{session_shape()}
 """
 
 
-def run_codex_step(output_dir: Path, analysis: dict[str, Any], session: dict[str, Any], history: list[dict[str, Any]], residual: dict[str, Any], step: int, max_layers: int, duration: float, sample_rate: int) -> dict[str, Any]:
+def codex_residual_critic_prompt(analysis: dict[str, Any], session: dict[str, Any], history_item: dict[str, Any], deterministic_residual: dict[str, Any]) -> str:
+    return f"""
+You are the Residual Critic agent in an audio reconstruction pipeline.
+
+Read the latest accepted/rejected render scores and produce measurable residual guidance for the next builder. Do not suggest vibes. Tie every critique to reconstruction metrics, source analysis, or session structure.
+
+Return ONLY JSON:
+{{
+  "missing": ["specific measurable mismatches"],
+  "recommendations": ["concrete next actions for the Layer Builder or Mixer"],
+  "priority": "layer|automation|pitch|envelope|stereo|mix",
+  "stop_layer_building": true_or_false
+}}
+
+Source analysis:
+{json.dumps(analysis, indent=2)}
+
+Current session:
+{json.dumps(session, indent=2)}
+
+Latest history item:
+{json.dumps(history_item, indent=2)}
+
+Deterministic residual:
+{json.dumps(deterministic_residual, indent=2)}
+"""
+
+
+def codex_mixer_prompt(analysis: dict[str, Any], session: dict[str, Any], history: list[dict[str, Any]], residual: dict[str, Any]) -> str:
+    return f"""
+You are the Mixer agent in an audio reconstruction pipeline.
+
+Task: Balance the accepted layers, stereo width, layer gains, pan, reverb/chorus mix, and master gain/width. Do not add new musical content unless the session is empty. Return a full JSON session.
+
+Source analysis:
+{json.dumps(analysis, indent=2)}
+
+Current session:
+{json.dumps(session, indent=2)}
+
+Score history:
+{json.dumps(history, indent=2)}
+
+Residual report:
+{json.dumps(residual, indent=2)}
+
+Return ONLY full JSON session with this shape:
+{session_shape()}
+"""
+
+
+def codex_simplifier_prompt(analysis: dict[str, Any], session: dict[str, Any], history: list[dict[str, Any]]) -> str:
+    return f"""
+You are the Simplifier agent in an audio reconstruction pipeline.
+
+Task: Remove redundant layers, collapse overlapping roles, keep the reconstruction close, and make the final session understandable. Return full JSON session. Also preserve enough structure to distill a playable patch.
+
+Rules:
+- Do not make the session empty.
+- Prefer 1-4 meaningful layers.
+- Preserve the most important layer ids when possible.
+- Return ONLY full JSON session.
+
+Source analysis:
+{json.dumps(analysis, indent=2)}
+
+Current mixed session:
+{json.dumps(session, indent=2)}
+
+History:
+{json.dumps(history, indent=2)}
+
+Return full JSON session with this shape:
+{session_shape()}
+"""
+
+
+def run_codex_json(output_dir: Path, agent: str, prompt: str, duration: float | None = None, sample_rate: int | None = None) -> dict[str, Any]:
     if not Path(CODEX_PATH).exists():
         raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
-    prompt = codex_session_prompt(analysis, session, history, residual, step, max_layers)
-    prompt_path = output_dir / f"codex_reconstruct_step_{step:02d}_prompt.txt"
-    answer_path = output_dir / f"codex_reconstruct_step_{step:02d}_answer.txt"
+    prompt_path = output_dir / f"codex_{agent}_prompt.txt"
+    answer_path = output_dir / f"codex_{agent}_answer.txt"
     prompt_path.write_text(prompt)
-    print(f"codex_start reconstruction_step={step}", flush=True)
+    print(f"codex_start agent={agent}", flush=True)
     print(f"codex_prompt_path {prompt_path}", flush=True)
-    print(f"codex_prompt_hidden reconstruction_step={step} bytes={len(prompt.encode())}", flush=True)
+    print(f"codex_prompt_hidden agent={agent} bytes={len(prompt.encode())}", flush=True)
     process = subprocess.Popen(
         [
             CODEX_PATH,
@@ -497,16 +663,19 @@ def run_codex_step(output_dir: Path, analysis: dict[str, Any], session: dict[str
     process.stdin.write(prompt)
     process.stdin.close()
     for line in process.stdout:
-        print(f"codex_log reconstruction_step={step} {line.rstrip()}", flush=True)
+        print(f"codex_log agent={agent} {line.rstrip()}", flush=True)
     try:
         returncode = process.wait(timeout=150)
     except subprocess.TimeoutExpired:
         process.kill()
-        raise RuntimeError(f"Codex reconstruction step {step} timed out.")
+        raise RuntimeError(f"Codex agent {agent} timed out.")
     if returncode != 0:
-        raise RuntimeError(f"Codex reconstruction step {step} failed with return code {returncode}.")
-    print(f"codex_done reconstruction_step={step} answer_path={answer_path}", flush=True)
-    return sanitize_session(extract_json_object(answer_path.read_text()), duration, sample_rate)
+        raise RuntimeError(f"Codex agent {agent} failed with return code {returncode}.")
+    print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
+    payload = extract_json_object(answer_path.read_text())
+    if duration is not None and sample_rate is not None:
+        return sanitize_session(payload, duration, sample_rate)
+    return payload
 
 
 def local_mutation(session: dict[str, Any], rng: np.random.Generator, amount: float, duration: float, sample_rate: int) -> dict[str, Any]:
@@ -534,14 +703,61 @@ def local_mutation(session: dict[str, Any], rng: np.random.Generator, amount: fl
     return sanitize_session(mutated, duration, sample_rate)
 
 
+def score_session(reference_audio: np.ndarray, session: dict[str, Any], sample_rate: int, output_path: Path) -> tuple[Score, dict[str, Any]]:
+    rendered = render_session(session)
+    sf.write(output_path, rendered.T, sample_rate)
+    return score_audio(reference_audio, rendered, sample_rate)
+
+
+def distilled_playable_patch(session: dict[str, Any]) -> dict[str, Any]:
+    layers = session.get("layers") or []
+    primary = layers[0] if layers else sanitize_session({"layers": [{}]}, session.get("duration", 5.0), session.get("sample_rate", 44100))["layers"][0]
+    notes = primary.get("notes") or [{"note": 60}]
+    effects = primary.get("effects", {})
+    filt = primary.get("filter", {})
+    synth = primary.get("synth", {})
+    amp = primary.get("amp_envelope", {})
+    return {
+        "instrument_type": "reconstructed_session_patch",
+        "source": "v1_simplifier",
+        "root_midi_note": int(notes[0].get("note", 60)),
+        "layers": [
+            {
+                "id": layer.get("id", f"layer_{index + 1}"),
+                "role": layer.get("role", "synth layer"),
+                "relative_gain_db": layer.get("gain_db", -8.0),
+                "pan": layer.get("pan", 0.0),
+                "width": layer.get("width", 0.6),
+                "synth": layer.get("synth", {}),
+                "amp_envelope": layer.get("amp_envelope", {}),
+                "filter": layer.get("filter", {}),
+                "effects": layer.get("effects", {}),
+            }
+            for index, layer in enumerate(layers[:4])
+        ],
+        "macros": {
+            "brightness": float(np.clip((filt.get("cutoff_end_hz", 1800.0) - 200.0) / 6000.0, 0.0, 1.0)),
+            "movement": float(np.clip(primary.get("modulation", {}).get("lfo_depth", 0.0), 0.0, 1.0)),
+            "space": float(np.clip(effects.get("reverb_mix", 0.0) / 0.7, 0.0, 1.0)),
+            "width": float(np.clip(primary.get("width", 0.6), 0.0, 1.0)),
+            "attack": float(np.clip(amp.get("attack", 0.05) / 4.0, 0.0, 1.0)),
+        },
+        "keyboard_mapping": {
+            "pitch_tracking": True,
+            "velocity_to_amp": True,
+            "mod_wheel": "brightness",
+            "aftertouch": "space",
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
-    parser.add_argument("--target-part", default="")
     parser.add_argument("--steps", type=int, default=5)
-    parser.add_argument("--local-trials", type=int, default=5)
-    parser.add_argument("--max-layers", type=int, default=4)
+    parser.add_argument("--local-trials", type=int, default=4)
+    parser.add_argument("--max-layers", type=int, default=5)
     parser.add_argument("--seconds", type=float, default=5.0)
     parser.add_argument("--sample-rate", type=int, default=44100)
     args = parser.parse_args()
@@ -561,71 +777,135 @@ def main() -> None:
         "duration": args.seconds,
     }
     print("analysis_start layer_plan", flush=True)
-    analysis = analyze_layers(client, reference_clip, local_features, args.target_part)
+    analysis = analyze_layers(client, reference_clip, local_features, args.seconds)
     (args.output_dir / "layer_analysis.json").write_text(json.dumps(analysis, indent=2) + "\n")
+    (args.output_dir / "analyzer_answer.json").write_text(json.dumps(analysis, indent=2) + "\n")
     print(f"analysis_done layers={len(analysis.get('layers', []))}", flush=True)
 
     session = sanitize_session(DEFAULT_SESSION, args.seconds, args.sample_rate)
     history: list[dict[str, Any]] = []
     best_session = session
-    best_score = Score(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    best_score = Score(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     residual = {"missing": ["empty session"], "recommendations": ["add the dominant audible layer first"], "diagnostics": local_features}
     rng = np.random.default_rng(20260506)
 
     for step in range(args.steps):
-        proposed = run_codex_step(args.output_dir, analysis, best_session, history, residual, step, args.max_layers, args.seconds, args.sample_rate)
+        print(f"agent_stage layer_builder step={step}", flush=True)
+        proposed = run_codex_json(
+            args.output_dir,
+            f"layer_builder_step_{step:02d}",
+            codex_layer_builder_prompt(analysis, best_session, history, residual, step, args.max_layers),
+            args.seconds,
+            args.sample_rate,
+        )
         candidates = [("codex", proposed)]
         for trial in range(args.local_trials):
             candidates.append((f"local_{trial}", local_mutation(proposed, rng, 0.22, args.seconds, args.sample_rate)))
         step_results = []
         for label, candidate_session in candidates:
-            rendered = render_session(candidate_session)
-            score, diagnostics = score_audio(reference_audio, rendered, args.sample_rate)
             out_path = args.output_dir / f"reconstruction_step_{step:02d}_{label}.wav"
-            sf.write(out_path, rendered.T, args.sample_rate)
+            score, diagnostics = score_session(reference_audio, candidate_session, args.sample_rate, out_path)
             step_results.append((score.final, label, candidate_session, score, diagnostics, out_path))
-            print(f"step={step} candidate={label} score={score.final:.4f} spectral={score.spectral:.4f} envelope={score.envelope:.4f} chroma={score.chroma:.4f} trajectory={score.trajectory:.4f} stereo={score.stereo:.4f}", flush=True)
+            print(
+                f"step={step} candidate={label} score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset={score.transient_onset:.4f} stereo={score.stereo_width:.4f}",
+                flush=True,
+            )
         step_results.sort(key=lambda item: item[0], reverse=True)
         _, label, session, score, diagnostics, out_path = step_results[0]
         accepted = score.final >= best_score.final
         if accepted:
             best_session = session
             best_score = score
-        residual = residual_report(best_score, diagnostics, len(best_session.get("layers", [])))
-        history.append(
-            {
-                "step": step,
-                "accepted": accepted,
-                "winner": label,
-                "audio_path": str(out_path),
-                "scores": score_to_json(score),
-                "best_scores": score_to_json(best_score),
-                "layers": [{"id": layer["id"], "role": layer["role"]} for layer in best_session.get("layers", [])],
-                "residual": residual,
-            }
+        deterministic_residual = residual_report(best_score, diagnostics, len(best_session.get("layers", [])))
+        history_item = {
+            "stage": "layer_builder",
+            "step": step,
+            "accepted": accepted,
+            "winner": label,
+            "audio_path": str(out_path),
+            "scores": score_to_json(score),
+            "best_scores": score_to_json(best_score),
+            "layers": [{"id": layer["id"], "role": layer["role"]} for layer in best_session.get("layers", [])],
+            "deterministic_residual": deterministic_residual,
+        }
+        print(f"agent_stage residual_critic step={step}", flush=True)
+        critic = run_codex_json(
+            args.output_dir,
+            f"residual_critic_step_{step:02d}",
+            codex_residual_critic_prompt(analysis, best_session, history_item, deterministic_residual),
         )
+        residual = {
+            "missing": critic.get("missing", deterministic_residual["missing"]),
+            "recommendations": critic.get("recommendations", deterministic_residual["recommendations"]),
+            "priority": critic.get("priority", "layer"),
+            "stop_layer_building": bool(critic.get("stop_layer_building", False)),
+            "diagnostics": deterministic_residual.get("diagnostics", {}),
+        }
+        history_item["residual_critic"] = residual
+        history.append(history_item)
         (args.output_dir / f"session_step_{step:02d}.json").write_text(json.dumps(best_session, indent=2) + "\n")
         print(f"step_complete index={step} winner={label} accepted={str(accepted).lower()} best_score={best_score.final:.4f}", flush=True)
+        if residual.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1:
+            print(f"layer_building_stopped step={step} reason=residual_critic", flush=True)
+            break
+
+    print("agent_stage mixer", flush=True)
+    mixed_session = run_codex_json(
+        args.output_dir,
+        "mixer",
+        codex_mixer_prompt(analysis, best_session, history, residual),
+        args.seconds,
+        args.sample_rate,
+    )
+    mixed_score, mixed_diagnostics = score_session(reference_audio, mixed_session, args.sample_rate, args.output_dir / "mixer_reconstruction.wav")
+    mixed_accepted = mixed_score.final >= best_score.final
+    if mixed_accepted:
+        best_session = mixed_session
+        best_score = mixed_score
+    history.append({"stage": "mixer", "scores": score_to_json(mixed_score), "accepted": mixed_accepted, "diagnostics": mixed_diagnostics})
+
+    print("agent_stage simplifier", flush=True)
+    simplified_session = run_codex_json(
+        args.output_dir,
+        "simplifier",
+        codex_simplifier_prompt(analysis, best_session, history),
+        args.seconds,
+        args.sample_rate,
+    )
+    simplified_score, simplified_diagnostics = score_session(reference_audio, simplified_session, args.sample_rate, args.output_dir / "simplifier_reconstruction.wav")
+    simplified_accepted = simplified_score.final >= best_score.final * 0.97
+    if simplified_accepted:
+        best_session = simplified_session
+        best_score = simplified_score
+    history.append({"stage": "simplifier", "scores": score_to_json(simplified_score), "accepted": simplified_accepted, "diagnostics": simplified_diagnostics})
 
     final_audio = render_session(best_session)
     final_path = args.output_dir / "final_reconstruction.wav"
     session_path = args.output_dir / "reconstruction_session.json"
+    session_alias_path = args.output_dir / "session.json"
+    playable_path = args.output_dir / "distilled_playable_patch.json"
     report_path = args.output_dir / "reconstruction_report.json"
     sf.write(final_path, final_audio.T, args.sample_rate)
     session_path.write_text(json.dumps(best_session, indent=2) + "\n")
+    session_alias_path.write_text(json.dumps(best_session, indent=2) + "\n")
+    playable_path.write_text(json.dumps(distilled_playable_patch(best_session), indent=2) + "\n")
     report = {
         "reference": str(args.reference),
         "source_clip": str(reference_clip),
-        "target_part": args.target_part,
         "analysis": analysis,
+        "empty_session_schema": sanitize_session(DEFAULT_SESSION, args.seconds, args.sample_rate),
         "history": history,
         "best_scores": score_to_json(best_score),
         "final_path": str(final_path),
         "session_path": str(session_path),
+        "session_alias_path": str(session_alias_path),
+        "distilled_playable_patch_path": str(playable_path),
     }
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     print(f"wrote {final_path}", flush=True)
     print(f"wrote {session_path}", flush=True)
+    print(f"wrote {session_alias_path}", flush=True)
+    print(f"wrote {playable_path}", flush=True)
     print(f"wrote {report_path}", flush=True)
 
 
