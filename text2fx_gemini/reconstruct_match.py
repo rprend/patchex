@@ -355,7 +355,7 @@ Read these files before answering:
 
 Task: Produce a structured layer plan and reconstruction constraints. This is not vibe analysis. Infer likely layer architecture from the source profile: band energy, centroid motion, onset count, stereo stats, and duration.
 
-Return ONLY JSON:
+Update the JSON artifact requested by the orchestrator with this structure:
 {{
   "global": {{
     "tempo": 60-180 or null,
@@ -413,7 +413,7 @@ Read these files before answering:
 - Previous Critic recommendation JSON: {recommendation_path}
 - Score/history JSON: {history_path}
 
-Task: Given those files, make the smallest concrete full-session JSON change that should reduce reconstruction error.
+Task: Given those files, update the requested session artifact with the smallest concrete full-session JSON change that should reduce reconstruction error.
 
 Current Producer run: {step + 1}
 Allowed action for this run: {phase}
@@ -426,14 +426,14 @@ Renderer capabilities:
 - Session has returns and master fields. Preserve them even if empty.
 
 Rules:
-- Return ONLY full JSON session, not prose and not a patch fragment.
+- Write a complete session JSON file, not prose and not a patch fragment.
 - Preserve useful existing layers and stable layer ids.
 - Add at most one new layer unless the residual clearly demands a paired support/noise layer.
 - Use synth/noise-like approximation only; do not reference external samples.
 - The previous Critic recommendation is binding: address its highest-priority missing items first and avoid its do_not guidance if present.
 - Optimize actual reconstruction metrics: multi-resolution spectral, mel spectrogram, envelope, segment_envelope, late_energy_ratio, sustain_coverage, frontload_balance, band_envelope_by_time, pitch chroma, spectral motion, transient/onset, stereo width, embedding.
 
-Return full JSON session with this shape:
+The session JSON must use this shape:
 {session_shape()}
 """
 
@@ -448,9 +448,9 @@ Read these files before answering:
 - Latest builder history item JSON: {history_item_path}
 - Latest audio similarity/diff JSON: {audio_diff_path}
 
-Task: Produce a measurable recommendation file for the next Producer run. Do not suggest vibes. Tie every critique to reconstruction metrics, source analysis, or session structure.
+Task: Update the requested recommendation artifact for the next Producer run. Do not suggest vibes. Tie every critique to reconstruction metrics, source analysis, or session structure.
 
-Return ONLY JSON:
+The recommendation JSON must use this shape:
 {{
   "missing": ["specific measurable mismatches"],
   "recommendations": ["concrete next actions for the Producer or Mixer"],
@@ -473,9 +473,9 @@ Read these files before answering:
 - Latest Critic recommendation JSON: {recommendation_path}
 - Score/history JSON: {history_path}
 
-Task: Balance the accepted layers, stereo width, layer gains, pan, reverb/chorus mix, and master gain/width. Do not add new musical content unless the session is empty. Return a full JSON session.
+Task: Update the requested session artifact by balancing the accepted layers, stereo width, layer gains, pan, reverb/chorus mix, and master gain/width. Do not add new musical content unless the session is empty.
 
-Return ONLY full JSON session with this shape:
+The session JSON must use this shape:
 {session_shape()}
 """
 
@@ -490,11 +490,11 @@ Read these files before answering:
 - Latest Critic recommendation JSON: {recommendation_path}
 - Score/history JSON: {history_path}
 
-Task: Mix this step's Producer candidate before scoring. Balance layer gains, pan, width, chorus/reverb, return_send, returns, and master gain/width so the reconstruction loss has a fair mixed candidate to evaluate. Do not remove musical layers and do not add new notes unless required to prevent an empty session.
+Task: Update the requested session artifact by mixing this step's Producer candidate before simplification and scoring. Balance layer gains, pan, width, chorus/reverb, return_send, returns, and master gain/width so the reconstruction loss has a fair mixed candidate to evaluate. Do not remove musical layers and do not add new notes unless required to prevent an empty session.
 
 Current loop step: {step + 1}
 
-Return ONLY full JSON session with this shape:
+The session JSON must use this shape:
 {session_shape()}
 """
 
@@ -508,24 +508,39 @@ Read these files before answering:
 - Mixed reconstruction session JSON: {session_path}
 - Score/history JSON: {history_path}
 
-Task: Remove redundant layers, collapse overlapping roles, keep the reconstruction close, and make the final session understandable. Return full JSON session. Also preserve enough structure to distill a playable patch.
+Task: Update the requested session artifact by removing redundant layers, collapsing overlapping roles, keeping the reconstruction close, and making the session understandable. Also preserve enough structure to distill a playable patch.
 
 Rules:
 - Do not make the session empty.
 - Prefer 1-4 meaningful layers.
 - Preserve the most important layer ids when possible.
-- Return ONLY full JSON session.
 
-Return full JSON session with this shape:
+The session JSON must use this shape:
 {session_shape()}
 """
 
 
-def run_codex_json(output_dir: Path, agent: str, prompt: str, duration: float | None = None, sample_rate: int | None = None) -> dict[str, Any]:
+def run_codex_json(
+    output_dir: Path,
+    agent: str,
+    prompt: str,
+    duration: float | None = None,
+    sample_rate: int | None = None,
+    json_output_path: Path | None = None,
+) -> dict[str, Any]:
     if not Path(CODEX_PATH).exists():
         raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
     prompt_path = output_dir / f"codex_{agent}_prompt.txt"
     answer_path = output_dir / f"codex_{agent}_answer.txt"
+    if json_output_path is not None:
+        prompt = (
+            f"{prompt.rstrip()}\n\n"
+            "File-driven orchestration requirement:\n"
+            f"- Working timeline folder: {output_dir}\n"
+            f"- Write or update the JSON artifact at: {json_output_path}\n"
+            "- Base your edit on the files listed above. The orchestrator will read that JSON file after this run.\n"
+            "- Your final chat message can be brief; the file is the source of truth.\n"
+        )
     prompt_path.write_text(prompt)
     print(f"codex_start agent={agent}", flush=True)
     print(f"codex_prompt_path {prompt_path}", flush=True)
@@ -562,7 +577,10 @@ def run_codex_json(output_dir: Path, agent: str, prompt: str, duration: float | 
         raise RuntimeError(f"Codex agent {agent} failed with return code {returncode}.")
     print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
     print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
-    payload = extract_json_object(answer_path.read_text())
+    payload_text = answer_path.read_text()
+    if json_output_path is not None and json_output_path.exists() and json_output_path.read_text().strip():
+        payload_text = json_output_path.read_text()
+    payload = extract_json_object(payload_text)
     if duration is not None and sample_rate is not None:
         return sanitize_session(payload, duration, sample_rate)
     return payload
@@ -720,6 +738,7 @@ def main() -> None:
         args.output_dir,
         "analyzer",
         codex_analyzer_prompt(reference_clip, source_profile_path, args.seconds),
+        json_output_path=args.output_dir / "analyzer_answer.json",
     )
     global_payload = analysis.setdefault("global", {})
     global_payload.setdefault("meter", "unknown")
@@ -755,6 +774,7 @@ def main() -> None:
             codex_layer_builder_prompt(analyzer_path, current_session_path, recommendation_path, history_path, step, args.max_layers),
             args.seconds,
             args.sample_rate,
+            json_output_path=args.output_dir / f"session_step_{step:02d}_codex_proposal.json",
         )
         proposed_session_path = trace_file(f"layer_builder_step_{step:02d}", "session_proposal", write_json(args.output_dir / f"session_step_{step:02d}_codex_proposal.json", proposed))
         candidates = [("codex", proposed)]
@@ -784,19 +804,30 @@ def main() -> None:
             codex_step_mixer_prompt(analyzer_path, premix_session_path, recommendation_path, history_path, step),
             args.seconds,
             args.sample_rate,
+            json_output_path=args.output_dir / f"session_step_{step:02d}_mixed.json",
         )
         mixed_session_path = trace_file(f"mixer_step_{step:02d}", "mixed_session", write_json(args.output_dir / f"session_step_{step:02d}_mixed.json", mixed_candidate))
-        mixed_out_path = args.output_dir / f"reconstruction_step_{step:02d}_mixed.wav"
-        mixed_diff_path = args.output_dir / f"audio_diff_step_{step:02d}_mixed.json"
-        score, diagnostics, candidate_residual = write_audio_diff(reference_audio, mixed_candidate, args.sample_rate, mixed_out_path, mixed_diff_path)
-        label = f"{premix_label}+mixer"
-        session = mixed_candidate
-        out_path = mixed_out_path
-        diff_path = mixed_diff_path
-        print(f"trace_file agent=loss step={step} role=audio_diff_mixed path={mixed_diff_path}", flush=True)
-        print(f"trace_file agent=loss step={step} role=render_mixed path={mixed_out_path}", flush=True)
+        print(f"agent_stage simplifier step={step}", flush=True)
+        simplified_candidate = run_codex_json(
+            args.output_dir,
+            f"simplifier_step_{step:02d}",
+            codex_simplifier_prompt(analyzer_path, mixed_session_path, history_path),
+            args.seconds,
+            args.sample_rate,
+            json_output_path=args.output_dir / f"session_step_{step:02d}_simplified.json",
+        )
+        simplified_session_path = trace_file(f"simplifier_step_{step:02d}", "simplified_session", write_json(args.output_dir / f"session_step_{step:02d}_simplified.json", simplified_candidate))
+        simplified_out_path = args.output_dir / f"reconstruction_step_{step:02d}_simplified.wav"
+        simplified_diff_path = args.output_dir / f"audio_diff_step_{step:02d}_simplified.json"
+        score, diagnostics, candidate_residual = write_audio_diff(reference_audio, simplified_candidate, args.sample_rate, simplified_out_path, simplified_diff_path)
+        label = f"{premix_label}+mixer+simplifier"
+        session = simplified_candidate
+        out_path = simplified_out_path
+        diff_path = simplified_diff_path
+        print(f"trace_file agent=loss step={step} role=audio_diff_simplified path={simplified_diff_path}", flush=True)
+        print(f"trace_file agent=loss step={step} role=render_simplified path={simplified_out_path}", flush=True)
         print(
-            f"step={step} candidate=mixed_from_{premix_label} phase=mixed score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+            f"step={step} candidate=simplified_from_{premix_label} phase=simplified score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
             flush=True,
         )
         print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(premix_label == 'codex').lower()} score={score.final:.4f}", flush=True)
@@ -822,6 +853,7 @@ def main() -> None:
             "premix_audio_path": str(premix_out_path),
             "premix_audio_diff_path": str(premix_diff_path),
             "mixer_session_path": str(mixed_session_path),
+            "simplifier_session_path": str(simplified_session_path),
             "scores": score_to_json(score),
             "best_scores": score_to_json(best_score),
             "layers": [{"id": layer["id"], "role": layer["role"]} for layer in best_session.get("layers", [])],
@@ -833,6 +865,7 @@ def main() -> None:
             args.output_dir,
             f"residual_critic_step_{step:02d}",
             codex_residual_critic_prompt(analyzer_path, current_session_path, history_item_path, diff_path),
+            json_output_path=args.output_dir / f"recommendation_step_{step:02d}.json",
         )
         recommendation = {
             "missing": critic.get("missing", deterministic_residual["missing"]),
@@ -861,54 +894,6 @@ def main() -> None:
         if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1 and step + 1 >= min_builder_steps and best_score.final >= 0.78 and temporal_scores_ok(best_score):
             print(f"layer_building_stopped step={step} reason=residual_critic", flush=True)
             break
-
-    print("agent_stage mixer", flush=True)
-    mixed_session = run_codex_json(
-        args.output_dir,
-        "mixer",
-        codex_mixer_prompt(analyzer_path, current_session_path, recommendation_path, history_path),
-        args.seconds,
-        args.sample_rate,
-    )
-    mixed_score, mixed_diagnostics, _mixed_residual = write_audio_diff(
-        reference_audio,
-        mixed_session,
-        args.sample_rate,
-        args.output_dir / "mixer_reconstruction.wav",
-        args.output_dir / "audio_diff_mixer.json",
-    )
-    trace_file("mixer", "render", args.output_dir / "mixer_reconstruction.wav")
-    trace_file("mixer", "audio_diff", args.output_dir / "audio_diff_mixer.json")
-    mixed_accepted = mixed_score.final >= best_score.final
-    if mixed_accepted:
-        best_session = mixed_session
-        best_score = mixed_score
-        current_session_path = write_json(args.output_dir / "session_current.json", best_session)
-    history.append({"stage": "mixer", "scores": score_to_json(mixed_score), "accepted": mixed_accepted, "diagnostics": mixed_diagnostics})
-    history_path = write_json(args.output_dir / "history.json", history)
-
-    print("agent_stage simplifier", flush=True)
-    simplified_session = run_codex_json(
-        args.output_dir,
-        "simplifier",
-        codex_simplifier_prompt(analyzer_path, current_session_path, history_path),
-        args.seconds,
-        args.sample_rate,
-    )
-    simplified_score, simplified_diagnostics, _simplified_residual = write_audio_diff(
-        reference_audio,
-        simplified_session,
-        args.sample_rate,
-        args.output_dir / "simplifier_reconstruction.wav",
-        args.output_dir / "audio_diff_simplifier.json",
-    )
-    trace_file("simplifier", "render", args.output_dir / "simplifier_reconstruction.wav")
-    trace_file("simplifier", "audio_diff", args.output_dir / "audio_diff_simplifier.json")
-    simplified_accepted = simplified_score.final >= best_score.final * 0.97
-    if simplified_accepted:
-        best_session = simplified_session
-        best_score = simplified_score
-    history.append({"stage": "simplifier", "scores": score_to_json(simplified_score), "accepted": simplified_accepted, "diagnostics": simplified_diagnostics})
 
     final_audio = render_session(best_session)
     final_path = args.output_dir / "final_reconstruction.wav"

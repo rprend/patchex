@@ -311,6 +311,7 @@ function friendlyRole(role, agent = "") {
   if (role.startsWith("premix_audio_diff")) return "Pre-mix accuracy";
   if (role.startsWith("premix_render")) return "Listen pre-mix";
   if (role.startsWith("render_mixed")) return "Listen mixed output";
+  if (role.startsWith("render_simplified")) return "Listen simplified output";
   if (role.startsWith("audio_diff")) return "Accuracy report";
   if (role.startsWith("render")) return "Listen";
   if (role === "prompt") {
@@ -331,9 +332,10 @@ function fileUrlFromTracePath(path) {
 }
 
 function tracePanelId(agent, step) {
-  if (step !== null && step !== undefined) return `${agent}_${step}`;
   const match = agent.match(/(.+)_step_(\d+)/);
-  return match ? `${match[1]}_${Number(match[2])}` : agent;
+  if (match) return `${match[1]}_${Number(match[2])}`;
+  if (step !== null && step !== undefined) return `${agent}_${step}`;
+  return agent;
 }
 
 async function addTraceFile(payload) {
@@ -343,6 +345,7 @@ async function addTraceFile(payload) {
   const step = payload.step ?? null;
   if (step !== null && role.startsWith("premix_render")) agent = `layer_builder_step_${String(step).padStart(2, "0")}`;
   if (step !== null && role.startsWith("render_mixed")) agent = `mixer_step_${String(step).padStart(2, "0")}`;
+  if (step !== null && role.startsWith("render_simplified")) agent = `simplifier_step_${String(step).padStart(2, "0")}`;
   if (step !== null && role.startsWith("audio_diff")) agent = "loss";
   const path = payload.path || "";
   const url = payload.url || fileUrlFromTracePath(path);
@@ -354,6 +357,7 @@ async function addTraceFile(payload) {
   if (role === "layer_analysis") appendToLog(log, "Layer plan ready.");
   if (role === "session_proposal") appendToLog(log, "Producer wrote a session proposal.");
   if (role === "mixed_session") appendToLog(log, "Mixer balanced the candidate for scoring.");
+  if (role === "simplified_session") appendToLog(log, "Simplifier cleaned up the mixed candidate before scoring.");
   if (role === "recommendation") appendToLog(log, "Critic wrote the next Producer brief.");
   if (role === "accepted_session") appendToLog(log, "Accepted as the current best session.");
 
@@ -423,7 +427,7 @@ async function routeRunLog(line) {
     const codexWon = line.match(/\bcodex_won=([^ ]+)/)?.[1] === "true";
     const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
     const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
-    appendToLog(panel.querySelector(".candidate-log"), codexWon ? `Codex proposal won pre-mix, then Mixer produced final step score ${score}.` : `Codex proposal lost pre-mix; ${winner} won after Mixer with score ${score}.`);
+    appendToLog(panel.querySelector(".candidate-log"), codexWon ? `Codex proposal won pre-mix, then Mixer and Simplifier produced final step score ${score}.` : `Codex proposal lost pre-mix; ${winner} won after Mixer and Simplifier with score ${score}.`);
     panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
     return;
   }
@@ -432,7 +436,7 @@ async function routeRunLog(line) {
     const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
     const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
     const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
-    appendToLog(panel.querySelector(".candidate-log"), `Pre-mix candidate winner: ${winner} (${score}); sending to Mixer.`);
+    appendToLog(panel.querySelector(".candidate-log"), `Pre-mix candidate winner: ${winner} (${score}); sending to Mixer, then Simplifier.`);
     panel.querySelector(".candidate-axis").textContent = `premix ${winner}`;
     return;
   }
@@ -469,7 +473,7 @@ async function routeRunLog(line) {
 }
 
 function markStepCompleted(step) {
-  [`layer_builder_${step}`, `mixer_${step}`, `loss_${step}`, `residual_critic_${step}`, `builder_${step}`].forEach((id) => {
+  [`layer_builder_${step}`, `mixer_${step}`, `simplifier_${step}`, `loss_${step}`, `residual_critic_${step}`, `builder_${step}`].forEach((id) => {
     const panel = stepLogsEl.querySelector(`[data-step="${id}"]`);
     if (panel) {
       panel.classList.remove("running");
@@ -484,6 +488,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
     return (
       name.startsWith("codex_") ||
       name.startsWith("audio_diff_") ||
+      name.startsWith("premix_audio_diff_") ||
       name.match(/^(premix_)?reconstruction_step_\d+_.+\.wav$/) ||
       name === "mixer_reconstruction.wav" ||
       name === "simplifier_reconstruction.wav" ||
@@ -492,7 +497,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
       name === "recommendation_initial.json" ||
       name === "source_profile.json" ||
       name === "layer_analysis.json" ||
-      name.match(/^session_step_\d+_(codex_proposal|accepted)\.json$/)
+      name.match(/^session_step_\d+_(codex_proposal|premix_winner|mixed|simplified|accepted)\.json$/)
     );
   });
   for (const artifact of traceArtifacts) {
@@ -503,6 +508,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
       : artifact.name.startsWith("audio_diff") ? "audio_diff"
         : artifact.name.match(/^premix_reconstruction_step_/) ? "premix_render"
         : artifact.name.match(/^reconstruction_step_\d+_mixed\.wav$/) ? "render_mixed"
+        : artifact.name.match(/^reconstruction_step_\d+_simplified\.wav$/) ? "render_simplified"
         : artifact.name === "final_reconstruction.wav" ? "render"
         : artifact.name.endsWith(".wav") ? "render"
         : artifact.name.startsWith("session") ? "session"
@@ -516,6 +522,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
     const step = stepMatch ? Number(stepMatch[1]) : null;
     if (role === "premix_render" && step !== null) agent = `layer_builder_step_${String(step).padStart(2, "0")}`;
     if (role === "render_mixed" && step !== null) agent = `mixer_step_${String(step).padStart(2, "0")}`;
+    if (role === "render_simplified" && step !== null) agent = `simplifier_step_${String(step).padStart(2, "0")}`;
     if (role === "audio_diff" && step !== null) agent = "loss";
     if (artifact.name === "final_reconstruction.wav") agent = "simplifier";
     await addTraceFile({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name });
@@ -528,7 +535,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
     const score = Number(item.scores?.final || item.scores || 0);
     const premixWinner = item.premix_winner || winner;
     const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
-    appendToLog(panel.querySelector(".candidate-log"), premixWinner === "codex" ? `Codex proposal won pre-mix, then Mixer produced final step score ${score.toFixed(3)}.` : `Codex proposal lost pre-mix; ${premixWinner} won after Mixer with score ${score.toFixed(3)}.`);
+    appendToLog(panel.querySelector(".candidate-log"), premixWinner === "codex" ? `Codex proposal won pre-mix, then Mixer and Simplifier produced final step score ${score.toFixed(3)}.` : `Codex proposal lost pre-mix; ${premixWinner} won after Mixer and Simplifier with score ${score.toFixed(3)}.`);
     panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
     const audioName = item.audio_path?.split("/").pop();
     const diffName = item.audio_diff_path?.split("/").pop();
