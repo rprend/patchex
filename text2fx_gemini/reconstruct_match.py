@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import os
+import tempfile
 import subprocess
 import time
 from pathlib import Path
@@ -33,6 +34,8 @@ DEFAULT_SESSION = {
 
 NOTE_NAMES = {"C": 0, "C#": 1, "DB": 1, "D": 2, "D#": 3, "EB": 3, "E": 4, "F": 5, "F#": 6, "GB": 6, "G": 7, "G#": 8, "AB": 8, "A": 9, "A#": 10, "BB": 10, "B": 11}
 CODEX_PATH = "/Applications/Codex.app/Contents/Resources/codex"
+VITAL_AU_RENDER_SOURCE = Path(__file__).resolve().parent / "vital_au_render.swift"
+VITAL_AU_RENDER_BIN = Path(tempfile.gettempdir()) / "text2fx_vital_au_render"
 MAX_NOTES_PER_LAYER = 128
 MAX_AUTOMATION_POINTS = 64
 VITAL_PLUGIN_CANDIDATES = [
@@ -62,7 +65,22 @@ def vital_status() -> dict[str, Any]:
             loadable = True
         except Exception as exc:
             error = str(exc).splitlines()[0]
-    return {"installed_paths": installed, "pedalboard_loadable": loadable, "error": error}
+    auval_loadable = False
+    auval_error = ""
+    try:
+        result = subprocess.run(["auval", "-v", "aumu", "Vita", "Tyte"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20)
+        auval_loadable = result.returncode == 0 and "AU VALIDATION SUCCEEDED" in result.stdout
+        if not auval_loadable:
+            auval_error = "\n".join(result.stdout.splitlines()[-5:])
+    except Exception as exc:
+        auval_error = str(exc)
+    return {"installed_paths": installed, "pedalboard_loadable": loadable, "pedalboard_error": error, "audio_unit_loadable": auval_loadable, "audio_unit_error": auval_error}
+
+
+def ensure_vital_au_renderer() -> Path:
+    if not VITAL_AU_RENDER_BIN.exists() or VITAL_AU_RENDER_BIN.stat().st_mtime < VITAL_AU_RENDER_SOURCE.stat().st_mtime:
+        subprocess.run(["swiftc", str(VITAL_AU_RENDER_SOURCE), "-o", str(VITAL_AU_RENDER_BIN)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return VITAL_AU_RENDER_BIN
 
 
 def load_audio(path: Path) -> tuple[np.ndarray, int]:
@@ -360,10 +378,61 @@ def apply_phaser(stereo: np.ndarray, sr: int, mix: float, rate_hz: float = 0.23)
     return stereo * (1.0 - mix) + out * mix
 
 
+def render_vital_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
+    renderer = ensure_vital_au_renderer()
+    with tempfile.TemporaryDirectory(prefix="text2fx_vital_") as tmp:
+        tmp_path = Path(tmp)
+        request_path = tmp_path / "request.json"
+        output_path = tmp_path / "vital.wav"
+        notes = [
+            {
+                "note": int(note.get("note", 60)),
+                "start": float(note.get("start", 0.0)),
+                "duration": float(note.get("duration", 0.1)),
+                "velocity": int(np.clip(round(float(note.get("velocity", 0.7)) * 127.0), 1, 127)),
+            }
+            for note in layer.get("notes", [])
+        ]
+        write_json(
+            request_path,
+            {
+                "sample_rate": sr,
+                "duration": duration,
+                "output_path": str(output_path),
+                "notes": notes,
+            },
+        )
+        subprocess.run([str(renderer), str(request_path)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30)
+        audio, rendered_sr = sf.read(output_path, always_2d=True)
+        if int(rendered_sr) != int(sr):
+            raise RuntimeError(f"Vital AU rendered at {rendered_sr} Hz, expected {sr} Hz")
+        rendered = audio.T.astype(np.float32)
+        samples = int(duration * sr)
+        if rendered.shape[1] < samples:
+            rendered = np.pad(rendered, ((0, 0), (0, samples - rendered.shape[1])))
+        return rendered[:, :samples]
+
+
 def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     samples = int(duration * sr)
-    mono = np.zeros(samples, dtype=np.float32)
     synth = layer["synth"]
+    if synth.get("engine") == "vital":
+        stereo = render_vital_layer(layer, duration, sr)
+        gain_curve = automation_curve(layer.get("gain_points", [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}]), "db", samples, duration)
+        stereo *= np.power(10.0, gain_curve / 20.0)[None, :]
+        stereo = apply_phaser(stereo, sr, float(layer["effects"].get("phaser_mix", 0.0)), float(layer["modulation"].get("lfo_rate_hz", 0.23)) or 0.23)
+        stereo = apply_delay(stereo, sr, float(layer["effects"].get("delay_time", 0.18)), float(layer["effects"].get("delay_mix", 0.0)))
+        stereo *= db_to_amp(layer["gain_db"])
+        reverb_mix = layer["effects"]["reverb_mix"]
+        if reverb_mix > 0:
+            tail = np.zeros_like(stereo)
+            delays = [int(sr * 0.083), int(sr * 0.137), int(sr * 0.211)]
+            for delay_samples in delays:
+                if delay_samples < samples:
+                    tail[:, delay_samples:] += stereo[:, :-delay_samples] * (0.35 / len(delays))
+            stereo = stereo * (1.0 - reverb_mix) + tail * reverb_mix
+        return stereo.astype(np.float32)
+    mono = np.zeros(samples, dtype=np.float32)
     amp = layer["amp_envelope"]
     filt = layer["filter"]
     mod = layer["modulation"]
@@ -547,7 +616,9 @@ Allowed action for this run: {phase}
 Renderer capabilities:
 - Up to {max_layers} synth layers.
 - Each layer has note events, gain/pan/width, wavetable synth params, ADSR amp envelope, automated lowpass cutoff_start_hz -> cutoff_end_hz, optional filter.cutoff_points, optional layer gain_points, optional modulation.gate_points, LFO tremolo, chorus_mix, phaser_mix, delay_mix, saturation, EQ, reverb_mix.
-- Wavetable synth fields: engine=wavetable, wavetable=saw_stack|square_saw|formant|digital|triangle|sine, wavetable_position, warp, fm_amount, fm_ratio, blend, voices, detune_cents, stereo_spread, sub_level.
+- Synth engine may be engine=vital for the native Vital Audio Unit renderer, or engine=wavetable for the internal fallback.
+- Internal wavetable fields: wavetable=saw_stack|square_saw|formant|digital|triangle|sine, wavetable_position, warp, fm_amount, fm_ratio, blend, voices, detune_cents, stereo_spread, sub_level.
+- Vital layers currently support MIDI notes, velocity, gain automation, width/mix effects after render, and the default Vital AU sound. Prefer engine=vital for primary arp/lead/pad layers when exact synth tone matters.
 - Each layer can send to session returns through effects.return_send. Returns currently support reverb with id/type/gain_db/decay/width.
 - waveform may be sine, triangle, saw, square, noise, air, or transient for fallback/noise layers.
 - Session has returns and master fields. Preserve them even if empty.
