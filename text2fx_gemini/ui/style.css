@@ -68,6 +68,29 @@ p { margin: 0; color: var(--soft); }
   line-height: 1.7;
 }
 
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-top: 1.25rem;
+}
+
+.page-nav a {
+  padding: .45rem .65rem;
+  border: 1px solid var(--line);
+  color: var(--soft);
+  text-decoration: none;
+  background: white;
+  font-size: .9rem;
+}
+
+.page-nav a:hover,
+.page-nav a[aria-current="page"] {
+  border-color: var(--blue-4);
+  background: #f4f6ff;
+  color: var(--accent);
+}
+
 .eyebrow,
 .field span,
 .status,
@@ -118,6 +141,13 @@ p { margin: 0; color: var(--soft); }
   grid-template-columns: minmax(16rem, 28rem) minmax(0, 1fr);
   align-items: end;
   margin: 1rem 0;
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
 .field {
@@ -407,6 +437,52 @@ textarea {
 
 .artifact audio {
   margin-top: .7rem;
+}
+
+.scoreboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  margin-top: 1rem;
+}
+
+.score-card {
+  min-height: 8rem;
+  padding: .9rem;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+
+.score-card span {
+  display: block;
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.score-card strong {
+  display: block;
+  margin: .45rem 0 .7rem;
+  font-family: "Newsreader", ui-serif, Georgia, serif;
+  font-size: 2rem;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.score-bar {
+  height: .45rem;
+  background: var(--blue-2);
+  overflow: hidden;
+}
+
+.score-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
 }
 
 .history-panel {

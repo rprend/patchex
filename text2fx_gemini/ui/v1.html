@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Text2FX V1 Reconstruction</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Text2FX Workbench · V1</p>
+          <h1>Audio reconstruction sessions.</h1>
+          <p class="lede">Select a five-second source clip, analyze its construction layers, then build a scored multitrack synth reconstruction one decision at a time.</p>
+          <nav class="page-nav">
+            <a href="/">V0 patch builder</a>
+            <a href="/v1.html" aria-current="page">V1 reconstruction</a>
+          </nav>
+        </div>
+        <div class="status" id="serviceStatus">Idle</div>
+      </header>
+
+      <section class="panel reference-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Source Clip</h2>
+            <p>Select a source file and drag the exact 5-second reconstruction window.</p>
+          </div>
+          <button id="refreshFiles">Refresh</button>
+        </div>
+        <div class="reference-grid">
+          <label class="field">
+            <span>Audio file</span>
+            <select id="fileSelect"></select>
+          </label>
+          <audio id="audio" controls></audio>
+        </div>
+        <div class="wave-wrap">
+          <div id="waveform"></div>
+          <div class="clip-readout">
+            <span id="clipRange">0.00s - 5.00s</span>
+            <button id="playClip">Play Selected 5s</button>
+          </div>
+        </div>
+        <label class="field focus-field">
+          <span>Reconstruction focus</span>
+          <input id="targetPart" placeholder="whole synth passage, main swelling pad, bass and pad only..." />
+        </label>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Extract</h2>
+            <p>Write the selected clip as a normalized WAV for exact source scoring.</p>
+          </div>
+          <button id="extractClip">Extract Clip</button>
+        </div>
+        <pre id="clipLog" class="log analysis-log"></pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Reconstruct</h2>
+            <p>Run sequential Codex reconstruction steps. Each step renders, scores, mutates locally, and accepts only the best version.</p>
+          </div>
+          <button id="startReconstruction" class="primary inline-primary" disabled>Start V1 Reconstruction</button>
+        </div>
+        <div class="controls-grid">
+          <label class="field">
+            <span>Codex steps</span>
+            <input id="steps" type="number" min="1" max="10" value="5" />
+          </label>
+          <label class="field">
+            <span>Local trials per step</span>
+            <input id="localTrials" type="number" min="0" max="24" value="5" />
+          </label>
+          <label class="field">
+            <span>Max layers</span>
+            <input id="maxLayers" type="number" min="1" max="6" value="4" />
+          </label>
+        </div>
+        <pre id="runLog" class="log run-log"></pre>
+        <div id="stepLogs" class="candidate-logs"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>Scoreboard</h2>
+            <p>Component scores track reconstruction quality against the source, not prompt similarity.</p>
+          </div>
+        </div>
+        <div id="scoreboard" class="scoreboard"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>Output Results</h2>
+            <p>Final reconstruction audio, scored report, session JSON, layer analysis, step renders, and raw logs.</p>
+          </div>
+        </div>
+        <div id="artifacts" class="artifacts"></div>
+      </section>
+    </main>
+    <script src="/vendor/wavesurfer.min.js"></script>
+    <script src="/vendor/regions.min.js"></script>
+    <script src="/v1.js"></script>
+  </body>
+</html>
