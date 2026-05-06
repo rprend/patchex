@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Text2FX Workbench</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Text2FX Workbench</p>
+          <h1>Reference-matched synth patches.</h1>
+          <p class="lede">Select a five-second region, let the model describe it across production axes, then build a playable synth patch from that exact excerpt.</p>
+        </div>
+        <div class="status" id="serviceStatus">Idle</div>
+      </header>
+
+      <section class="panel reference-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Reference</h2>
+            <p>Select a source file and drag the 5-second capture window.</p>
+          </div>
+          <button id="refreshFiles">Refresh</button>
+        </div>
+        <div class="reference-grid">
+          <label class="field">
+            <span>Audio file</span>
+            <select id="fileSelect"></select>
+          </label>
+          <audio id="audio" controls></audio>
+        </div>
+        <div class="wave-wrap">
+          <div id="waveform"></div>
+          <div class="clip-readout">
+            <span id="clipRange">0.00s - 5.00s</span>
+            <button id="playClip">Play Selected 5s</button>
+            <button id="analyzeClip">Analyze Clip</button>
+          </div>
+        </div>
+        <label class="field focus-field">
+          <span>Part to recreate</span>
+          <input id="targetPart" placeholder="bright arpeggio, bass pulse, lead hook, pad wash..." />
+        </label>
+      </section>
+
+      <section class="grid-two">
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Axes</h2>
+              <p>The model describes the extracted clip and chooses the target synth family.</p>
+            </div>
+          </div>
+          <details class="advanced">
+            <summary>Advanced target prompt and instrument override</summary>
+            <label class="field">
+              <span>Override instrument</span>
+              <select id="instrument">
+                <option value="">Use detected instrument</option>
+                <option value="arp_synth">arp_synth</option>
+                <option value="bass_synth">bass_synth</option>
+                <option value="lead_synth">lead_synth</option>
+                <option value="pad_synth">pad_synth</option>
+                <option value="pluck_synth">pluck_synth</option>
+                <option value="texture_synth">texture_synth</option>
+              </select>
+            </label>
+            <label class="field prompt-field">
+              <span>Prompt</span>
+              <textarea id="prompt" rows="4" placeholder="Analyze a clip first."></textarea>
+            </label>
+          </details>
+          <div id="axes" class="axes"></div>
+          <button id="startRun" class="primary" disabled>Build Patch From This Clip</button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Run</h2>
+              <p>Live subprocess output from the matcher.</p>
+            </div>
+          </div>
+          <pre id="log" class="log"></pre>
+          <section id="keyboardPanel" class="keyboard-panel" hidden>
+            <div class="section-head">
+              <div>
+                <h2>Playable Patch</h2>
+                <p>Use the home row like a keyboard: A W S E D F T G Y H U J K.</p>
+              </div>
+            </div>
+            <div id="keyboard" class="keyboard"></div>
+          </section>
+          <div id="artifacts" class="artifacts"></div>
+        </section>
+      </section>
+
+      <section class="panel history-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Past Runs</h2>
+            <p>Open any previous run with its report, embedded sounds, and playable patch.</p>
+          </div>
+          <button id="refreshRuns">Refresh Runs</button>
+        </div>
+        <div id="runHistory" class="run-history"></div>
+      </section>
+    </main>
+    <script src="/vendor/wavesurfer.min.js"></script>
+    <script src="/vendor/regions.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
