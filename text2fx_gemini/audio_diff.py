@@ -19,6 +19,10 @@ class AudioScore:
     sustain_coverage: float
     frontload_balance: float
     band_envelope_by_time: float
+    beat_grid_mel: float
+    beat_grid_band: float
+    beat_grid_envelope: float
+    beat_grid_mid_side: float
     pitch_chroma: float
     f0_contour: float
     spectral_motion: float
@@ -114,6 +118,59 @@ def onset_positions(env: np.ndarray, threshold: float = 0.35) -> np.ndarray:
     if curve.size and curve[0] >= threshold:
         peaks.insert(0, 0)
     return np.asarray(peaks, dtype=np.float32)
+
+
+def estimate_beat_grid(reference: np.ndarray, sr: int, subdivision: int = 4) -> dict[str, Any]:
+    y = mono(reference)
+    duration = y.size / sr
+    env = frame_rms(y, frame=1024, hop=512)
+    positions = onset_positions(env, threshold=0.32)
+    onset_times = positions * 512.0 / sr
+    if env.size < 4:
+        tempo = 120.0
+    else:
+        curve = onset_curve(env)
+        tempos = np.arange(60.0, 181.0, 1.0)
+        scores = []
+        for bpm in tempos:
+            beat_frames = max(1.0, (60.0 / bpm) * sr / 512.0)
+            lags = [beat_frames * mul for mul in (1.0, 2.0, 0.5)]
+            score = 0.0
+            for lag in lags:
+                lag_i = int(round(lag))
+                if 1 <= lag_i < curve.size:
+                    score += float(np.dot(curve[:-lag_i], curve[lag_i:]) / max(1, curve.size - lag_i))
+            scores.append(score)
+        tempo = float(tempos[int(np.argmax(scores))])
+    step_seconds = 60.0 / tempo / subdivision
+    if onset_times.size:
+        phases = np.linspace(0.0, step_seconds, 32, endpoint=False)
+        phase_scores = []
+        for phase in phases:
+            distances = np.abs(((onset_times - phase + step_seconds / 2.0) % step_seconds) - step_seconds / 2.0)
+            phase_scores.append(float(np.mean(distances)))
+        phase = float(phases[int(np.argmin(phase_scores))])
+    else:
+        phase = 0.0
+    edges = np.arange(phase, duration + step_seconds, step_seconds)
+    if edges.size < 2 or edges[0] > 0.0:
+        edges = np.insert(edges, 0, 0.0)
+    edges = np.unique(np.clip(edges, 0.0, duration))
+    if edges[-1] < duration:
+        edges = np.append(edges, duration)
+    downbeat_time = float(phase)
+    return {
+        "tempo": tempo,
+        "meter": "4/4",
+        "subdivision": f"1/{4 * subdivision}",
+        "subdivision_per_beat": subdivision,
+        "step_seconds": float(step_seconds),
+        "phase_seconds": phase,
+        "downbeat_time_seconds": downbeat_time,
+        "downbeat_frame": int(round(downbeat_time * sr)),
+        "edges_seconds": [float(x) for x in edges.tolist()],
+        "onset_times_seconds": [float(x) for x in onset_times.tolist()],
+    }
 
 
 def chroma(mag: np.ndarray, sr: int) -> np.ndarray:
@@ -285,6 +342,67 @@ def band_envelope_score(ref_mag: np.ndarray, cand_mag: np.ndarray, sr: int) -> f
     return float(np.mean(scores)) if scores else 1.0
 
 
+def slice_edges_to_samples(edges_seconds: list[float], samples: int, sr: int) -> list[tuple[int, int]]:
+    edges = [int(np.clip(round(edge * sr), 0, samples)) for edge in edges_seconds]
+    out = []
+    for start, end in zip(edges[:-1], edges[1:]):
+        if end > start:
+            out.append((start, end))
+    return out
+
+
+def slice_band_vector(y: np.ndarray, sr: int) -> np.ndarray:
+    if y.size < 64:
+        y = np.pad(y, (0, 64 - y.size))
+    mag = stft_mag(y, frame=min(1024, max(128, int(2 ** math.ceil(math.log2(max(64, y.size))))), 1024), hop=max(64, min(512, y.size // 2)))
+    bands = band_energies(mag, sr)
+    return np.asarray([float(np.mean(values)) for values in bands.values()], dtype=np.float32)
+
+
+def beat_grid_scores(reference: np.ndarray, candidate: np.ndarray, sr: int, grid: dict[str, Any]) -> dict[str, Any]:
+    samples = min(reference.shape[-1], candidate.shape[-1])
+    slices = slice_edges_to_samples(grid.get("edges_seconds", []), samples, sr)
+    if not slices:
+        return {"mel": 1.0, "band": 1.0, "envelope": 1.0, "mid_side": 1.0, "slice_count": 0, "weak_slices": []}
+    ref_mono = mono(reference)[..., :samples]
+    cand_mono = mono(candidate)[..., :samples]
+    mel_ref = []
+    mel_cand = []
+    band_ref = []
+    band_cand = []
+    env_ref = []
+    env_cand = []
+    ms_ref = []
+    ms_cand = []
+    weak = []
+    for index, (start, end) in enumerate(slices):
+        r = ref_mono[start:end]
+        c = cand_mono[start:end]
+        rb = slice_band_vector(r, sr)
+        cb = slice_band_vector(c, sr)
+        band_ref.append(rb)
+        band_cand.append(cb)
+        mel_ref.append(rb)
+        mel_cand.append(cb)
+        env_ref.append(float(np.sqrt(np.mean(r**2) + 1e-12)))
+        env_cand.append(float(np.sqrt(np.mean(c**2) + 1e-12)))
+        if reference.ndim == 2 and candidate.ndim == 2 and reference.shape[0] >= 2 and candidate.shape[0] >= 2:
+            ref_mid = 0.5 * (reference[0, start:end] + reference[1, start:end])
+            ref_side = 0.5 * (reference[0, start:end] - reference[1, start:end])
+            cand_mid = 0.5 * (candidate[0, start:end] + candidate[1, start:end])
+            cand_side = 0.5 * (candidate[0, start:end] - candidate[1, start:end])
+            ms_ref.append([float(np.sqrt(np.mean(ref_mid**2) + 1e-12)), float(np.sqrt(np.mean(ref_side**2) + 1e-12))])
+            ms_cand.append([float(np.sqrt(np.mean(cand_mid**2) + 1e-12)), float(np.sqrt(np.mean(cand_side**2) + 1e-12))])
+        slice_score = relative_score(rb, cb)
+        if slice_score < 0.55:
+            weak.append({"index": index, "start": float(start / sr), "end": float(end / sr), "band_score": slice_score})
+    mel = matrix_score(np.asarray(mel_ref), np.asarray(mel_cand))
+    band = matrix_score(np.asarray(band_ref), np.asarray(band_cand))
+    envelope = relative_score(np.asarray(env_ref), np.asarray(env_cand))
+    mid_side = matrix_score(np.asarray(ms_ref), np.asarray(ms_cand)) if ms_ref else 1.0
+    return {"mel": mel, "band": band, "envelope": envelope, "mid_side": mid_side, "slice_count": len(slices), "weak_slices": weak[:12]}
+
+
 def trajectory_score(ref: np.ndarray, cand: np.ndarray, segments: int = 10) -> float:
     ref_segments = segment_values(ref, segments)
     cand_segments = segment_values(cand, segments)
@@ -315,6 +433,8 @@ def structural_gate_penalty(
     f0_contour: float,
     spectral_features: float,
     harmonic_noise: float,
+    beat_grid_mel: float = 1.0,
+    beat_grid_band: float = 1.0,
 ) -> float:
     """Harder musical-identity penalty for patterns that average metrics can hide."""
     penalty = 1.0
@@ -332,6 +452,8 @@ def structural_gate_penalty(
         penalty *= 0.9
     if harmonic_noise < 0.5:
         penalty *= 0.94
+    if beat_grid_mel < 0.58 or beat_grid_band < 0.58:
+        penalty *= 0.82
     return float(np.clip(penalty, 0.45, 1.0))
 
 
@@ -344,12 +466,14 @@ def matrix_score(ref: np.ndarray, cand: np.ndarray) -> float:
     return safe_exp_distance(distance)
 
 
-def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict[str, Any]:
+def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int, beat_grid: dict[str, Any] | None = None) -> dict[str, Any]:
     reference, candidate = align(reference, candidate)
     ref = mono(reference)
     cand = mono(candidate)
     ref_mag = stft_mag(ref)
     cand_mag = stft_mag(cand)
+    beat_grid = beat_grid or estimate_beat_grid(reference, sr)
+    grid_scores = beat_grid_scores(reference, candidate, sr, beat_grid)
 
     spectral_scores = []
     for frame, hop in [(512, 128), (1024, 256), (2048, 512), (4096, 1024)]:
@@ -428,15 +552,19 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict
     )
 
     weighted_final = (
-        0.13 * multi_resolution_spectral
-        + 0.12 * mel_spectrogram
+        0.105 * multi_resolution_spectral
+        + 0.095 * mel_spectrogram
         + 0.06 * a_weighted_spectral
-        + 0.045 * envelope
-        + 0.055 * segment_envelope
+        + 0.035 * envelope
+        + 0.04 * segment_envelope
         + 0.025 * late_energy_ratio
         + 0.025 * sustain_coverage
-        + 0.025 * frontload_balance
-        + 0.075 * band_envelope_by_time
+        + 0.02 * frontload_balance
+        + 0.055 * band_envelope_by_time
+        + 0.105 * grid_scores["mel"]
+        + 0.09 * grid_scores["band"]
+        + 0.055 * grid_scores["envelope"]
+        + 0.045 * grid_scores["mid_side"]
         + 0.055 * pitch_chroma
         + 0.075 * f0_contour
         + 0.065 * spectral_motion
@@ -452,7 +580,7 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict
         + 0.005 * embedding
         + 0.005 * codec_latent
     )
-    penalty = structural_gate_penalty(ref_onsets, cand_onsets, f0_contour, spectral_features, harmonic_noise)
+    penalty = structural_gate_penalty(ref_onsets, cand_onsets, f0_contour, spectral_features, harmonic_noise, grid_scores["mel"], grid_scores["band"])
 
     score = AudioScore(
         final=float(weighted_final * penalty),
@@ -465,6 +593,10 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict
         sustain_coverage=sustain_coverage,
         frontload_balance=frontload_balance,
         band_envelope_by_time=band_envelope_by_time,
+        beat_grid_mel=grid_scores["mel"],
+        beat_grid_band=grid_scores["band"],
+        beat_grid_envelope=grid_scores["envelope"],
+        beat_grid_mid_side=grid_scores["mid_side"],
         pitch_chroma=pitch_chroma,
         f0_contour=f0_contour,
         spectral_motion=spectral_motion,
@@ -480,7 +612,7 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict
         embedding=embedding,
         codec_latent=codec_latent,
     )
-    diagnostics = build_diagnostics(reference, candidate, sr, ref_features, cand_features, ref_env, cand_env, ref_stereo, cand_stereo, score)
+    diagnostics = build_diagnostics(reference, candidate, sr, ref_features, cand_features, ref_env, cand_env, ref_stereo, cand_stereo, score, beat_grid, grid_scores)
     return {"scores": score_to_json(score), "diagnostics": diagnostics, "residual": residual_from_diff(score, diagnostics)}
 
 
@@ -495,6 +627,8 @@ def build_diagnostics(
     ref_stereo: dict[str, Any],
     cand_stereo: dict[str, Any],
     score: AudioScore,
+    beat_grid: dict[str, Any],
+    grid_scores: dict[str, Any],
 ) -> dict[str, Any]:
     ref_mag = stft_mag(mono(reference))
     cand_mag = stft_mag(mono(candidate))
@@ -536,6 +670,15 @@ def build_diagnostics(
         "band_energy": band_deltas,
         "reference_stereo": ref_stereo,
         "candidate_stereo": cand_stereo,
+        "beat_grid": beat_grid,
+        "beat_grid_scores": {
+            "mel": grid_scores.get("mel", 1.0),
+            "band": grid_scores.get("band", 1.0),
+            "envelope": grid_scores.get("envelope", 1.0),
+            "mid_side": grid_scores.get("mid_side", 1.0),
+            "slice_count": grid_scores.get("slice_count", 0),
+            "weak_slices": grid_scores.get("weak_slices", []),
+        },
         "weakest_components": sorted(score_to_json(score).items(), key=lambda item: item[1])[:5],
     }
 
@@ -568,6 +711,11 @@ def residual_from_diff(score: AudioScore, diagnostics: dict[str, Any]) -> dict[s
     if score.band_envelope_by_time < 0.7:
         missing.append("band energy changes over time do not match the source")
         recommendations.append("use filter/gain automation or layer timing to match low/mid/high energy across the whole clip")
+    if score.beat_grid_mel < 0.68 or score.beat_grid_band < 0.68 or score.beat_grid_envelope < 0.68:
+        grid = diagnostics.get("beat_grid", {})
+        grid_scores = diagnostics.get("beat_grid_scores", {})
+        missing.append(f"beat-grid reconstruction differs across {grid_scores.get('slice_count', 0)} {grid.get('subdivision', 'grid')} slices")
+        recommendations.append("move note events, automation, and layer energy onto the detected beat grid instead of matching only whole-clip averages")
     if score.transient_onset < 0.7 or score.onset_count < 0.78 or score.onset_timing < 0.78:
         ref_count = diagnostics.get("reference_onset_count", 0)
         cand_count = diagnostics.get("candidate_onset_count", 0)

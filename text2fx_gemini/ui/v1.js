@@ -497,6 +497,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
       name === "recommendation_initial.json" ||
       name === "source_profile.json" ||
       name === "pattern_constraints.json" ||
+      name === "beat_grid.json" ||
       name === "layer_analysis.json" ||
       name.match(/^session_step_\d+_(codex_proposal|premix_winner|mixed|simplified|accepted)\.json$/)
     );
@@ -774,6 +775,10 @@ function renderScoreboard(report) {
     "sustain_coverage",
     "frontload_balance",
     "band_envelope_by_time",
+    "beat_grid_mel",
+    "beat_grid_band",
+    "beat_grid_envelope",
+    "beat_grid_mid_side",
     "pitch_chroma",
     "f0_contour",
     "spectral_motion",

@@ -13,10 +13,10 @@ from typing import Any
 import numpy as np
 
 try:
-    from audio_diff import AudioScore, compare_audio, score_to_json
+    from audio_diff import AudioScore, compare_audio, estimate_beat_grid, score_to_json
     from text2fx import extract_json_object, load_runtime_dependencies
 except ModuleNotFoundError:
-    from .audio_diff import AudioScore, compare_audio, score_to_json
+    from .audio_diff import AudioScore, compare_audio, estimate_beat_grid, score_to_json
     from .text2fx import extract_json_object, load_runtime_dependencies
 
 sf: Any = None
@@ -536,6 +536,7 @@ Read these files before answering:
 - Previous Critic recommendation JSON: {recommendation_path}
 - Score/history JSON: {history_path}
 - Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
+- Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
 - Current chunked session manifest if present: {analyzer_path.parent / "session_chunks" / "current" / "manifest.json"}
 
 Task: Given those files, update the requested session artifact with the smallest concrete full-session JSON change that should reduce reconstruction error.
@@ -551,6 +552,7 @@ Renderer capabilities:
 - waveform may be sine, triangle, saw, square, noise, air, or transient for fallback/noise layers.
 - Session has returns and master fields. Preserve them even if empty.
 - Dense MIDI/pattern layers may use up to {MAX_NOTES_PER_LAYER} note events. If pattern_constraints.json shows source onsets, write note events near those onset times instead of summarizing them as a held layer.
+- Timing must be aligned to beat_grid.json. Use its tempo, meter, downbeat_time_seconds, and 1/16 grid edges when placing arpeggio/pulse notes or automation changes.
 
 Rules:
 - Write a complete session JSON file, not prose and not a patch fragment.
@@ -576,6 +578,7 @@ Read these files before answering:
 - Latest builder history item JSON: {history_item_path}
 - Latest audio similarity/diff JSON: {audio_diff_path}
 - Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
+- Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
 
 Task: Update the requested recommendation artifact for the next Producer run. Include perceptual language plus concrete file-level edits. Tie every critique to reconstruction metrics, source analysis, or session structure.
 
@@ -832,10 +835,17 @@ def onset_frames_to_notes(diagnostics: dict[str, Any], sample_rate: int, midi_no
 
 def pattern_constraints(profile: dict[str, Any], sample_rate: int) -> dict[str, Any]:
     diagnostics = profile.get("diagnostics", {})
+    beat_grid = profile.get("beat_grid", {})
     onset_count = int(profile.get("onset_count", diagnostics.get("reference_onset_count", 0)) or 0)
     return {
         "requires_pattern": onset_count >= 12,
         "target_onset_count": onset_count,
+        "tempo": beat_grid.get("tempo"),
+        "meter": beat_grid.get("meter", "4/4"),
+        "subdivision": beat_grid.get("subdivision", "1/16"),
+        "step_seconds": beat_grid.get("step_seconds"),
+        "downbeat_time_seconds": beat_grid.get("downbeat_time_seconds", beat_grid.get("phase_seconds", 0.0)),
+        "grid_edges_seconds": beat_grid.get("edges_seconds", []),
         "reference_onset_positions": diagnostics.get("reference_onset_positions", []),
         "reference_onset_times_seconds": [round(float(frame) * 512.0 / sample_rate, 4) for frame in diagnostics.get("reference_onset_positions", [])],
         "starter_notes": onset_frames_to_notes(diagnostics, sample_rate),
@@ -906,6 +916,8 @@ def structural_scores_ok(score: AudioScore, diagnostics: dict[str, Any]) -> bool
         return False
     if score.spectral_features < 0.38 or score.harmonic_noise < 0.38:
         return False
+    if score.beat_grid_mel < 0.58 or score.beat_grid_band < 0.58:
+        return False
     return True
 
 
@@ -913,10 +925,10 @@ def score_from_json(payload: dict[str, float]) -> AudioScore:
     return AudioScore(**{field: float(payload.get(field, 0.0)) for field in AudioScore.__dataclass_fields__})
 
 
-def write_audio_diff(reference_audio: np.ndarray, session: dict[str, Any], sample_rate: int, audio_path: Path, diff_path: Path) -> tuple[AudioScore, dict[str, Any], dict[str, Any]]:
+def write_audio_diff(reference_audio: np.ndarray, session: dict[str, Any], sample_rate: int, audio_path: Path, diff_path: Path, beat_grid: dict[str, Any] | None = None) -> tuple[AudioScore, dict[str, Any], dict[str, Any]]:
     rendered = render_session(session)
     sf.write(audio_path, rendered.T, sample_rate)
-    diff = compare_audio(reference_audio, rendered, sample_rate)
+    diff = compare_audio(reference_audio, rendered, sample_rate, beat_grid=beat_grid)
     write_json(diff_path, diff)
     return score_from_json(diff["scores"]), diff["diagnostics"], diff["residual"]
 
@@ -932,6 +944,7 @@ def score_candidate_with_inner_trials(
     sample_rate: int,
     trials: int,
     pattern_info: dict[str, Any],
+    beat_grid: dict[str, Any],
 ) -> list[tuple[float, str, dict[str, Any], AudioScore, dict[str, Any], dict[str, Any], Path, Path]]:
     candidates = [(label_prefix, sanitize_session(base_session, duration, sample_rate))]
     if pattern_info.get("requires_pattern"):
@@ -943,7 +956,7 @@ def score_candidate_with_inner_trials(
     for label, candidate_session in candidates:
         out_path = output_dir / f"premix_reconstruction_step_{step:02d}_{label}.wav"
         diff_path = output_dir / f"premix_audio_diff_step_{step:02d}_{label}.json"
-        score, diagnostics, residual = write_audio_diff(reference_audio, candidate_session, sample_rate, out_path, diff_path)
+        score, diagnostics, residual = write_audio_diff(reference_audio, candidate_session, sample_rate, out_path, diff_path, beat_grid=beat_grid)
         write_json(output_dir / f"session_step_{step:02d}_{label}.json", candidate_session)
         print(f"trace_file agent=loss step={step} role=premix_audio_diff_{label} path={diff_path}", flush=True)
         print(f"trace_file agent=loss step={step} role=premix_render_{label} path={out_path}", flush=True)
@@ -951,20 +964,26 @@ def score_candidate_with_inner_trials(
         gated_final = score.final if gate else score.final * 0.82
         results.append((gated_final, label, candidate_session, score, diagnostics, residual, out_path, diff_path))
         print(
-            f"step={step} candidate={label} phase=premix score={score.final:.4f} gated={gated_final:.4f} structural_gate={str(gate).lower()} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} f0={score.f0_contour:.4f} motion={score.spectral_motion:.4f} timbre={score.spectral_features:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+            f"step={step} candidate={label} phase=premix score={score.final:.4f} gated={gated_final:.4f} structural_gate={str(gate).lower()} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} f0={score.f0_contour:.4f} motion={score.spectral_motion:.4f} timbre={score.spectral_features:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
             flush=True,
         )
     results.sort(key=lambda item: item[0], reverse=True)
     return results
 
 
-def source_profile(reference_audio: np.ndarray, sample_rate: int, duration: float) -> dict[str, Any]:
+def source_profile(reference_audio: np.ndarray, sample_rate: int, duration: float, beat_grid: dict[str, Any]) -> dict[str, Any]:
     silence = np.zeros_like(reference_audio)
-    profile_diff = compare_audio(reference_audio, silence, sample_rate)
+    profile_diff = compare_audio(reference_audio, silence, sample_rate, beat_grid=beat_grid)
     diagnostics = profile_diff["diagnostics"]
     return {
         "sample_rate": sample_rate,
         "duration_seconds": duration,
+        "beat_grid": beat_grid,
+        "tempo": beat_grid.get("tempo"),
+        "meter": beat_grid.get("meter", "4/4"),
+        "subdivision": beat_grid.get("subdivision", "1/16"),
+        "downbeat_time_seconds": beat_grid.get("downbeat_time_seconds", beat_grid.get("phase_seconds", 0.0)),
+        "downbeat_frame": beat_grid.get("downbeat_frame", 0),
         "rms": float(np.sqrt(np.mean(local_mono(reference_audio) ** 2) + 1e-12)),
         "diagnostics": diagnostics,
         "band_energy": diagnostics.get("band_energy", {}),
@@ -1050,7 +1069,9 @@ def main() -> None:
     reference_clip = args.output_dir / "source_clip.wav"
     sf.write(reference_clip, reference_audio.T, args.sample_rate)
 
-    profile = source_profile(reference_audio, args.sample_rate, args.seconds)
+    beat_grid = estimate_beat_grid(reference_audio, args.sample_rate, subdivision=4)
+    trace_file("analyzer", "beat_grid", write_json(args.output_dir / "beat_grid.json", beat_grid))
+    profile = source_profile(reference_audio, args.sample_rate, args.seconds, beat_grid)
     pattern_info = pattern_constraints(profile, args.sample_rate)
     profile["pattern_constraints"] = pattern_info
     profile["synth_engine"] = {"active": "internal_wavetable", "vital": vital_status()}
@@ -1112,6 +1133,7 @@ def main() -> None:
             args.sample_rate,
             args.local_trials,
             pattern_info,
+            beat_grid,
         )
         premix_score_value, premix_label, premix_session, premix_score, premix_diagnostics, premix_residual, premix_out_path, premix_diff_path = step_results[0]
         print(f"premix_winner step={step} winner={premix_label} score={premix_score_value:.4f}", flush=True)
@@ -1138,7 +1160,7 @@ def main() -> None:
         simplified_session_path = trace_file(f"simplifier_step_{step:02d}", "simplified_session", write_json(args.output_dir / f"session_step_{step:02d}_simplified.json", simplified_candidate))
         simplified_out_path = args.output_dir / f"reconstruction_step_{step:02d}_simplified.wav"
         simplified_diff_path = args.output_dir / f"audio_diff_step_{step:02d}_simplified.json"
-        score, diagnostics, candidate_residual = write_audio_diff(reference_audio, simplified_candidate, args.sample_rate, simplified_out_path, simplified_diff_path)
+        score, diagnostics, candidate_residual = write_audio_diff(reference_audio, simplified_candidate, args.sample_rate, simplified_out_path, simplified_diff_path, beat_grid=beat_grid)
         label = f"{premix_label}+mixer+simplifier"
         session = simplified_candidate
         out_path = simplified_out_path
@@ -1146,7 +1168,7 @@ def main() -> None:
         print(f"trace_file agent=loss step={step} role=audio_diff_simplified path={simplified_diff_path}", flush=True)
         print(f"trace_file agent=loss step={step} role=render_simplified path={simplified_out_path}", flush=True)
         print(
-            f"step={step} candidate=simplified_from_{premix_label} phase=simplified score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+            f"step={step} candidate=simplified_from_{premix_label} phase=simplified score={score.final:.4f} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
             flush=True,
         )
         print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(premix_label == 'codex').lower()} score={score.final:.4f}", flush=True)
