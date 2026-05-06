@@ -309,6 +309,32 @@ def onset_timing_score(ref_positions: np.ndarray, cand_positions: np.ndarray, le
     return safe_exp_distance(float(np.mean(distances) * 8.0 + extra_penalty))
 
 
+def structural_gate_penalty(
+    ref_positions: np.ndarray,
+    cand_positions: np.ndarray,
+    f0_contour: float,
+    spectral_features: float,
+    harmonic_noise: float,
+) -> float:
+    """Harder musical-identity penalty for patterns that average metrics can hide."""
+    penalty = 1.0
+    ref_count = int(ref_positions.size)
+    cand_count = int(cand_positions.size)
+    if ref_count >= 16:
+        count_ratio = cand_count / max(1, ref_count)
+        if count_ratio < 0.55:
+            penalty *= 0.72
+        elif count_ratio < 0.8:
+            penalty *= 0.88
+    if f0_contour < 0.35:
+        penalty *= 0.82
+    if spectral_features < 0.5:
+        penalty *= 0.9
+    if harmonic_noise < 0.5:
+        penalty *= 0.94
+    return float(np.clip(penalty, 0.45, 1.0))
+
+
 def matrix_score(ref: np.ndarray, cand: np.ndarray) -> float:
     rows = min(ref.shape[0], cand.shape[0])
     cols = min(ref.shape[1], cand.shape[1])
@@ -401,32 +427,35 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int) -> dict
         )
     )
 
+    weighted_final = (
+        0.13 * multi_resolution_spectral
+        + 0.12 * mel_spectrogram
+        + 0.06 * a_weighted_spectral
+        + 0.045 * envelope
+        + 0.055 * segment_envelope
+        + 0.025 * late_energy_ratio
+        + 0.025 * sustain_coverage
+        + 0.025 * frontload_balance
+        + 0.075 * band_envelope_by_time
+        + 0.055 * pitch_chroma
+        + 0.075 * f0_contour
+        + 0.065 * spectral_motion
+        + 0.045 * centroid_trajectory
+        + 0.07 * spectral_features
+        + 0.035 * transient_onset
+        + 0.07 * onset_count
+        + 0.075 * onset_timing
+        + 0.035 * stereo_width
+        + 0.04 * modulation
+        + 0.045 * harmonic_noise
+        + 0.005 * cepstral
+        + 0.005 * embedding
+        + 0.005 * codec_latent
+    )
+    penalty = structural_gate_penalty(ref_onsets, cand_onsets, f0_contour, spectral_features, harmonic_noise)
+
     score = AudioScore(
-        final=float(
-            0.12 * multi_resolution_spectral
-            + 0.11 * mel_spectrogram
-            + 0.06 * a_weighted_spectral
-            + 0.06 * envelope
-            + 0.07 * segment_envelope
-            + 0.06 * late_energy_ratio
-            + 0.05 * sustain_coverage
-            + 0.05 * frontload_balance
-            + 0.08 * band_envelope_by_time
-            + 0.06 * pitch_chroma
-            + 0.04 * f0_contour
-            + 0.06 * spectral_motion
-            + 0.05 * centroid_trajectory
-            + 0.04 * spectral_features
-            + 0.04 * transient_onset
-            + 0.04 * onset_count
-            + 0.04 * onset_timing
-            + 0.03 * stereo_width
-            + 0.03 * modulation
-            + 0.02 * harmonic_noise
-            + 0.01 * cepstral
-            + 0.005 * embedding
-            + 0.005 * codec_latent
-        ),
+        final=float(weighted_final * penalty),
         multi_resolution_spectral=multi_resolution_spectral,
         mel_spectrogram=mel_spectrogram,
         a_weighted_spectral=a_weighted_spectral,

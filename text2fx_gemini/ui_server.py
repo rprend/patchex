@@ -13,7 +13,7 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from reference_match import analyze_reference, load_audio, runtime
 from text2fx import LLM_MODEL, extract_json_object
@@ -800,8 +800,12 @@ def list_artifacts(path: Path) -> list[dict]:
     if not path.exists():
         return []
     return [
-        {"name": file.name, "size": file.stat().st_size, "url": f"/media/runs/{path.name}/{file.name}"}
-        for file in sorted(path.glob("*"))
+        {
+            "name": str(file.relative_to(path)),
+            "size": file.stat().st_size,
+            "url": f"/media/runs/{path.name}/{'/'.join(quote(part) for part in file.relative_to(path).parts)}",
+        }
+        for file in sorted(path.rglob("*"))
         if file.is_file()
     ]
 

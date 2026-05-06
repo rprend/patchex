@@ -496,6 +496,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
       name.startsWith("recommendation_step_") ||
       name === "recommendation_initial.json" ||
       name === "source_profile.json" ||
+      name === "pattern_constraints.json" ||
       name === "layer_analysis.json" ||
       name.match(/^session_step_\d+_(codex_proposal|premix_winner|mixed|simplified|accepted)\.json$/)
     );
