@@ -291,13 +291,13 @@ textarea {
 .candidate-logs {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1rem;
+  gap: 1.25rem;
   margin-top: 1rem;
 }
 
 .loop-group {
-  border: 1px solid var(--line);
-  background: #f8f9fd;
+  border-top: 1px solid var(--line);
+  background: transparent;
 }
 
 .loop-group > summary {
@@ -305,9 +305,9 @@ textarea {
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
-  padding: .85rem 1rem;
+  padding: .85rem 0;
   cursor: pointer;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
 }
 
 .loop-group > summary span {
@@ -327,24 +327,25 @@ textarea {
 .loop-body {
   display: grid;
   grid-template-columns: 1fr;
-  gap: .75rem;
-  padding: .75rem;
+  gap: .2rem;
+  padding: 0;
 }
 
 .candidate-panel {
   min-height: 0;
-  border: 1px solid var(--line);
-  background: white;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: transparent;
 }
 
 .candidate-head {
-  min-height: 3.4rem;
+  min-height: 3rem;
   display: flex;
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
-  padding: .7rem .8rem;
-  border-bottom: 1px solid var(--line-soft);
+  padding: .7rem 0;
+  border-bottom: 0;
 }
 
 .candidate-head span {
@@ -367,15 +368,15 @@ textarea {
   max-height: 8rem;
   overflow: auto;
   margin: 0;
-  padding: .8rem;
+  padding: 0 0 .65rem;
   color: var(--soft);
   font: .78rem/1.5 "Geist", ui-sans-serif, system-ui;
   white-space: pre-wrap;
 }
 
 .spinner {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: .75rem;
+  height: .75rem;
   border: 2px solid var(--blue-3);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -384,8 +385,8 @@ textarea {
 
 .candidate-panel.completed .spinner {
   animation: none;
-  border-color: var(--blue-4);
-  background: var(--blue-4);
+  border-color: var(--muted);
+  background: var(--muted);
 }
 
 .candidate-panel.failed .spinner {
@@ -397,7 +398,7 @@ textarea {
 .trace-file {
   margin-top: 0;
   border-top: 1px solid var(--line);
-  background: #fbfcff;
+  background: transparent;
 }
 
 .trace-file summary {
@@ -405,7 +406,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: .75rem;
-  padding: .65rem .75rem;
+  padding: .6rem 0;
   cursor: pointer;
   color: var(--text);
   font-size: .82rem;
@@ -428,27 +429,27 @@ textarea {
 .trace-file pre {
   max-height: 18rem;
   margin: 0;
-  padding: .8rem;
+  padding: .75rem 0;
   overflow: auto;
   border-top: 1px solid var(--line);
-  background: white;
-  color: #1f2937;
+  background: transparent;
+  color: var(--soft);
   font-size: .75rem;
   line-height: 1.45;
   white-space: pre-wrap;
 }
 
 .trace-file audio {
-  width: calc(100% - 1.5rem);
-  margin: 0 .75rem .75rem;
+  width: 100%;
+  margin: 0 0 .75rem;
 }
 
 .trace-waveform {
   min-height: 88px;
-  margin: 0 .75rem .75rem;
+  margin: 0 0 .75rem;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  background: #f8f9fd;
+  background: transparent;
 }
 
 @keyframes spin {
