@@ -302,9 +302,15 @@ function friendlyAgent(agent) {
   return step === undefined ? name : `${name} ${Number(step) + 1}`;
 }
 
+function panelLabel(agent, step) {
+  if (agent.match(/_step_\d+$/) || step === null || step === undefined) return friendlyAgent(agent);
+  return `${friendlyAgent(agent)} ${Number(step) + 1}`;
+}
+
 function friendlyRole(role, agent = "") {
   if (role.startsWith("premix_audio_diff")) return "Pre-mix accuracy";
   if (role.startsWith("premix_render")) return "Listen pre-mix";
+  if (role.startsWith("render_mixed")) return "Listen mixed output";
   if (role.startsWith("audio_diff")) return "Accuracy report";
   if (role.startsWith("render")) return "Listen";
   if (role === "prompt") {
@@ -331,15 +337,18 @@ function tracePanelId(agent, step) {
 }
 
 async function addTraceFile(payload) {
-  const agent = payload.agent || "trace";
+  let agent = payload.agent || "trace";
   const role = payload.role || "file";
   if (agent === "session" && role === "current") return;
   const step = payload.step ?? null;
+  if (step !== null && role.startsWith("premix_render")) agent = `layer_builder_step_${String(step).padStart(2, "0")}`;
+  if (step !== null && role.startsWith("render_mixed")) agent = `mixer_step_${String(step).padStart(2, "0")}`;
+  if (step !== null && role.startsWith("audio_diff")) agent = "loss";
   const path = payload.path || "";
   const url = payload.url || fileUrlFromTracePath(path);
   const fileName = payload.name || path.split("/").pop();
   const line = payload.line || `trace_file agent=${agent} role=${role} path=${path}`;
-  const panel = agentPanel(tracePanelId(agent, step), friendlyAgent(agent));
+  const panel = agentPanel(tracePanelId(agent, step), panelLabel(agent, step));
   panel.querySelector(".candidate-axis").textContent = friendlyRole(role, agent);
   const log = panel.querySelector(".candidate-log");
   if (role === "layer_analysis") appendToLog(log, "Layer plan ready.");
@@ -350,6 +359,9 @@ async function addTraceFile(payload) {
 
   const trace = document.createElement("details");
   trace.className = "trace-file";
+  const traceKey = `${role}:${url || path}`;
+  if (Array.from(panel.querySelectorAll(".trace-file")).some((item) => item.dataset.traceKey === traceKey)) return;
+  trace.dataset.traceKey = traceKey;
   trace.open = fileName.endsWith(".wav") || role.includes("recommendation") || role.includes("winner_audio_diff");
   trace.innerHTML = `<summary><span>${friendlyRole(role, agent)}</span><a href="${url || "#"}" target="_blank">Open details</a></summary>`;
   const body = document.createElement("pre");
@@ -475,6 +487,7 @@ async function renderTraceArtifacts(artifacts, report = null) {
       name.match(/^(premix_)?reconstruction_step_\d+_.+\.wav$/) ||
       name === "mixer_reconstruction.wav" ||
       name === "simplifier_reconstruction.wav" ||
+      name === "final_reconstruction.wav" ||
       name.startsWith("recommendation_step_") ||
       name === "recommendation_initial.json" ||
       name === "source_profile.json" ||
@@ -488,14 +501,23 @@ async function renderTraceArtifacts(artifacts, report = null) {
       ? artifact.name.includes("_prompt") ? "prompt" : "answer"
       : artifact.name.startsWith("premix_audio_diff") ? "premix_audio_diff"
       : artifact.name.startsWith("audio_diff") ? "audio_diff"
+        : artifact.name.match(/^premix_reconstruction_step_/) ? "premix_render"
+        : artifact.name.match(/^reconstruction_step_\d+_mixed\.wav$/) ? "render_mixed"
+        : artifact.name === "final_reconstruction.wav" ? "render"
         : artifact.name.endsWith(".wav") ? "render"
         : artifact.name.startsWith("session") ? "session"
           : artifact.name.startsWith("recommendation") ? "recommendation"
             : "file";
-    const agent = artifact.name
+    let agent = artifact.name
       .replace(/^codex_/, "")
       .replace(/_(prompt|answer)\.txt$/, "")
       .replace(/\.json$/, "");
+    const stepMatch = artifact.name.match(/step_(\d+)/);
+    const step = stepMatch ? Number(stepMatch[1]) : null;
+    if (role === "premix_render" && step !== null) agent = `layer_builder_step_${String(step).padStart(2, "0")}`;
+    if (role === "render_mixed" && step !== null) agent = `mixer_step_${String(step).padStart(2, "0")}`;
+    if (role === "audio_diff" && step !== null) agent = "loss";
+    if (artifact.name === "final_reconstruction.wav") agent = "simplifier";
     await addTraceFile({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name });
   }
   if (!report?.history) return;
@@ -720,6 +742,7 @@ function attachReconstructionEvents(runId) {
           });
         }
         const job = await api(`/api/reconstructions/${runId}`);
+        await renderTraceArtifacts(job.artifacts);
         await renderArtifacts(job.artifacts);
         loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
       }
