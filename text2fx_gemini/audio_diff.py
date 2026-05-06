@@ -363,7 +363,7 @@ def beat_grid_scores(reference: np.ndarray, candidate: np.ndarray, sr: int, grid
     samples = min(reference.shape[-1], candidate.shape[-1])
     slices = slice_edges_to_samples(grid.get("edges_seconds", []), samples, sr)
     if not slices:
-        return {"mel": 1.0, "band": 1.0, "envelope": 1.0, "mid_side": 1.0, "slice_count": 0, "weak_slices": []}
+        return {"mel": 1.0, "band": 1.0, "envelope": 1.0, "mid_side": 1.0, "slice_count": 0, "weak_slices": [], "slices": []}
     ref_mono = mono(reference)[..., :samples]
     cand_mono = mono(candidate)[..., :samples]
     mel_ref = []
@@ -374,7 +374,8 @@ def beat_grid_scores(reference: np.ndarray, candidate: np.ndarray, sr: int, grid
     env_cand = []
     ms_ref = []
     ms_cand = []
-    weak = []
+    slice_reports = []
+    band_names = ["sub", "bass", "low_mid", "mid", "presence", "air"]
     for index, (start, end) in enumerate(slices):
         r = ref_mono[start:end]
         c = cand_mono[start:end]
@@ -386,21 +387,63 @@ def beat_grid_scores(reference: np.ndarray, candidate: np.ndarray, sr: int, grid
         mel_cand.append(cb)
         env_ref.append(float(np.sqrt(np.mean(r**2) + 1e-12)))
         env_cand.append(float(np.sqrt(np.mean(c**2) + 1e-12)))
+        ref_ms = [0.0, 0.0]
+        cand_ms = [0.0, 0.0]
+        mid_side_score = 1.0
         if reference.ndim == 2 and candidate.ndim == 2 and reference.shape[0] >= 2 and candidate.shape[0] >= 2:
             ref_mid = 0.5 * (reference[0, start:end] + reference[1, start:end])
             ref_side = 0.5 * (reference[0, start:end] - reference[1, start:end])
             cand_mid = 0.5 * (candidate[0, start:end] + candidate[1, start:end])
             cand_side = 0.5 * (candidate[0, start:end] - candidate[1, start:end])
-            ms_ref.append([float(np.sqrt(np.mean(ref_mid**2) + 1e-12)), float(np.sqrt(np.mean(ref_side**2) + 1e-12))])
-            ms_cand.append([float(np.sqrt(np.mean(cand_mid**2) + 1e-12)), float(np.sqrt(np.mean(cand_side**2) + 1e-12))])
-        slice_score = relative_score(rb, cb)
-        if slice_score < 0.55:
-            weak.append({"index": index, "start": float(start / sr), "end": float(end / sr), "band_score": slice_score})
+            ref_ms = [float(np.sqrt(np.mean(ref_mid**2) + 1e-12)), float(np.sqrt(np.mean(ref_side**2) + 1e-12))]
+            cand_ms = [float(np.sqrt(np.mean(cand_mid**2) + 1e-12)), float(np.sqrt(np.mean(cand_side**2) + 1e-12))]
+            ms_ref.append(ref_ms)
+            ms_cand.append(cand_ms)
+            mid_side_score = relative_score(np.asarray(ref_ms), np.asarray(cand_ms))
+        band_score = relative_score(rb, cb)
+        envelope_score = ratio_score(env_ref[-1], env_cand[-1])
+        mel_score = band_score
+        deltas = cb - rb
+        worst_band_index = int(np.argmax(np.abs(deltas))) if deltas.size else 0
+        slice_reports.append(
+            {
+                "index": index,
+                "start": float(start / sr),
+                "end": float(end / sr),
+                "scores": {
+                    "mel": float(mel_score),
+                    "band": float(band_score),
+                    "envelope": float(envelope_score),
+                    "mid_side": float(mid_side_score),
+                },
+                "source": {
+                    "rms": float(env_ref[-1]),
+                    "bands": {name: float(rb[pos]) for pos, name in enumerate(band_names[: rb.size])},
+                    "mid": ref_ms[0],
+                    "side": ref_ms[1],
+                },
+                "candidate": {
+                    "rms": float(env_cand[-1]),
+                    "bands": {name: float(cb[pos]) for pos, name in enumerate(band_names[: cb.size])},
+                    "mid": cand_ms[0],
+                    "side": cand_ms[1],
+                },
+                "delta": {
+                    "rms": float(env_cand[-1] - env_ref[-1]),
+                    "bands": {name: float(deltas[pos]) for pos, name in enumerate(band_names[: deltas.size])},
+                    "largest_band": band_names[worst_band_index] if worst_band_index < len(band_names) else "unknown",
+                },
+            }
+        )
     mel = matrix_score(np.asarray(mel_ref), np.asarray(mel_cand))
     band = matrix_score(np.asarray(band_ref), np.asarray(band_cand))
     envelope = relative_score(np.asarray(env_ref), np.asarray(env_cand))
     mid_side = matrix_score(np.asarray(ms_ref), np.asarray(ms_cand)) if ms_ref else 1.0
-    return {"mel": mel, "band": band, "envelope": envelope, "mid_side": mid_side, "slice_count": len(slices), "weak_slices": weak[:12]}
+    weak = sorted(
+        slice_reports,
+        key=lambda item: min(item["scores"]["mel"], item["scores"]["band"], item["scores"]["envelope"], item["scores"]["mid_side"]),
+    )[:12]
+    return {"mel": mel, "band": band, "envelope": envelope, "mid_side": mid_side, "slice_count": len(slices), "weak_slices": weak, "slices": slice_reports}
 
 
 def trajectory_score(ref: np.ndarray, cand: np.ndarray, segments: int = 10) -> float:
@@ -678,6 +721,7 @@ def build_diagnostics(
             "mid_side": grid_scores.get("mid_side", 1.0),
             "slice_count": grid_scores.get("slice_count", 0),
             "weak_slices": grid_scores.get("weak_slices", []),
+            "slices": grid_scores.get("slices", []),
         },
         "weakest_components": sorted(score_to_json(score).items(), key=lambda item: item[1])[:5],
     }

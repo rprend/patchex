@@ -582,6 +582,8 @@ Read these files before answering:
 
 Task: Update the requested recommendation artifact for the next Producer run. Include perceptual language plus concrete file-level edits. Tie every critique to reconstruction metrics, source analysis, or session structure.
 
+Important: Latest audio similarity/diff JSON contains diagnostics.beat_grid_scores.slices and weak_slices. Use those per-slice records to name exact grid indices and time ranges that need work. Recommendations should say things like "increase mid energy at slices 28-34, 2.86s-3.48s" or "add missing note attacks at grid indices 12, 15, 16" when supported by the diff.
+
 The recommendation JSON must use this shape:
 {{
   "missing": ["specific measurable mismatches"],
@@ -591,6 +593,7 @@ The recommendation JSON must use this shape:
   "success_criteria": ["numbers the next score should move toward"],
   "priority": "layer|automation|pitch|envelope|stereo|mix",
   "target_files": ["tracks/track_id.json or effects/effect_id.json that should change"],
+  "target_slices": [{{"index": 0, "start": 0.0, "end": 0.1, "problem": "what is wrong here", "action": "specific fix at this time"}}],
   "producer_work_order": "one compact paragraph telling Producer exactly which track/effect file to update and what note/synth/effect changes to test",
   "stop_layer_building": true_or_false
 }}
@@ -1218,6 +1221,7 @@ def main() -> None:
             "success_criteria": critic.get("success_criteria", []),
             "priority": critic.get("priority", "layer"),
             "target_files": critic.get("target_files", []),
+            "target_slices": critic.get("target_slices", []),
             "producer_work_order": critic.get("producer_work_order", ""),
             "stop_layer_building": bool(critic.get("stop_layer_building", False)),
             "diagnostics": deterministic_residual.get("diagnostics", {}),
