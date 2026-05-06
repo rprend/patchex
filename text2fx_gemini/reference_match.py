@@ -290,49 +290,22 @@ def with_fixed_pattern(recipe: Recipe, pattern: PatternParams) -> Recipe:
     )
 
 
-def fixed_pattern_for_analysis(analysis: dict[str, Any], target_prompt: str = "", target_part: str = "") -> PatternParams:
-    instrument_type = analysis.get("instrument_type", "lead_synth")
-    features = analysis.get("features", {})
-    onset_density = float(features.get("onset_density", 2.0))
-    axes_text = " ".join(
-        phrase
-        for values in analysis.get("axes", {}).values()
-        for phrase in values
-    ).lower()
-    explicit_text = f"{target_prompt} {target_part}".lower()
-    intent_text = f"{explicit_text} {axes_text}".lower()
-    tempo = 128.0
-
-    if instrument_type == "pad_synth":
-        is_background_swell = any(word in intent_text for word in ["swelling", "swell", "wash", "background", "behind", "sustained", "soft attack"])
-        explicit_pulsing = any(word in explicit_text for word in ["pulse", "pulsing", "sidechain", "rhythmic", "lfo"])
-        axis_pulsing = any(word in axes_text for word in ["pulse", "pulsing", "sidechain", "rhythmic", "lfo"])
-        if is_background_swell and not explicit_pulsing:
-            steps = [0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5]
-            velocity = [0.78, 0.78, 0.78, 0.78, 0.82, 0.82, 0.82, 0.82, 0.74, 0.74, 0.74, 0.74, 0.80, 0.80, 0.80, 0.80]
-            tempo = 84.0
-        elif explicit_pulsing or axis_pulsing:
-            steps = [0, 0, 0, 0, 5, 5, 5, 5, 7, 7, 7, 7, 5, 5, 5, 5]
-            velocity = [0.82, 0.42, 0.74, 0.38, 0.82, 0.42, 0.74, 0.38, 0.78, 0.40, 0.70, 0.36, 0.78, 0.40, 0.70, 0.36]
-            tempo = 104.0
-        else:
-            steps = [0, 0, 0, 0, 5, 5, 5, 5, 7, 7, 7, 7, 5, 5, 5, 5]
-            velocity = [0.72] * 16
-            tempo = 96.0
-    elif instrument_type == "arp_synth" or (onset_density > 8.0 and "arpeggio" in intent_text):
-        steps = [0, 4, 7, 12, 7, 4, 0, -5, 0, 4, 7, 12, 7, 4, 0, -5]
-        velocity = [0.9, 0.82, 0.88, 0.84, 0.9, 0.82, 0.88, 0.78, 0.9, 0.82, 0.88, 0.84, 0.9, 0.82, 0.88, 0.78]
-        tempo = 132.0
-    elif instrument_type == "bass_synth":
-        steps = [0, 0, 7, 0, -5, 0, 7, 0, 0, 0, 7, 0, -5, 0, 7, 0]
-        velocity = [0.96, 0.0, 0.88, 0.0, 0.9, 0.0, 0.86, 0.0, 0.96, 0.0, 0.88, 0.0, 0.9, 0.0, 0.86, 0.0]
-    elif instrument_type == "pluck_synth":
-        steps = [0, 7, 12, 7, 5, 12, 7, 5, 0, 7, 12, 7, 5, 12, 7, 5]
-        velocity = [0.94, 0.8, 0.88, 0.78, 0.9, 0.82, 0.86, 0.76, 0.94, 0.8, 0.88, 0.78, 0.9, 0.82, 0.86, 0.76]
-    else:
-        steps = [0, 2, 4, 7, 9, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2]
-        velocity = [0.88, 0.78, 0.84, 0.9, 0.86, 0.82, 0.78, 0.74, 0.88, 0.78, 0.84, 0.9, 0.86, 0.82, 0.78, 0.74]
-    return PatternParams(tempo=tempo, grid="16th", steps=steps, velocity=velocity)
+def fixed_pattern_from_analysis(analysis: dict[str, Any]) -> PatternParams:
+    payload = analysis.get("fixed_pattern")
+    if not isinstance(payload, dict):
+        raise ValueError("Analysis is missing AI-generated fixed_pattern. Analyze the clip again before building.")
+    steps = payload.get("steps")
+    velocity = payload.get("velocity")
+    if not isinstance(steps, list) or len(steps) != 16:
+        raise ValueError("Analysis fixed_pattern.steps must contain exactly 16 values.")
+    if not isinstance(velocity, list) or len(velocity) != 16:
+        raise ValueError("Analysis fixed_pattern.velocity must contain exactly 16 values.")
+    return PatternParams(
+        tempo=float(np.clip(float(payload["tempo"]), 60, 180)),
+        grid="16th",
+        steps=[int(np.clip(float(step), -24, 24)) for step in steps],
+        velocity=[float(np.clip(float(v), 0, 1)) for v in velocity],
+    )
 
 
 def default_macros(synth: SynthParams, effects: FxParams) -> dict[str, float]:
@@ -994,11 +967,15 @@ def main() -> None:
     parser.add_argument("--candidate-iterations", type=int, default=3)
     parser.add_argument("--instrument-type", choices=["bass_synth", "lead_synth", "pad_synth", "pluck_synth", "arp_synth", "texture_synth"])
     parser.add_argument("--target-part", default="")
+    parser.add_argument("--analysis-json", type=Path)
     args = parser.parse_args()
 
     runtime()
     reference_audio, reference_sr = load_audio(args.reference)
-    analysis = analyze_reference(reference_audio, reference_sr)
+    if args.analysis_json:
+        analysis = json.loads(args.analysis_json.read_text())
+    else:
+        analysis = analyze_reference(reference_audio, reference_sr)
     if args.instrument_type:
         analysis["instrument_type"] = args.instrument_type
     if args.target_part:
@@ -1011,7 +988,7 @@ def main() -> None:
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
     proposal_status: dict[str, Any] = {"source": "codex_cli", "codex_path": CODEX_PATH}
     codex_candidates: list[dict[str, Any]] = []
-    fixed_pattern = fixed_pattern_for_analysis(analysis, target_prompt=target_prompt, target_part=args.target_part)
+    fixed_pattern = fixed_pattern_from_analysis(analysis)
     print(f"fixed_pattern {json.dumps(asdict(fixed_pattern))}", flush=True)
     seed_recipe: Recipe | None = None
 

@@ -230,10 +230,17 @@ Return only JSON with this exact shape:
     "rhythm": ["2-4 short production phrases"],
     "mix_role": ["2-4 short production phrases"]
   }},
+  "fixed_pattern": {{
+    "tempo": 60-180,
+    "grid": "16th",
+    "steps": [16 semitone offsets from root, integers -24..24],
+    "velocity": [16 values from 0..1 matching steps]
+  }},
   "prompt": "one compact target prompt summarizing the axes for recipe generation"
 }}
 
 Use the local DSP features only as supporting evidence; the audio clip is authoritative.
+Choose fixed_pattern from the audio and target part. For pads/background swells, prefer held or slow-pulse notes. For arps/plucks, use active 16th-note motion. For bass, use sparse root/octave/fifth pulses. Do not use a deterministic template.
 Local features:
 {json.dumps(local["features"], indent=2)}
 
@@ -259,7 +266,29 @@ Local preliminary guess:
         raise ValueError(f"Gemini axis analysis returned wrong axes: {payload}")
     if payload.get("instrument_type") not in {"bass_synth", "lead_synth", "pad_synth", "pluck_synth", "arp_synth", "texture_synth"}:
         raise ValueError(f"Gemini axis analysis returned invalid instrument_type: {payload}")
-    return {"features": local["features"], "axes": payload["axes"], "instrument_type": payload["instrument_type"], "prompt": payload["prompt"], "target_part": target_part, "analysis_source": "gemini_audio"}
+    fixed_pattern = sanitize_fixed_pattern(payload.get("fixed_pattern"))
+    return {"features": local["features"], "axes": payload["axes"], "instrument_type": payload["instrument_type"], "fixed_pattern": fixed_pattern, "prompt": payload["prompt"], "target_part": target_part, "analysis_source": "gemini_audio"}
+
+
+def sanitize_fixed_pattern(payload) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError(f"Gemini analysis missing fixed_pattern: {payload}")
+    required = {"tempo", "grid", "steps", "velocity"}
+    missing = sorted(required - set(payload))
+    if missing:
+        raise ValueError(f"Gemini fixed_pattern missing keys: {missing}")
+    steps = payload["steps"]
+    velocity = payload["velocity"]
+    if not isinstance(steps, list) or len(steps) != 16:
+        raise ValueError("Gemini fixed_pattern.steps must be a 16-item list.")
+    if not isinstance(velocity, list) or len(velocity) != 16:
+        raise ValueError("Gemini fixed_pattern.velocity must be a 16-item list.")
+    return {
+        "tempo": float(max(60, min(180, float(payload["tempo"])))),
+        "grid": "16th",
+        "steps": [int(max(-24, min(24, float(step)))) for step in steps],
+        "velocity": [float(max(0, min(1, float(v)))) for v in velocity],
+    }
 
 
 def generate_clip_description_with_retry(client, contents, attempts: int = 4):
@@ -303,12 +332,16 @@ def compact_log_line(line: str, state: dict[str, int]) -> str | None:
     return stripped
 
 
-def start_run(reference: str, prompt: str, instrument_type: str, candidates: int, axis_trials: int, target_part: str = "") -> str:
+def start_run(reference: str, prompt: str, instrument_type: str, candidates: int, axis_trials: int, target_part: str = "", analysis: dict | None = None) -> str:
     reference_path = safe_reference_path(reference)
     run_id = time.strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
     out_dir = RUNS / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     event_queue: queue.Queue[dict] = queue.Queue()
+    analysis_path = out_dir / "analysis_input.json"
+    if analysis is None:
+        raise ValueError("Build requires AI clip analysis, including fixed_pattern. Run Analyze Clip first.")
+    analysis_path.write_text(json.dumps(analysis, indent=2) + "\n")
     cmd = [
         str(WORKSPACE / ".venv/bin/python"),
         str(ROOT / "reference_match.py"),
@@ -324,6 +357,8 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
         str(axis_trials),
         "--instrument-type",
         instrument_type,
+        "--analysis-json",
+        str(analysis_path),
     ]
     if target_part:
         cmd.extend(["--target-part", target_part])
@@ -471,6 +506,7 @@ class Handler(BaseHTTPRequestHandler):
                     candidates=int(payload.get("candidates", 4)),
                     axis_trials=int(payload.get("axis_trials", 1)),
                     target_part=str(payload.get("target_part", "")),
+                    analysis=payload.get("analysis"),
                 )
                 json_response(self, {"run_id": run_id})
                 return

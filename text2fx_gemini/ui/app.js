@@ -23,6 +23,7 @@ const runHistory = document.getElementById("runHistory");
 let currentFile = null;
 let currentClip = null;
 let currentInstrument = null;
+let currentAnalysis = null;
 let wavesurfer = null;
 let regionsPlugin = null;
 let activeRegion = null;
@@ -149,6 +150,7 @@ async function selectFile(name) {
   currentFile = name;
   currentClip = null;
   currentInstrument = null;
+  currentAnalysis = null;
   instrument.value = "";
   keyboardPanel.hidden = true;
   activePatch = null;
@@ -370,6 +372,7 @@ analyzeClip.addEventListener("click", async () => {
         }
         const result = payload.result;
         currentClip = result.clip;
+        currentAnalysis = result.analysis;
         currentInstrument = result.analysis.instrument_type;
         instrument.value = "";
         renderAxes(result.analysis.axes);
@@ -392,6 +395,10 @@ playClipButton.addEventListener("click", playRegion);
 
 startRun.addEventListener("click", async () => {
   if (!currentClip) return;
+  if (!currentAnalysis) {
+    appendRunLog("Build requires a completed clip analysis with an AI-generated fixed pattern.");
+    return;
+  }
   runLogEl.textContent = "";
   candidateLogsEl.innerHTML = "";
   artifactsEl.innerHTML = "";
@@ -410,6 +417,7 @@ startRun.addEventListener("click", async () => {
         prompt: promptBox.value,
         instrument_type: selectedInstrument,
         target_part: targetPart.value.trim(),
+        analysis: currentAnalysis,
         candidates: 2,
         axis_trials: 1,
       }),
