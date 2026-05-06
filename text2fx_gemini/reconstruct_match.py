@@ -14,13 +14,12 @@ import numpy as np
 
 try:
     from audio_diff import AudioScore, compare_audio, score_to_json
-    from text2fx import LLM_MODEL, extract_json_object, load_runtime_dependencies
+    from text2fx import extract_json_object, load_runtime_dependencies
 except ModuleNotFoundError:
     from .audio_diff import AudioScore, compare_audio, score_to_json
-    from .text2fx import LLM_MODEL, extract_json_object, load_runtime_dependencies
+    from .text2fx import extract_json_object, load_runtime_dependencies
 
 sf: Any = None
-genai: Any = None
 
 
 DEFAULT_SESSION = {
@@ -37,13 +36,11 @@ CODEX_PATH = "/Applications/Codex.app/Contents/Resources/codex"
 
 
 def setup() -> None:
-    global sf, genai
+    global sf
     load_runtime_dependencies()
     import soundfile as soundfile_module
-    from google import genai as genai_module
 
     sf = soundfile_module
-    genai = genai_module
 
 
 def load_audio(path: Path) -> tuple[np.ndarray, int]:
@@ -259,20 +256,19 @@ def render_session(session: dict[str, Any]) -> np.ndarray:
     return mix.astype(np.float32)
 
 
-def gemini_client() -> Any:
-    key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not key:
-        raise RuntimeError("Set GEMINI_API_KEY or GOOGLE_API_KEY before running reconstruction.")
-    return genai.Client(api_key=key)
+def session_shape() -> str:
+    return json.dumps(DEFAULT_SESSION, indent=2)
 
 
-def analyze_layers(client: Any, reference_path: Path, local_features: dict[str, Any], duration: float) -> dict[str, Any]:
-    from google.genai import types
+def codex_analyzer_prompt(source_clip_path: Path, source_profile_path: Path, duration: float) -> str:
+    return f"""
+You are the Analyzer agent in a file-driven audio reconstruction pipeline.
 
-    prompt = f"""
-Analyze this exact five-second audio clip as a reconstruction target, not as a vibe prompt.
+Read these files before answering:
+- Source clip WAV: {source_clip_path}
+- Source audio profile JSON: {source_profile_path}
 
-Reconstruct the whole selected clip autonomously. If drums, vocals, or non-synth material are present, represent what can be approximated with synth/noise/space layers and mark confidence honestly.
+Task: Produce a structured layer plan and reconstruction constraints. This is not vibe analysis. Infer likely layer architecture from the source profile: band energy, centroid motion, onset count, stereo stats, and duration.
 
 Return ONLY JSON:
 {{
@@ -304,37 +300,18 @@ Return ONLY JSON:
   "strategy": ["ordered reconstruction steps, each adding or modifying a measurable layer"]
 }}
 
-Prefer 2-5 layers for dense clips and 1-3 layers for sparse clips. Use the source audio as authority. Local DSP features:
-{json.dumps(local_features, indent=2)}
+Prefer 2-5 layers for dense clips and 1-3 layers for sparse clips. Treat this as a hypothesis that later audio-diff files can correct.
 """
-    response = client.models.generate_content(
-        model=LLM_MODEL,
-        contents=[
-            types.Content(
-                parts=[
-                    types.Part(text=prompt),
-                    types.Part(inline_data=types.Blob(mime_type="audio/wav", data=reference_path.read_bytes())),
-                ]
-            )
-        ],
-    )
-    payload = extract_json_object(response.text or "")
-    if not isinstance(payload.get("layers"), list):
-        raise ValueError(f"Layer analysis did not return layers: {payload}")
-    global_payload = payload.setdefault("global", {})
-    global_payload.setdefault("meter", "unknown")
-    global_payload.setdefault("duration_seconds", duration)
-    if "summary" in global_payload and "overall_mix" not in global_payload:
-        global_payload["overall_mix"] = global_payload.pop("summary")
-    global_payload.setdefault("overall_mix", "unknown overall mix")
-    return payload
 
 
-def session_shape() -> str:
-    return json.dumps(DEFAULT_SESSION, indent=2)
-
-
-def codex_layer_builder_prompt(analysis: dict[str, Any], session: dict[str, Any], history: list[dict[str, Any]], residual: dict[str, Any], step: int, max_layers: int) -> str:
+def codex_layer_builder_prompt(
+    analyzer_path: Path,
+    current_session_path: Path,
+    recommendation_path: Path,
+    history_path: Path,
+    step: int,
+    max_layers: int,
+) -> str:
     phase = [
         "create the dominant audible layer",
         "inspect residual and add or modify the second most important layer",
@@ -345,7 +322,13 @@ def codex_layer_builder_prompt(analysis: dict[str, Any], session: dict[str, Any]
     return f"""
 You are the Layer Builder agent in an autonomous audio reconstruction pipeline.
 
-Task: Given the source layer plan, current session, score history, and residual report, make the smallest concrete full-session JSON change that should reduce reconstruction error.
+Read these files before answering:
+- Analyzer layer plan: {analyzer_path}
+- Current best reconstruction session JSON: {current_session_path}
+- Previous Residual Critic recommendation JSON: {recommendation_path}
+- Score/history JSON: {history_path}
+
+Task: Given those files, make the smallest concrete full-session JSON change that should reduce reconstruction error.
 
 Current builder run: {step + 1}
 Allowed action for this run: {phase}
@@ -362,28 +345,22 @@ Rules:
 - Use synth/noise-like approximation only; do not reference external samples.
 - Optimize actual reconstruction metrics: multi-resolution spectral, mel spectrogram, envelope, pitch chroma, spectral motion, transient/onset, stereo width, embedding.
 
-Source analysis:
-{json.dumps(analysis, indent=2)}
-
-Current session:
-{json.dumps(session, indent=2)}
-
-Score history:
-{json.dumps(history, indent=2)}
-
-Residual report:
-{json.dumps(residual, indent=2)}
-
 Return full JSON session with this shape:
 {session_shape()}
 """
 
 
-def codex_residual_critic_prompt(analysis: dict[str, Any], session: dict[str, Any], history_item: dict[str, Any], deterministic_residual: dict[str, Any]) -> str:
+def codex_residual_critic_prompt(analyzer_path: Path, session_path: Path, history_item_path: Path, audio_diff_path: Path) -> str:
     return f"""
 You are the Residual Critic agent in an audio reconstruction pipeline.
 
-Read the latest accepted/rejected render scores and produce measurable residual guidance for the next builder. Do not suggest vibes. Tie every critique to reconstruction metrics, source analysis, or session structure.
+Read these files before answering:
+- Analyzer layer plan: {analyzer_path}
+- Current best reconstruction session JSON: {session_path}
+- Latest builder history item JSON: {history_item_path}
+- Latest audio similarity/diff JSON: {audio_diff_path}
+
+Task: Produce a measurable recommendation file for the next Codex run. Do not suggest vibes. Tie every critique to reconstruction metrics, source analysis, or session structure.
 
 Return ONLY JSON:
 {{
@@ -392,47 +369,34 @@ Return ONLY JSON:
   "priority": "layer|automation|pitch|envelope|stereo|mix",
   "stop_layer_building": true_or_false
 }}
-
-Source analysis:
-{json.dumps(analysis, indent=2)}
-
-Current session:
-{json.dumps(session, indent=2)}
-
-Latest history item:
-{json.dumps(history_item, indent=2)}
-
-Deterministic residual:
-{json.dumps(deterministic_residual, indent=2)}
 """
 
 
-def codex_mixer_prompt(analysis: dict[str, Any], session: dict[str, Any], history: list[dict[str, Any]], residual: dict[str, Any]) -> str:
+def codex_mixer_prompt(analyzer_path: Path, session_path: Path, recommendation_path: Path, history_path: Path) -> str:
     return f"""
 You are the Mixer agent in an audio reconstruction pipeline.
 
+Read these files before answering:
+- Analyzer layer plan: {analyzer_path}
+- Current best reconstruction session JSON: {session_path}
+- Latest Residual Critic recommendation JSON: {recommendation_path}
+- Score/history JSON: {history_path}
+
 Task: Balance the accepted layers, stereo width, layer gains, pan, reverb/chorus mix, and master gain/width. Do not add new musical content unless the session is empty. Return a full JSON session.
-
-Source analysis:
-{json.dumps(analysis, indent=2)}
-
-Current session:
-{json.dumps(session, indent=2)}
-
-Score history:
-{json.dumps(history, indent=2)}
-
-Residual report:
-{json.dumps(residual, indent=2)}
 
 Return ONLY full JSON session with this shape:
 {session_shape()}
 """
 
 
-def codex_simplifier_prompt(analysis: dict[str, Any], session: dict[str, Any], history: list[dict[str, Any]]) -> str:
+def codex_simplifier_prompt(analyzer_path: Path, session_path: Path, history_path: Path) -> str:
     return f"""
 You are the Simplifier agent in an audio reconstruction pipeline.
+
+Read these files before answering:
+- Analyzer layer plan: {analyzer_path}
+- Mixed reconstruction session JSON: {session_path}
+- Score/history JSON: {history_path}
 
 Task: Remove redundant layers, collapse overlapping roles, keep the reconstruction close, and make the final session understandable. Return full JSON session. Also preserve enough structure to distill a playable patch.
 
@@ -441,15 +405,6 @@ Rules:
 - Prefer 1-4 meaningful layers.
 - Preserve the most important layer ids when possible.
 - Return ONLY full JSON session.
-
-Source analysis:
-{json.dumps(analysis, indent=2)}
-
-Current mixed session:
-{json.dumps(session, indent=2)}
-
-History:
-{json.dumps(history, indent=2)}
 
 Return full JSON session with this shape:
 {session_shape()}
@@ -530,15 +485,40 @@ def local_mono(audio: np.ndarray) -> np.ndarray:
     return audio.mean(axis=0) if audio.ndim == 2 else audio
 
 
+def write_json(path: Path, payload: Any) -> Path:
+    path.write_text(json.dumps(payload, indent=2) + "\n")
+    return path
+
+
 def score_from_json(payload: dict[str, float]) -> AudioScore:
     return AudioScore(**{field: float(payload.get(field, 0.0)) for field in AudioScore.__dataclass_fields__})
 
 
-def score_session(reference_audio: np.ndarray, session: dict[str, Any], sample_rate: int, output_path: Path) -> tuple[AudioScore, dict[str, Any], dict[str, Any]]:
+def write_audio_diff(reference_audio: np.ndarray, session: dict[str, Any], sample_rate: int, audio_path: Path, diff_path: Path) -> tuple[AudioScore, dict[str, Any], dict[str, Any]]:
     rendered = render_session(session)
-    sf.write(output_path, rendered.T, sample_rate)
+    sf.write(audio_path, rendered.T, sample_rate)
     diff = compare_audio(reference_audio, rendered, sample_rate)
+    write_json(diff_path, diff)
     return score_from_json(diff["scores"]), diff["diagnostics"], diff["residual"]
+
+
+def source_profile(reference_audio: np.ndarray, sample_rate: int, duration: float) -> dict[str, Any]:
+    silence = np.zeros_like(reference_audio)
+    profile_diff = compare_audio(reference_audio, silence, sample_rate)
+    diagnostics = profile_diff["diagnostics"]
+    return {
+        "sample_rate": sample_rate,
+        "duration_seconds": duration,
+        "rms": float(np.sqrt(np.mean(local_mono(reference_audio) ** 2) + 1e-12)),
+        "diagnostics": diagnostics,
+        "band_energy": diagnostics.get("band_energy", {}),
+        "centroid": {
+            "start_hz": diagnostics.get("reference_centroid_start_hz", 0.0),
+            "end_hz": diagnostics.get("reference_centroid_end_hz", 0.0),
+        },
+        "onset_count": diagnostics.get("reference_onset_count", 0),
+        "stereo": diagnostics.get("reference_stereo", {}),
+    }
 
 
 def distilled_playable_patch(session: dict[str, Any]) -> dict[str, Any]:
@@ -602,23 +582,37 @@ def main() -> None:
     reference_audio = reference_audio[:, : int(args.seconds * args.sample_rate)]
     reference_clip = args.output_dir / "source_clip.wav"
     sf.write(reference_clip, reference_audio.T, args.sample_rate)
-    client = gemini_client()
 
-    local_features = {
-        "rms": float(np.sqrt(np.mean(local_mono(reference_audio) ** 2) + 1e-12)),
-        "duration": args.seconds,
-    }
+    source_profile_path = write_json(args.output_dir / "source_profile.json", source_profile(reference_audio, args.sample_rate, args.seconds))
     print("analysis_start layer_plan", flush=True)
-    analysis = analyze_layers(client, reference_clip, local_features, args.seconds)
-    (args.output_dir / "layer_analysis.json").write_text(json.dumps(analysis, indent=2) + "\n")
-    (args.output_dir / "analyzer_answer.json").write_text(json.dumps(analysis, indent=2) + "\n")
+    analysis = run_codex_json(
+        args.output_dir,
+        "analyzer",
+        codex_analyzer_prompt(reference_clip, source_profile_path, args.seconds),
+    )
+    global_payload = analysis.setdefault("global", {})
+    global_payload.setdefault("meter", "unknown")
+    global_payload.setdefault("duration_seconds", args.seconds)
+    global_payload.setdefault("overall_mix", "unknown overall mix")
+    if not isinstance(analysis.get("layers"), list):
+        raise ValueError(f"Codex Analyzer did not return layers: {analysis}")
+    analyzer_path = write_json(args.output_dir / "analyzer_answer.json", analysis)
+    write_json(args.output_dir / "layer_analysis.json", analysis)
     print(f"analysis_done layers={len(analysis.get('layers', []))}", flush=True)
 
     session = sanitize_session(DEFAULT_SESSION, args.seconds, args.sample_rate)
+    current_session_path = write_json(args.output_dir / "session_current.json", session)
     history: list[dict[str, Any]] = []
+    history_path = write_json(args.output_dir / "history.json", history)
     best_session = session
     best_score = AudioScore(**{field: 0.0 for field in AudioScore.__dataclass_fields__})
-    residual = {"missing": ["empty session"], "recommendations": ["add the dominant audible layer first"], "diagnostics": local_features}
+    recommendation = {
+        "missing": ["empty session"],
+        "recommendations": ["add the dominant audible layer first"],
+        "priority": "layer",
+        "stop_layer_building": False,
+    }
+    recommendation_path = write_json(args.output_dir / "recommendation_initial.json", recommendation)
     rng = np.random.default_rng(20260506)
 
     for step in range(args.steps):
@@ -626,29 +620,33 @@ def main() -> None:
         proposed = run_codex_json(
             args.output_dir,
             f"layer_builder_step_{step:02d}",
-            codex_layer_builder_prompt(analysis, best_session, history, residual, step, args.max_layers),
+            codex_layer_builder_prompt(analyzer_path, current_session_path, recommendation_path, history_path, step, args.max_layers),
             args.seconds,
             args.sample_rate,
         )
+        proposed_session_path = write_json(args.output_dir / f"session_step_{step:02d}_codex_proposal.json", proposed)
         candidates = [("codex", proposed)]
         for trial in range(args.local_trials):
             candidates.append((f"local_{trial}", local_mutation(proposed, rng, 0.22, args.seconds, args.sample_rate)))
         step_results = []
         for label, candidate_session in candidates:
             out_path = args.output_dir / f"reconstruction_step_{step:02d}_{label}.wav"
-            score, diagnostics, candidate_residual = score_session(reference_audio, candidate_session, args.sample_rate, out_path)
-            step_results.append((score.final, label, candidate_session, score, diagnostics, candidate_residual, out_path))
+            diff_path = args.output_dir / f"audio_diff_step_{step:02d}_{label}.json"
+            score, diagnostics, candidate_residual = write_audio_diff(reference_audio, candidate_session, args.sample_rate, out_path, diff_path)
+            write_json(args.output_dir / f"session_step_{step:02d}_{label}.json", candidate_session)
+            step_results.append((score.final, label, candidate_session, score, diagnostics, candidate_residual, out_path, diff_path))
             print(
                 f"step={step} candidate={label} score={score.final:.4f} mel={score.mel_spectrogram:.4f} envelope={score.envelope:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset={score.transient_onset:.4f} stereo={score.stereo_width:.4f}",
                 flush=True,
             )
         step_results.sort(key=lambda item: item[0], reverse=True)
-        _, label, session, score, diagnostics, candidate_residual, out_path = step_results[0]
+        _, label, session, score, diagnostics, candidate_residual, out_path, diff_path = step_results[0]
         accepted = score.final >= best_score.final
         if accepted:
             best_session = session
             best_score = score
-        deterministic_residual = candidate_residual
+            current_session_path = write_json(args.output_dir / "session_current.json", best_session)
+        deterministic_residual = dict(candidate_residual)
         if len(best_session.get("layers", [])) < 2 and best_score.final < 0.72:
             deterministic_residual.setdefault("recommendations", []).append("prefer adding one concrete layer over overfitting the first layer")
         history_item = {
@@ -657,29 +655,35 @@ def main() -> None:
             "accepted": accepted,
             "winner": label,
             "audio_path": str(out_path),
+            "audio_diff_path": str(diff_path),
+            "proposal_session_path": str(proposed_session_path),
             "scores": score_to_json(score),
             "best_scores": score_to_json(best_score),
             "layers": [{"id": layer["id"], "role": layer["role"]} for layer in best_session.get("layers", [])],
             "deterministic_residual": deterministic_residual,
         }
+        history_item_path = write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item)
         print(f"agent_stage residual_critic step={step}", flush=True)
         critic = run_codex_json(
             args.output_dir,
             f"residual_critic_step_{step:02d}",
-            codex_residual_critic_prompt(analysis, best_session, history_item, deterministic_residual),
+            codex_residual_critic_prompt(analyzer_path, current_session_path, history_item_path, diff_path),
         )
-        residual = {
+        recommendation = {
             "missing": critic.get("missing", deterministic_residual["missing"]),
             "recommendations": critic.get("recommendations", deterministic_residual["recommendations"]),
             "priority": critic.get("priority", "layer"),
             "stop_layer_building": bool(critic.get("stop_layer_building", False)),
             "diagnostics": deterministic_residual.get("diagnostics", {}),
         }
-        history_item["residual_critic"] = residual
+        recommendation_path = write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation)
+        history_item["recommendation_path"] = str(recommendation_path)
+        history_item["residual_critic"] = recommendation
         history.append(history_item)
-        (args.output_dir / f"session_step_{step:02d}.json").write_text(json.dumps(best_session, indent=2) + "\n")
+        history_path = write_json(args.output_dir / "history.json", history)
+        write_json(args.output_dir / f"session_step_{step:02d}_accepted.json", best_session)
         print(f"step_complete index={step} winner={label} accepted={str(accepted).lower()} best_score={best_score.final:.4f}", flush=True)
-        if residual.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1:
+        if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1:
             print(f"layer_building_stopped step={step} reason=residual_critic", flush=True)
             break
 
@@ -687,26 +691,40 @@ def main() -> None:
     mixed_session = run_codex_json(
         args.output_dir,
         "mixer",
-        codex_mixer_prompt(analysis, best_session, history, residual),
+        codex_mixer_prompt(analyzer_path, current_session_path, recommendation_path, history_path),
         args.seconds,
         args.sample_rate,
     )
-    mixed_score, mixed_diagnostics, _mixed_residual = score_session(reference_audio, mixed_session, args.sample_rate, args.output_dir / "mixer_reconstruction.wav")
+    mixed_score, mixed_diagnostics, _mixed_residual = write_audio_diff(
+        reference_audio,
+        mixed_session,
+        args.sample_rate,
+        args.output_dir / "mixer_reconstruction.wav",
+        args.output_dir / "audio_diff_mixer.json",
+    )
     mixed_accepted = mixed_score.final >= best_score.final
     if mixed_accepted:
         best_session = mixed_session
         best_score = mixed_score
+        current_session_path = write_json(args.output_dir / "session_current.json", best_session)
     history.append({"stage": "mixer", "scores": score_to_json(mixed_score), "accepted": mixed_accepted, "diagnostics": mixed_diagnostics})
+    history_path = write_json(args.output_dir / "history.json", history)
 
     print("agent_stage simplifier", flush=True)
     simplified_session = run_codex_json(
         args.output_dir,
         "simplifier",
-        codex_simplifier_prompt(analysis, best_session, history),
+        codex_simplifier_prompt(analyzer_path, current_session_path, history_path),
         args.seconds,
         args.sample_rate,
     )
-    simplified_score, simplified_diagnostics, _simplified_residual = score_session(reference_audio, simplified_session, args.sample_rate, args.output_dir / "simplifier_reconstruction.wav")
+    simplified_score, simplified_diagnostics, _simplified_residual = write_audio_diff(
+        reference_audio,
+        simplified_session,
+        args.sample_rate,
+        args.output_dir / "simplifier_reconstruction.wav",
+        args.output_dir / "audio_diff_simplifier.json",
+    )
     simplified_accepted = simplified_score.final >= best_score.final * 0.97
     if simplified_accepted:
         best_session = simplified_session
