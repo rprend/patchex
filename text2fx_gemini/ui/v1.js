@@ -11,6 +11,8 @@ const stepLogsEl = document.getElementById("stepLogs");
 const artifactsEl = document.getElementById("artifacts");
 const statusEl = document.getElementById("serviceStatus");
 const scoreboardEl = document.getElementById("scoreboard");
+const refreshRuns = document.getElementById("refreshRuns");
+const runHistory = document.getElementById("runHistory");
 
 let currentFile = null;
 let currentClip = null;
@@ -55,6 +57,11 @@ async function loadFiles() {
   if (data.files.length) {
     await selectFile(data.files[0].name);
   }
+}
+
+async function loadRuns() {
+  const data = await api("/api/reconstruction-runs");
+  renderRunHistory(data.runs);
 }
 
 async function selectFile(name) {
@@ -208,6 +215,85 @@ function routeRunLog(line) {
   }
 }
 
+function formatRunDate(id) {
+  const match = id.match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_/);
+  if (!match) return id;
+  const [, year, month, day, hour, minute, second] = match;
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
+function renderRunHistory(runs) {
+  runHistory.innerHTML = "";
+  if (!runs.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-history";
+    empty.textContent = "No completed V1 reconstruction runs found yet.";
+    runHistory.appendChild(empty);
+    return;
+  }
+  runs.forEach((run) => {
+    const button = document.createElement("button");
+    button.className = "run-card";
+    button.type = "button";
+    const finalScore = Number.isFinite(run.final_score) ? run.final_score.toFixed(3) : "n/a";
+    const melScore = Number.isFinite(run.mel_score) ? run.mel_score.toFixed(3) : "n/a";
+    button.innerHTML = `
+      <span class="run-time">${formatRunDate(run.id)}</span>
+      <strong>${finalScore}</strong>
+      <span>${run.overall_mix || "Reconstruction run"}</span>
+      <em>${run.stage_count || 0} stages · mel ${melScore}</em>
+    `;
+    button.addEventListener("click", () => loadPastRun(run));
+    runHistory.appendChild(button);
+  });
+}
+
+async function loadPastRun(run) {
+  clipLogEl.textContent = "";
+  runLogEl.textContent = "";
+  stepLogsEl.innerHTML = "";
+  artifactsEl.innerHTML = "";
+  scoreboardEl.innerHTML = "";
+  setStatus("Loaded run");
+  appendRunLog(`loaded v1 run: ${run.id}`);
+  appendRunLog(`status: ${run.status}`);
+  const reportArtifact = run.artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
+  if (!reportArtifact) {
+    appendRunLog("reconstruction_report.json is missing for this run");
+    await renderArtifacts(run.artifacts);
+    return;
+  }
+  const report = await fetch(reportArtifact.url).then((res) => {
+    if (!res.ok) throw new Error(`Could not load ${reportArtifact.url}`);
+    return res.json();
+  });
+  renderScoreboard(report);
+  renderHistoryTimeline(report.history || []);
+  const scores = report.best_scores || {};
+  appendRunLog(`final score: ${Number(scores.final || 0).toFixed(3)}`);
+  appendRunLog(`final audio: ${report.final_path || "not recorded"}`);
+  await renderArtifacts(run.artifacts);
+}
+
+function renderHistoryTimeline(history) {
+  stepLogsEl.innerHTML = "";
+  history.forEach((item, index) => {
+    const id = item.step === undefined || item.step === null ? `${item.stage}_${index}` : `${item.stage}_${item.step}`;
+    const panel = agentPanel(id, item.stage || `stage ${index + 1}`);
+    panel.classList.remove("running");
+    panel.classList.add(item.accepted === false ? "failed" : "completed");
+    const log = panel.querySelector(".candidate-log");
+    const score = item.scores?.final;
+    panel.querySelector(".candidate-axis").textContent = Number.isFinite(score) ? `score ${score.toFixed(3)}` : "loaded";
+    appendToLog(log, `stage: ${item.stage || "unknown"}`);
+    if (item.step !== undefined && item.step !== null) appendToLog(log, `step: ${item.step}`);
+    if (item.winner) appendToLog(log, `winner: ${item.winner}`);
+    if (item.accepted !== undefined) appendToLog(log, `accepted: ${item.accepted}`);
+    if (item.scores) appendToLog(log, `scores: ${JSON.stringify(item.scores, null, 2)}`);
+    if (item.recommendation_path) appendToLog(log, `recommendation: ${item.recommendation_path}`);
+  });
+}
+
 async function extractSelectedClip() {
   if (!currentFile || !activeRegion) return;
   setStatus("Extracting");
@@ -292,6 +378,7 @@ async function startAutonomousRun() {
         }
         const job = await api(`/api/reconstructions/${data.run_id}`);
         await renderArtifacts(job.artifacts);
+        loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
       }
     };
     events.onerror = () => appendRunLog("event stream error; check server process");
@@ -364,8 +451,11 @@ async function renderArtifacts(artifacts) {
 playClipButton.addEventListener("click", playRegion);
 fileSelect.addEventListener("change", () => selectFile(fileSelect.value));
 refreshFiles.addEventListener("click", loadFiles);
+refreshRuns.addEventListener("click", () => {
+  loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
+});
 
-loadFiles().catch((error) => {
+Promise.all([loadFiles(), loadRuns()]).catch((error) => {
   setStatus("Error");
   runLogEl.textContent = error.stack || String(error);
 });

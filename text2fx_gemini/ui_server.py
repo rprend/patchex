@@ -540,6 +540,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/runs":
                 json_response(self, {"runs": list_runs()})
                 return
+            if path == "/api/reconstruction-runs":
+                json_response(self, {"runs": list_reconstruction_runs()})
+                return
             if path.startswith("/api/analysis/") and path.endswith("/events"):
                 analysis_id = path.split("/")[-2]
                 self.stream_analysis_events(analysis_id)
@@ -785,6 +788,37 @@ def list_runs() -> list[dict]:
                 "instrument_type": ((report or {}).get("final_recipe") or {}).get("instrument_type", ""),
                 "best_axis": (((report or {}).get("best_candidates") or [{}])[0]).get("axis", ""),
                 "best_score": ((((report or {}).get("best_candidates") or [{}])[0]).get("scores") or {}).get("final"),
+                "artifacts": list_artifacts(run_dir),
+            }
+        )
+    return runs
+
+
+def list_reconstruction_runs() -> list[dict]:
+    runs = []
+    for run_dir in sorted(RUNS.glob("*"), reverse=True):
+        if not run_dir.is_dir():
+            continue
+        report_path = run_dir / "reconstruction_report.json"
+        if not report_path.exists():
+            continue
+        report = None
+        try:
+            report = json.loads(report_path.read_text())
+        except json.JSONDecodeError:
+            report = None
+        history = (report or {}).get("history") or []
+        scores = (report or {}).get("best_scores") or {}
+        runs.append(
+            {
+                "id": run_dir.name,
+                "status": "completed",
+                "overall_mix": (((report or {}).get("analysis") or {}).get("global") or {}).get("overall_mix", ""),
+                "final_score": scores.get("final"),
+                "mel_score": scores.get("mel_spectrogram"),
+                "envelope_score": scores.get("envelope"),
+                "stage_count": len(history),
+                "accepted_layers": len(((report or {}).get("analysis") or {}).get("layers") or []),
                 "artifacts": list_artifacts(run_dir),
             }
         )
