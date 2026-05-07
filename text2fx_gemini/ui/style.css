@@ -796,6 +796,15 @@ textarea {
   background: #f4f6ff;
 }
 
+.active-run-card {
+  border-color: var(--blue-4);
+  background: #f7f9ff;
+}
+
+.active-run-card [data-slot="card-title"] {
+  color: var(--accent);
+}
+
 .run-card strong {
   font-family: "Newsreader", ui-serif, Georgia, serif;
   font-size: 1.45rem;

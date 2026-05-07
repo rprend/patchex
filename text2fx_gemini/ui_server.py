@@ -840,11 +840,35 @@ def list_runs() -> list[dict]:
 
 def list_reconstruction_runs() -> list[dict]:
     runs = []
+    seen = set()
+    for run_id, job in sorted(reconstruction_jobs.items(), reverse=True):
+        if job.get("status") != "running":
+            continue
+        output_dir = Path(job["output_dir"])
+        seen.add(run_id)
+        runs.append(
+            {
+                "id": run_id,
+                "status": "running",
+                "overall_mix": "Reconstruction currently running",
+                "final_score": None,
+                "mel_score": None,
+                "envelope_score": None,
+                "stage_count": 0,
+                "accepted_layers": 0,
+                "artifacts": list_artifacts(output_dir) if output_dir.exists() else [],
+            }
+        )
     for run_dir in sorted(RUNS.glob("*"), reverse=True):
         if not run_dir.is_dir():
             continue
+        if run_dir.name in seen:
+            continue
         report_path = run_dir / "reconstruction_report.json"
-        if not report_path.exists():
+        if not report_path.exists() and run_dir.name not in reconstruction_jobs:
+            continue
+        running_job = reconstruction_jobs.get(run_dir.name)
+        if running_job and running_job.get("status") == "running":
             continue
         report = None
         try:

@@ -781,12 +781,12 @@ function RunHistory({ runs, onLoad, onRefresh }) {
     ),
     h("div", { className: "run-history react-run-history" },
       runs.length
-        ? runs.map((run) => h(Card, { key: run.id, className: "run-card", role: "button", tabIndex: 0, onClick: () => onLoad(run), onKeyDown: (event) => {
+        ? runs.map((run) => h(Card, { key: run.id, className: run.status === "running" ? "run-card active-run-card" : "run-card", role: "button", tabIndex: 0, onClick: () => onLoad(run), onKeyDown: (event) => {
           if (event.key === "Enter" || event.key === " ") onLoad(run);
         } },
           h(CardHeader, null,
             h(CardDescription, { className: "run-time" }, formatRunDate(run.id)),
-            h(CardTitle, null, Number.isFinite(run.final_score) ? run.final_score.toFixed(3) : "n/a")
+            h(CardTitle, null, run.status === "running" ? "Running" : Number.isFinite(run.final_score) ? run.final_score.toFixed(3) : "n/a")
           ),
           h(CardContent, null,
             h("span", null, run.overall_mix || "Reconstruction run"),
@@ -864,8 +864,13 @@ function App() {
 
   const loadRuns = useCallback(async () => {
     const data = await api("/api/reconstruction-runs");
-    setRuns(data.runs || []);
-    return data.runs || [];
+    const serverRuns = data.runs || [];
+    const activeId = localStorage.getItem("v1ActiveRunId");
+    const merged = activeId && !serverRuns.some((run) => run.id === activeId)
+      ? [{ id: activeId, status: "running", overall_mix: "Reconnect to running reconstruction", artifacts: [], stage_count: 0 }, ...serverRuns]
+      : serverRuns;
+    setRuns(merged);
+    return merged;
   }, []);
 
   const resetRunView = useCallback(() => {
@@ -1110,6 +1115,21 @@ function App() {
   const loadPastRun = useCallback(async (run, options = {}) => {
     resetRunView();
     if (options.push !== false) pushRunRoute(run.id);
+    if (run.status === "running") {
+      setStatus("Running");
+      activeRun.current = run.id;
+      localStorage.setItem("v1ActiveRunId", run.id);
+      try {
+        const job = await api(`/api/reconstructions/${run.id}`);
+        setArtifacts(job.artifacts || []);
+        await renderTraceArtifacts(job.artifacts || []);
+      } catch (error) {
+        addRunNote(error.stack || String(error));
+      }
+      attachEvents(run.id);
+      addRunNote(`Reconnected to ${run.id}.`);
+      return;
+    }
     setStatus("Viewing past run");
     setArtifacts(run.artifacts || []);
     const reportArtifact = run.artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
