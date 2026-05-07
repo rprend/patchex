@@ -819,29 +819,21 @@ def codex_layer_builder_prompt(
     step: int,
     max_layers: int,
 ) -> str:
-    phase = [
-        "create the dominant audible layer",
-        "inspect residual and add or modify the second most important layer",
-        "add movement/filter automation or correct pitch/envelope mismatch",
-        "add stereo width, reverb/space, chorus/phaser-like motion, or ambience layer",
-        "make a conservative reconstruction pass before mixing",
-    ][min(step, 4)]
     return f"""
 You are the Producer agent in an autonomous audio reconstruction pipeline.
 
 Read these files before answering:
 - Analyzer layer plan: {analyzer_path}
 - Current best reconstruction session JSON: {current_session_path}
-- Previous Critic recommendation JSON: {recommendation_path}
+- Previous Critic recommendation JSON, especially producer_prompt and success_metrics: {recommendation_path}
 - Score/history JSON: {history_path}
+- Target source audio: {analyzer_path.parent / "source_clip.wav"}
+- Latest accepted/current reconstruction audio if present: read the latest audio_path in {history_path}
 - Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
 - Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
 - Current chunked session manifest if present: {analyzer_path.parent / "session_chunks" / "current" / "manifest.json"}
 
-Task: Given those files, update the requested session artifact with the smallest concrete full-session JSON change that should reduce reconstruction error.
-
-Current Producer run: {step + 1}
-Allowed action for this run: {phase}
+Task: Work like a DAW producer reconstructing the target clip. Listen/reason over the target source audio, the current reconstruction audio, and the latest loss file. Then update the requested session artifact with a concrete full-session JSON state that should reduce the next reconstruction loss.
 
 Renderer capabilities:
 - Up to {max_layers} synth layers.
@@ -858,10 +850,12 @@ Renderer capabilities:
 Rules:
 - Write a complete session JSON file, not prose and not a patch fragment.
 - Preserve useful existing layers and stable layer ids.
-- Add at most one new layer unless the residual clearly demands a paired support/noise layer.
+- Add/remove tracks, set Vital synth parameters, add LFO/modulation, add sidechain-like gate/gain movement, add compression/EQ/reverb/chorus/phaser/delay, or change MIDI/patterns as needed.
+- Prefer a small number of meaningful DAW decisions, then let the loss decide. Do not blindly add layers when a synth parameter, LFO, effect, sidechain, or MIDI/pattern change is the better DAW move.
 - Use synth/noise-like approximation only; do not reference external samples.
-- The previous Critic recommendation is binding: address its highest-priority missing items first and avoid its do_not guidance if present.
+- The previous Critic's producer_prompt and success_metrics are binding. Follow the intent, but choose the actual session edits yourself.
 - If the Critic or pattern constraints say MIDI/pattern/onsets are weak, update the notes list concretely. Do not describe an arpeggio without writing the note events.
+- If the source motion is cyclic/modulated, use continuous modulation/LFO-style settings or dense smooth automation. Do not fake an LFO with one isolated chop or note hit.
 - Optimize actual reconstruction metrics: multi-resolution spectral, mel spectrogram, envelope, segment_envelope, late_energy_ratio, sustain_coverage, frontload_balance, band_envelope_by_time, pitch chroma, spectral motion, transient/onset, stereo width, embedding.
 
 The session JSON must use this shape:
@@ -881,80 +875,28 @@ Read these files before answering:
 - Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
 - Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
 
-Task: Update the requested recommendation artifact for the next Producer run. Include perceptual language plus concrete file-level edits. Tie every critique to reconstruction metrics, source analysis, or session structure.
+Task: Update the requested recommendation artifact for the next Producer run. You are not writing a rigid action list. Write a clear Producer prompt that explains what is wrong perceptually and metrically, what kind of DAW decisions to consider, and what success would look like on the next loss file.
 
 Important: Latest audio similarity/diff JSON contains diagnostics.beat_grid_scores.slices and weak_slices. Use those per-slice records to name exact grid indices and time ranges that need work. Recommendations should say things like "increase mid energy at slices 28-34, 2.86s-3.48s" or "add missing note attacks at grid indices 12, 15, 16" when supported by the diff.
 
 The recommendation JSON must use this shape:
 {{
   "missing": ["specific measurable mismatches"],
-  "recommendations": ["concrete next actions for the Producer or Mixer"],
-  "must_fix": ["highest priority concrete measurable fixes for the next Producer prompt"],
-  "do_not": ["specific changes the next Producer should avoid"],
+  "producer_prompt": "plain-language prompt for the next Producer. It should reason like a DAW producer comparing target audio and current reconstruction, not prescribe a rigid JSON action list.",
+  "success_metrics": {{
+    "primary": ["loss components that must improve next"],
+    "targets": ["concrete numeric or directional targets"],
+    "failure_modes": ["what would prove the Producer made the wrong kind of change"]
+  }},
+  "recommendations": ["optional high-level DAW moves to consider, not mandatory actions"],
+  "must_fix": ["highest priority perceptual/metric fixes to include in producer_prompt"],
+  "do_not": ["specific mistakes the next Producer should avoid"],
   "success_criteria": ["numbers the next score should move toward"],
   "priority": "layer|automation|pitch|envelope|stereo|mix",
   "target_files": ["tracks/track_id.json or effects/effect_id.json that should change"],
   "target_slices": [{{"index": 0, "start": 0.0, "end": 0.1, "problem": "what is wrong here", "action": "specific fix at this time"}}],
-  "producer_work_order": "one compact paragraph telling Producer exactly which track/effect file to update and what note/synth/effect changes to test",
   "stop_layer_building": true_or_false
 }}
-"""
-
-
-def codex_mixer_prompt(analyzer_path: Path, session_path: Path, recommendation_path: Path, history_path: Path) -> str:
-    return f"""
-You are the Mixer agent in an audio reconstruction pipeline.
-
-Read these files before answering:
-- Analyzer layer plan: {analyzer_path}
-- Current best reconstruction session JSON: {session_path}
-- Latest Critic recommendation JSON: {recommendation_path}
-- Score/history JSON: {history_path}
-
-Task: Update the requested session artifact by balancing the accepted layers, stereo width, layer gains, pan, reverb/chorus mix, and master gain/width. Do not add new musical content unless the session is empty.
-
-The session JSON must use this shape:
-{session_shape()}
-"""
-
-
-def codex_step_mixer_prompt(analyzer_path: Path, candidate_session_path: Path, recommendation_path: Path, history_path: Path, step: int) -> str:
-    return f"""
-You are the Mixer agent inside the reconstruction loop.
-
-Read these files before answering:
-- Analyzer layer plan: {analyzer_path}
-- Current Producer candidate session JSON: {candidate_session_path}
-- Latest Critic recommendation JSON: {recommendation_path}
-- Score/history JSON: {history_path}
-
-Task: Update the requested session artifact by mixing this step's Producer candidate before simplification and scoring. Balance layer gains, pan, width, chorus/reverb, return_send, returns, and master gain/width so the reconstruction loss has a fair mixed candidate to evaluate. Do not remove musical layers and do not add new notes unless required to prevent an empty session.
-
-Current loop step: {step + 1}
-
-The session JSON must use this shape:
-{session_shape()}
-"""
-
-
-def codex_simplifier_prompt(analyzer_path: Path, session_path: Path, history_path: Path) -> str:
-    return f"""
-You are the Simplifier agent in an audio reconstruction pipeline.
-
-Read these files before answering:
-- Analyzer layer plan: {analyzer_path}
-- Mixed reconstruction session JSON: {session_path}
-- Score/history JSON: {history_path}
-
-Task: Update the requested session artifact by removing redundant layers, collapsing overlapping roles, keeping the reconstruction close, and making the session understandable. Also preserve enough structure to distill a playable patch.
-
-Rules:
-- Do not make the session empty.
-- Prefer 1-4 meaningful layers.
-- Preserve the most important layer ids when possible.
-
-The session JSON must use this shape:
-{session_shape()}
 """
 
 
@@ -1258,17 +1200,17 @@ def score_candidate_with_inner_trials(
         candidates.append((f"{label_prefix}_inner_{trial}", local_mutation(source, rng, 0.18 + 0.04 * trial, duration, sample_rate)))
     results = []
     for label, candidate_session in candidates:
-        out_path = output_dir / f"premix_reconstruction_step_{step:02d}_{label}.wav"
-        diff_path = output_dir / f"premix_audio_diff_step_{step:02d}_{label}.json"
+        out_path = output_dir / f"producer_reconstruction_step_{step:02d}_{label}.wav"
+        diff_path = output_dir / f"producer_audio_diff_step_{step:02d}_{label}.json"
         score, diagnostics, residual = write_audio_diff(reference_audio, candidate_session, sample_rate, out_path, diff_path, beat_grid=beat_grid)
         write_json(output_dir / f"session_step_{step:02d}_{label}.json", candidate_session)
-        print(f"trace_file agent=loss step={step} role=premix_audio_diff_{label} path={diff_path}", flush=True)
-        print(f"trace_file agent=loss step={step} role=premix_render_{label} path={out_path}", flush=True)
+        print(f"trace_file agent=loss step={step} role=producer_audio_diff_{label} path={diff_path}", flush=True)
+        print(f"trace_file agent=loss step={step} role=producer_render_{label} path={out_path}", flush=True)
         gate = structural_scores_ok(score, diagnostics)
         gated_final = score.final if gate else score.final * 0.82
         results.append((gated_final, label, candidate_session, score, diagnostics, residual, out_path, diff_path))
         print(
-            f"step={step} candidate={label} phase=premix score={score.final:.4f} gated={gated_final:.4f} structural_gate={str(gate).lower()} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} f0={score.f0_contour:.4f} motion={score.spectral_motion:.4f} timbre={score.spectral_features:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+            f"step={step} candidate={label} phase=producer_trial score={score.final:.4f} gated={gated_final:.4f} structural_gate={str(gate).lower()} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} f0={score.f0_contour:.4f} motion={score.spectral_motion:.4f} timbre={score.spectral_features:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
             flush=True,
         )
     results.sort(key=lambda item: item[0], reverse=True)
@@ -1310,7 +1252,7 @@ def distilled_playable_patch(session: dict[str, Any]) -> dict[str, Any]:
     amp = primary.get("amp_envelope", {})
     return {
         "instrument_type": "reconstructed_session_patch",
-        "source": "v1_simplifier",
+        "source": "v1_reconstruction_session",
         "root_midi_note": int(notes[0].get("note", 60)),
         "layers": [
             {
@@ -1439,43 +1381,16 @@ def main() -> None:
             pattern_info,
             beat_grid,
         )
-        premix_score_value, premix_label, premix_session, premix_score, premix_diagnostics, premix_residual, premix_out_path, premix_diff_path = step_results[0]
-        print(f"premix_winner step={step} winner={premix_label} score={premix_score_value:.4f}", flush=True)
-        print(f"agent_stage mixer step={step}", flush=True)
-        premix_session_path = trace_file(f"mixer_step_{step:02d}", "premix_session", write_json(args.output_dir / f"session_step_{step:02d}_premix_winner.json", premix_session))
-        mixed_candidate = run_codex_json(
-            args.output_dir,
-            f"mixer_step_{step:02d}",
-            codex_step_mixer_prompt(analyzer_path, premix_session_path, recommendation_path, history_path, step),
-            args.seconds,
-            args.sample_rate,
-            json_output_path=args.output_dir / f"session_step_{step:02d}_mixed.json",
-        )
-        mixed_session_path = trace_file(f"mixer_step_{step:02d}", "mixed_session", write_json(args.output_dir / f"session_step_{step:02d}_mixed.json", mixed_candidate))
-        print(f"agent_stage simplifier step={step}", flush=True)
-        simplified_candidate = run_codex_json(
-            args.output_dir,
-            f"simplifier_step_{step:02d}",
-            codex_simplifier_prompt(analyzer_path, mixed_session_path, history_path),
-            args.seconds,
-            args.sample_rate,
-            json_output_path=args.output_dir / f"session_step_{step:02d}_simplified.json",
-        )
-        simplified_session_path = trace_file(f"simplifier_step_{step:02d}", "simplified_session", write_json(args.output_dir / f"session_step_{step:02d}_simplified.json", simplified_candidate))
-        simplified_out_path = args.output_dir / f"reconstruction_step_{step:02d}_simplified.wav"
-        simplified_diff_path = args.output_dir / f"audio_diff_step_{step:02d}_simplified.json"
-        score, diagnostics, candidate_residual = write_audio_diff(reference_audio, simplified_candidate, args.sample_rate, simplified_out_path, simplified_diff_path, beat_grid=beat_grid)
-        label = f"{premix_label}+mixer+simplifier"
-        session = simplified_candidate
-        out_path = simplified_out_path
-        diff_path = simplified_diff_path
-        print(f"trace_file agent=loss step={step} role=audio_diff_simplified path={simplified_diff_path}", flush=True)
-        print(f"trace_file agent=loss step={step} role=render_simplified path={simplified_out_path}", flush=True)
+        score_value, label, session, score, diagnostics, candidate_residual, out_path, diff_path = step_results[0]
+        trace_file(f"producer_step_{step:02d}", "candidate_session", write_json(args.output_dir / f"session_step_{step:02d}_producer_winner.json", session))
+        print(f"producer_winner step={step} winner={label} score={score_value:.4f}", flush=True)
+        print(f"trace_file agent=loss step={step} role=audio_diff_winner path={diff_path}", flush=True)
+        print(f"trace_file agent=loss step={step} role=render_winner path={out_path}", flush=True)
         print(
-            f"step={step} candidate=simplified_from_{premix_label} phase=simplified score={score.final:.4f} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+            f"step={step} candidate={label} phase=producer score={score.final:.4f} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
             flush=True,
         )
-        print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(premix_label == 'codex').lower()} score={score.final:.4f}", flush=True)
+        print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(label == 'codex').lower()} score={score.final:.4f}", flush=True)
         trace_file(f"loss_step_{step:02d}", "winner_render", out_path)
         trace_file(f"loss_step_{step:02d}", "winner_audio_diff", diff_path)
         accepted = score.final >= best_score.final and structural_scores_ok(score, diagnostics)
@@ -1495,11 +1410,6 @@ def main() -> None:
             "audio_path": str(out_path),
             "audio_diff_path": str(diff_path),
             "proposal_session_path": str(proposed_session_path),
-            "premix_winner": premix_label,
-            "premix_audio_path": str(premix_out_path),
-            "premix_audio_diff_path": str(premix_diff_path),
-            "mixer_session_path": str(mixed_session_path),
-            "simplifier_session_path": str(simplified_session_path),
             "chunk_manifest_path": str(chunk_manifest_path),
             "scores": score_to_json(score),
             "best_scores": score_to_json(best_score),
@@ -1516,6 +1426,8 @@ def main() -> None:
         )
         recommendation = {
             "missing": critic.get("missing", deterministic_residual["missing"]),
+            "producer_prompt": critic.get("producer_prompt", "Compare the target audio to the current reconstruction, then make the smallest DAW-style session change that should improve the weakest loss components."),
+            "success_metrics": critic.get("success_metrics", {"primary": [], "targets": [], "failure_modes": []}),
             "recommendations": critic.get("recommendations", deterministic_residual["recommendations"]),
             "must_fix": critic.get("must_fix", deterministic_residual["missing"][:4]),
             "do_not": critic.get("do_not", []),
@@ -1523,7 +1435,6 @@ def main() -> None:
             "priority": critic.get("priority", "layer"),
             "target_files": critic.get("target_files", []),
             "target_slices": critic.get("target_slices", []),
-            "producer_work_order": critic.get("producer_work_order", ""),
             "stop_layer_building": bool(critic.get("stop_layer_building", False)),
             "diagnostics": deterministic_residual.get("diagnostics", {}),
         }
@@ -1532,7 +1443,7 @@ def main() -> None:
         forced_continue = step + 1 < min_builder_steps or best_score.final < 0.78 or not temporal_ok or not structural_ok
         if forced_continue and recommendation["stop_layer_building"]:
             recommendation["stop_layer_building"] = False
-            recommendation.setdefault("do_not", []).append("do not stop yet; the orchestrator requires more builder passes, a higher final score, and passing temporal scores before mixer")
+            recommendation.setdefault("do_not", []).append("do not stop yet; the orchestrator requires more Producer passes, a higher final score, and passing temporal scores")
             recommendation.setdefault("recommendations", []).append("continue the Builder/Critic loop and address the weakest temporal and spectral metrics")
             recommendation.setdefault("success_criteria", []).append("before stopping, final >= 0.78, temporal scores pass, and structural gate passes: enough onsets, onset timing, f0 contour, timbre features")
         recommendation_path = trace_file(f"residual_critic_step_{step:02d}", "recommendation", write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation))
