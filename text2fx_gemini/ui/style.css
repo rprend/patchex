@@ -1553,10 +1553,14 @@ textarea {
   align-items: center;
   gap: .55rem;
   min-width: 0;
+  width: 100%;
   padding: .55rem 0 .8rem;
-  color: #a3a3a3;
-  text-decoration: none;
+  border: 0;
   border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: #a3a3a3;
+  text-align: left;
+  cursor: pointer;
 }
 
 .codex-tool-line:hover {
@@ -1595,13 +1599,20 @@ textarea {
 .activity-event {
   display: grid;
   gap: .18rem;
+  width: 100%;
   padding: .7rem 0;
+  border: 0;
   border-bottom: 1px solid var(--line-soft);
+  background: transparent;
   color: var(--text);
-  text-decoration: none;
+  text-align: left;
 }
 
-.activity-event:hover {
+.activity-event.clickable {
+  cursor: pointer;
+}
+
+.activity-event.clickable:hover {
   color: var(--accent);
 }
 
@@ -1617,6 +1628,14 @@ textarea {
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: .9rem;
+}
+
+.activity-event em {
+  min-width: 0;
+  color: var(--muted);
+  font-size: .82rem;
+  font-style: normal;
+  overflow-wrap: anywhere;
 }
 
 .activity-empty {

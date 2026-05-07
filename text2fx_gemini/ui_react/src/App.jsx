@@ -534,26 +534,43 @@ function AgentActivity({ selected }) {
   }, [active, selected.id]);
   const latestTrace = traces.at(-1);
   const latestNote = selected.notes?.at(-1);
+  const logEntries = [
+    ...(selected.notes || []).map((note, index) => ({ type: "log", key: `note-${index}-${note}`, title: note, detail: "" })),
+    ...traces.map((trace) => ({
+      type: "file",
+      key: traceKey(trace),
+      title: `${activityKind(trace)} written`,
+      detail: trace.name || trace.path?.split("/").pop() || "artifact",
+      trace,
+    })),
+  ];
   return h("div", { className: "agent-activity" },
     h("div", { className: "codex-status-line" }, active ? `Working for ${elapsed || 1}s` : selected.status === "completed" ? "Finished" : "Waiting"),
     h("div", { className: "codex-message" },
-      h("p", null, latestNote || (active ? `${selected.label} is running. Waiting for the next update from the process.` : "Open an output row on the card to inspect a specific artifact."))
+      h("p", null, latestNote || (active ? `${selected.label} is running. Waiting for new log output.` : `${selected.label} run log.`))
     ),
-    latestTrace ? h("a", { className: "codex-tool-line", href: latestTrace.url || "#", target: latestTrace.url ? "_blank" : undefined },
+    latestTrace ? h("button", {
+      type: "button",
+      className: "codex-tool-line",
+      onClick: () => selected.onOpen?.(latestTrace, selected),
+    },
       h("span", { className: "tool-glyph", "aria-hidden": true }, "◇"),
-      h("span", null, `${activityKind(latestTrace)} ${latestTrace.name || latestTrace.path?.split("/").pop() || ""}`)
-    ) : null,
-    selected.notes?.length > 1 ? h("div", { className: "activity-notes" },
-      selected.notes.slice(-3, -1).map((note, index) => h("p", { key: `${note}-${index}` }, note))
+      h("span", null, `${activityKind(latestTrace)} written: ${latestTrace.name || latestTrace.path?.split("/").pop() || ""}`)
     ) : null,
     h("div", { className: "activity-events" },
-      traces.length ? traces.map((trace) => {
-        const name = trace.name || trace.path?.split("/").pop() || "artifact";
-        return h("a", { className: "activity-event", href: trace.url || "#", target: trace.url ? "_blank" : undefined, key: traceKey(trace) },
-          h("span", null, activityKind(trace)),
-          h("strong", null, name)
+      logEntries.length ? logEntries.map((entry) => {
+        const clickable = entry.type === "file" && entry.trace;
+        return h(clickable ? "button" : "div", {
+          type: clickable ? "button" : undefined,
+          className: clickable ? "activity-event clickable" : "activity-event",
+          key: entry.key,
+          onClick: clickable ? () => selected.onOpen?.(entry.trace, selected) : undefined,
+        },
+          h("span", null, entry.type === "file" ? "file event" : "run log"),
+          h("strong", null, entry.title),
+          entry.detail ? h("em", null, entry.detail) : null
         );
-      }) : h("div", { className: "activity-empty" }, active ? "No files written yet." : "No files for this agent yet.")
+      }) : h("div", { className: "activity-empty" }, active ? "No log events yet." : "No logs for this agent yet.")
     ),
     active ? h("div", { className: "thinking-shimmer" }, "Thinking") : null
   );
