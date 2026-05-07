@@ -8,7 +8,6 @@
   "arrangement": "arrangement.json",
   "composition_schema": "patchex.arrangement.v1",
   "default_clip_seconds": 5.0,
-  "audio_start_offset_seconds": 0.089947,
   "role_map": {
     "programs": {
       "4": "electric_piano_1",

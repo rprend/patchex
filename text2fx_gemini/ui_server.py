@@ -196,8 +196,6 @@ def make_song_clip(song_id: str, start: float, duration: float) -> Path:
         raise ValueError("Clip duration must be 12 seconds or less.")
     song = load_song(song_id)
     source = song_asset_path(song, "audio")
-    audio_offset = float(song.get("audio_start_offset_seconds") or 0.0)
-    source_start = max(0.0, start + audio_offset)
     out = REFERENCES / f"{song_id}_clip_{start:.2f}_{duration:.2f}.wav"
     subprocess.run(
         [
@@ -207,7 +205,7 @@ def make_song_clip(song_id: str, start: float, duration: float) -> Path:
             "-loglevel",
             "error",
             "-ss",
-            f"{source_start:.6f}",
+            f"{start:.6f}",
             "-t",
             f"{duration:.6f}",
             "-i",
