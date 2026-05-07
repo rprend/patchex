@@ -37,6 +37,13 @@ class AudioScore:
     cepstral: float
     embedding: float
     codec_latent: float
+    exact_envelope_50ms: float
+    exact_band_50ms: float
+    modulation_periodicity: float
+    modulation_rate: float
+    modulation_depth: float
+    directional_delta: float
+    transient_classification: float
 
 
 def score_to_json(score: AudioScore) -> dict[str, float]:
@@ -335,6 +342,114 @@ def frontload_score(ref_env: np.ndarray, cand_env: np.ndarray) -> float:
     return ratio_score(ref_front, cand_front)
 
 
+def fixed_window_metrics(reference: np.ndarray, candidate: np.ndarray, sr: int, window_seconds: float = 0.05) -> dict[str, Any]:
+    samples = min(reference.shape[-1], candidate.shape[-1])
+    step = max(1, int(window_seconds * sr))
+    ref_mono = mono(reference)[..., :samples]
+    cand_mono = mono(candidate)[..., :samples]
+    band_names = ["sub", "bass", "low_mid", "mid", "presence", "air"]
+    rows = []
+    ref_env = []
+    cand_env = []
+    ref_bands = []
+    cand_bands = []
+    for index, start in enumerate(range(0, samples, step)):
+        end = min(samples, start + step)
+        if end <= start:
+            continue
+        r = ref_mono[start:end]
+        c = cand_mono[start:end]
+        rb = slice_band_vector(r, sr)
+        cb = slice_band_vector(c, sr)
+        rr = float(np.sqrt(np.mean(r**2) + 1e-12))
+        cr = float(np.sqrt(np.mean(c**2) + 1e-12))
+        ref_env.append(rr)
+        cand_env.append(cr)
+        ref_bands.append(rb)
+        cand_bands.append(cb)
+        delta_bands = cb - rb
+        worst = int(np.argmax(np.abs(delta_bands))) if delta_bands.size else 0
+        rows.append(
+            {
+                "index": index,
+                "start": float(start / sr),
+                "end": float(end / sr),
+                "source_rms": rr,
+                "candidate_rms": cr,
+                "delta_rms": float(cr - rr),
+                "source_bands": {name: float(rb[pos]) for pos, name in enumerate(band_names[: rb.size])},
+                "candidate_bands": {name: float(cb[pos]) for pos, name in enumerate(band_names[: cb.size])},
+                "delta_bands": {name: float(delta_bands[pos]) for pos, name in enumerate(band_names[: delta_bands.size])},
+                "largest_band_error": band_names[worst] if worst < len(band_names) else "unknown",
+            }
+        )
+    ref_env_arr = np.asarray(ref_env, dtype=np.float32)
+    cand_env_arr = np.asarray(cand_env, dtype=np.float32)
+    ref_band_arr = np.asarray(ref_bands, dtype=np.float32) if ref_bands else np.zeros((0, 6), dtype=np.float32)
+    cand_band_arr = np.asarray(cand_bands, dtype=np.float32) if cand_bands else np.zeros((0, 6), dtype=np.float32)
+    envelope_distance = float(np.mean(np.abs(ref_env_arr - cand_env_arr)) / (np.mean(np.abs(ref_env_arr)) + 1e-8)) if ref_env_arr.size else 0.0
+    envelope_score = safe_exp_distance(2.0 * envelope_distance)
+    band_score = matrix_score(ref_band_arr, cand_band_arr) if ref_band_arr.size and cand_band_arr.size else 1.0
+    weak = sorted(rows, key=lambda row: abs(row["delta_rms"]) + max(abs(v) for v in row["delta_bands"].values()))[:]
+    weak = list(reversed(weak[-16:]))
+    return {"envelope": envelope_score, "band": band_score, "windows": rows, "weak_windows": weak}
+
+
+def dominant_modulation(values: np.ndarray, sr: int, hop: int = 512) -> dict[str, float]:
+    if values.size < 8:
+        return {"rate_hz": 0.0, "depth": 0.0, "periodicity": 0.0}
+    centered = values.astype(np.float32) - float(np.mean(values))
+    depth = float(np.std(centered) / (float(np.mean(np.abs(values))) + 1e-8))
+    if float(np.std(centered)) < 1e-8:
+        return {"rate_hz": 0.0, "depth": depth, "periodicity": 0.0}
+    spectrum = np.abs(np.fft.rfft(centered * np.hanning(centered.size)))
+    freqs = np.fft.rfftfreq(centered.size, hop / sr)
+    mask = (freqs >= 0.2) & (freqs <= 12.0)
+    if not np.any(mask):
+        return {"rate_hz": 0.0, "depth": depth, "periodicity": 0.0}
+    masked = spectrum[mask]
+    masked_freqs = freqs[mask]
+    peak_index = int(np.argmax(masked))
+    periodicity = float(masked[peak_index] / (np.sum(masked) + 1e-8))
+    return {"rate_hz": float(masked_freqs[peak_index]), "depth": depth, "periodicity": periodicity}
+
+
+def modulation_scores(ref_env: np.ndarray, cand_env: np.ndarray, ref_centroid: np.ndarray, cand_centroid: np.ndarray, sr: int) -> dict[str, Any]:
+    ref_sig = dominant_modulation(ref_env, sr)
+    cand_sig = dominant_modulation(cand_env, sr)
+    ref_cent = dominant_modulation(ref_centroid, sr)
+    cand_cent = dominant_modulation(cand_centroid, sr)
+    ref_rate = max(ref_sig["rate_hz"], ref_cent["rate_hz"])
+    cand_rate = max(cand_sig["rate_hz"], cand_cent["rate_hz"])
+    ref_depth = max(ref_sig["depth"], ref_cent["depth"])
+    cand_depth = max(cand_sig["depth"], cand_cent["depth"])
+    ref_periodicity = max(ref_sig["periodicity"], ref_cent["periodicity"])
+    cand_periodicity = max(cand_sig["periodicity"], cand_cent["periodicity"])
+    rate_score = ratio_score(ref_rate, cand_rate, 0.25) if max(ref_rate, cand_rate) > 0 else 1.0
+    depth_score = ratio_score(ref_depth, cand_depth, 0.05)
+    periodicity_score = ratio_score(ref_periodicity, cand_periodicity, 0.05)
+    return {
+        "rate": rate_score,
+        "depth": depth_score,
+        "periodicity": periodicity_score,
+        "score": float(np.mean([rate_score, depth_score, periodicity_score])),
+        "reference": {"rate_hz": ref_rate, "depth": ref_depth, "periodicity": ref_periodicity},
+        "candidate": {"rate_hz": cand_rate, "depth": cand_depth, "periodicity": cand_periodicity},
+    }
+
+
+def transient_classification_score(ref_env: np.ndarray, cand_env: np.ndarray) -> float:
+    ref_curve = onset_curve(ref_env)
+    cand_curve = onset_curve(cand_env)
+    ref_diffuse = float(np.mean(ref_curve > 0.08))
+    cand_diffuse = float(np.mean(cand_curve > 0.08))
+    ref_peak = float(np.max(ref_curve)) if ref_curve.size else 0.0
+    cand_peak = float(np.max(cand_curve)) if cand_curve.size else 0.0
+    diffuse_score = ratio_score(ref_diffuse, cand_diffuse, 0.02)
+    peak_score = ratio_score(ref_peak, cand_peak, 0.05)
+    return float(np.mean([diffuse_score, peak_score]))
+
+
 def band_envelope_score(ref_mag: np.ndarray, cand_mag: np.ndarray, sr: int) -> float:
     ref_bands = band_energies(ref_mag, sr)
     cand_bands = band_energies(cand_mag, sr)
@@ -530,6 +645,7 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int, beat_gr
 
     ref_env = frame_rms(ref)
     cand_env = frame_rms(cand)
+    fixed_50ms = fixed_window_metrics(reference, candidate, sr, 0.05)
     envelope = relative_score(ref_env, cand_env)
     segment_envelope = segmented_relative_score(ref_env, cand_env, 10)
     late_energy_ratio = late_energy_score(ref_env, cand_env)
@@ -553,6 +669,7 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int, beat_gr
 
     ref_features = centroid_rolloff_flatness(ref_mag, sr)
     cand_features = centroid_rolloff_flatness(cand_mag, sr)
+    mod_detail = modulation_scores(ref_env, cand_env, ref_features["centroid"], cand_features["centroid"], sr)
     spectral_motion_parts = [
         relative_score(ref_features["centroid"], cand_features["centroid"]),
         relative_score(ref_features["rolloff"], cand_features["rolloff"]),
@@ -573,6 +690,15 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int, beat_gr
     ref_band_env = band_matrix(ref_mag, 16)
     cand_band_env = band_matrix(cand_mag, 16)
     modulation = matrix_score(np.abs(np.diff(ref_band_env, axis=0)), np.abs(np.diff(cand_band_env, axis=0)))
+    transient_classification = transient_classification_score(ref_env, cand_env)
+    directional_delta = float(
+        np.mean(
+            [
+                relative_score(np.diff(ref_env), np.diff(cand_env), 1.0),
+                relative_score(np.diff(ref_features["centroid"]), np.diff(cand_features["centroid"]), 1.0),
+            ]
+        )
+    )
 
     harmonic_noise = relative_score(harmonic_noise_ratio(ref_mag), harmonic_noise_ratio(cand_mag))
     cepstral = max(0.0, cosine(cepstral_vector(ref_mag), cepstral_vector(cand_mag)))
@@ -594,39 +720,28 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int, beat_gr
         )
     )
 
-    weighted_final = (
-        0.105 * multi_resolution_spectral
-        + 0.095 * mel_spectrogram
-        + 0.06 * a_weighted_spectral
-        + 0.035 * envelope
-        + 0.04 * segment_envelope
-        + 0.025 * late_energy_ratio
-        + 0.025 * sustain_coverage
-        + 0.02 * frontload_balance
-        + 0.055 * band_envelope_by_time
-        + 0.105 * grid_scores["mel"]
-        + 0.09 * grid_scores["band"]
-        + 0.055 * grid_scores["envelope"]
-        + 0.045 * grid_scores["mid_side"]
-        + 0.055 * pitch_chroma
-        + 0.075 * f0_contour
-        + 0.065 * spectral_motion
-        + 0.045 * centroid_trajectory
-        + 0.07 * spectral_features
-        + 0.035 * transient_onset
-        + 0.07 * onset_count
-        + 0.075 * onset_timing
-        + 0.035 * stereo_width
-        + 0.04 * modulation
-        + 0.045 * harmonic_noise
-        + 0.005 * cepstral
-        + 0.005 * embedding
-        + 0.005 * codec_latent
+    time_series_core = float(
+        np.mean(
+            [
+                fixed_50ms["envelope"],
+                fixed_50ms["band"],
+                grid_scores["envelope"],
+                grid_scores["band"],
+                band_envelope_by_time,
+                directional_delta,
+            ]
+        )
     )
+    timbre_core = float(np.mean([multi_resolution_spectral, mel_spectrogram, a_weighted_spectral, spectral_features, harmonic_noise, codec_latent]))
+    motion_core = float(np.mean([spectral_motion, centroid_trajectory, modulation, mod_detail["score"], transient_classification]))
+    pitch_core = float(np.mean([pitch_chroma, f0_contour]))
+    stereo_core = float(np.mean([stereo_width, grid_scores["mid_side"]]))
+    weighted_final = 0.38 * time_series_core + 0.24 * timbre_core + 0.16 * motion_core + 0.12 * pitch_core + 0.07 * stereo_core + 0.03 * cepstral
+    gate = min(time_series_core, max(0.52, motion_core), max(0.50, timbre_core))
     penalty = structural_gate_penalty(ref_onsets, cand_onsets, f0_contour, spectral_features, harmonic_noise, grid_scores["mel"], grid_scores["band"])
 
     score = AudioScore(
-        final=float(weighted_final * penalty),
+        final=float(weighted_final * penalty * (0.55 + 0.45 * gate)),
         multi_resolution_spectral=multi_resolution_spectral,
         mel_spectrogram=mel_spectrogram,
         a_weighted_spectral=a_weighted_spectral,
@@ -654,8 +769,26 @@ def compare_audio(reference: np.ndarray, candidate: np.ndarray, sr: int, beat_gr
         cepstral=cepstral,
         embedding=embedding,
         codec_latent=codec_latent,
+        exact_envelope_50ms=float(fixed_50ms["envelope"]),
+        exact_band_50ms=float(fixed_50ms["band"]),
+        modulation_periodicity=float(mod_detail["periodicity"]),
+        modulation_rate=float(mod_detail["rate"]),
+        modulation_depth=float(mod_detail["depth"]),
+        directional_delta=directional_delta,
+        transient_classification=transient_classification,
     )
     diagnostics = build_diagnostics(reference, candidate, sr, ref_features, cand_features, ref_env, cand_env, ref_stereo, cand_stereo, score, beat_grid, grid_scores)
+    diagnostics["fixed_50ms"] = fixed_50ms
+    diagnostics["modulation_analysis"] = mod_detail
+    diagnostics["score_groups"] = {
+        "time_series_core": time_series_core,
+        "timbre_core": timbre_core,
+        "motion_core": motion_core,
+        "pitch_core": pitch_core,
+        "stereo_core": stereo_core,
+        "gate": gate,
+        "structural_penalty": penalty,
+    }
     return {"scores": score_to_json(score), "diagnostics": diagnostics, "residual": residual_from_diff(score, diagnostics)}
 
 
@@ -755,6 +888,11 @@ def residual_from_diff(score: AudioScore, diagnostics: dict[str, Any]) -> dict[s
     if score.band_envelope_by_time < 0.7:
         missing.append("band energy changes over time do not match the source")
         recommendations.append("use filter/gain automation or layer timing to match low/mid/high energy across the whole clip")
+    if score.exact_envelope_50ms < 0.72 or score.exact_band_50ms < 0.72:
+        weak_windows = diagnostics.get("fixed_50ms", {}).get("weak_windows", [])[:5]
+        ranges = ", ".join(f"{item.get('start', 0):.2f}-{item.get('end', 0):.2f}s {item.get('largest_band_error', 'band')}" for item in weak_windows)
+        missing.append(f"50ms time-series match is poor; worst windows: {ranges}")
+        recommendations.append("fix the exact time-local envelope/band errors before optimizing whole-clip averages")
     if score.beat_grid_mel < 0.68 or score.beat_grid_band < 0.68 or score.beat_grid_envelope < 0.68:
         grid = diagnostics.get("beat_grid", {})
         grid_scores = diagnostics.get("beat_grid_scores", {})
@@ -775,6 +913,20 @@ def residual_from_diff(score: AudioScore, diagnostics: dict[str, Any]) -> dict[s
         cand_end = diagnostics.get("candidate_centroid_end_hz", 0.0)
         missing.append(f"spectral motion differs: source centroid {ref_start:.0f}->{ref_end:.0f}Hz, candidate {cand_start:.0f}->{cand_end:.0f}Hz")
         recommendations.append("adjust filter cutoff automation, LFO depth/rate, or add movement layer")
+    if score.modulation_periodicity < 0.72 or score.modulation_rate < 0.72 or score.modulation_depth < 0.72:
+        mod = diagnostics.get("modulation_analysis", {})
+        ref_mod = mod.get("reference", {})
+        cand_mod = mod.get("candidate", {})
+        missing.append(
+            f"cyclic modulation differs: source rate {ref_mod.get('rate_hz', 0.0):.2f}Hz/depth {ref_mod.get('depth', 0.0):.2f}, candidate rate {cand_mod.get('rate_hz', 0.0):.2f}Hz/depth {cand_mod.get('depth', 0.0):.2f}"
+        )
+        recommendations.append("use a routed LFO or smooth repeated automation for filter/gain/pan; do not replace cyclic motion with a single chop")
+    if score.transient_classification < 0.72:
+        missing.append("transient shape classification differs; source modulation/attacks are being confused with candidate chops or missing pulses")
+        recommendations.append("decide whether the target is cyclic LFO motion or discrete MIDI attacks, then remove the wrong type of event")
+    if score.directional_delta < 0.72:
+        missing.append("directional movement is wrong: candidate rises/falls at different times than the source")
+        recommendations.append("align gain/filter movement direction per 50ms window instead of matching only average level")
     if score.stereo_width < 0.72:
         missing.append("stereo image differs from the source")
         recommendations.append("adjust width, pan, chorus_mix, reverb_mix, or high-band side energy")

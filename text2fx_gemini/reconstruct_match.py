@@ -135,6 +135,40 @@ def automation_curve(points: list[dict[str, float]], value_key: str, samples: in
     return np.interp(t, times, values).astype(np.float32)
 
 
+def lfo_shape(shape: str, rate_hz: float, phase: float, samples: int, sr: int) -> np.ndarray:
+    t = np.arange(samples, dtype=np.float32) / sr
+    cycle = (rate_hz * t + phase) % 1.0
+    if shape == "triangle":
+        return (4.0 * np.abs(cycle - 0.5) - 1.0).astype(np.float32)
+    if shape in {"square", "pulse"}:
+        return np.where(cycle < 0.5, 1.0, -1.0).astype(np.float32)
+    if shape in {"saw", "ramp"}:
+        return (2.0 * cycle - 1.0).astype(np.float32)
+    return np.sin(2.0 * np.pi * cycle).astype(np.float32)
+
+
+def modulation_curves(modulation: dict[str, Any], samples: int, sr: int, duration: float) -> dict[str, np.ndarray]:
+    curves = {
+        "gain_db": np.zeros(samples, dtype=np.float32),
+        "filter_hz": np.zeros(samples, dtype=np.float32),
+        "pan": np.zeros(samples, dtype=np.float32),
+        "width": np.zeros(samples, dtype=np.float32),
+    }
+    for lfo in modulation.get("lfos", []) if isinstance(modulation.get("lfos", []), list) else []:
+        target = str(lfo.get("target", "")).lower()
+        amount = float(lfo.get("amount", 0.0)) * float(lfo.get("depth", 1.0))
+        signal = lfo_shape(str(lfo.get("shape", "sine")), float(lfo.get("rate_hz", 1.0)), float(lfo.get("phase", 0.0)), samples, sr)
+        if "gain" in target or "amp" in target or "volume" in target:
+            curves["gain_db"] += signal * (amount if amount else 2.0 * float(lfo.get("depth", 1.0)))
+        elif "pan" in target:
+            curves["pan"] += signal * (amount if amount else 0.3 * float(lfo.get("depth", 1.0)))
+        elif "width" in target or "stereo" in target:
+            curves["width"] += signal * (amount if amount else 0.2 * float(lfo.get("depth", 1.0)))
+        elif "filter" in target or "cutoff" in target:
+            curves["filter_hz"] += signal * (amount if amount else 800.0 * float(lfo.get("depth", 1.0)))
+    return curves
+
+
 def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int) -> dict[str, Any]:
     session = dict(DEFAULT_SESSION)
     session["duration"] = float(duration)
@@ -170,6 +204,25 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
         notes = layer.get("notes", [])
         if not isinstance(notes, list) or not notes:
             notes = [{"note": synth.get("note", 48), "start": 0.0, "duration": duration, "velocity": 0.7}]
+        modulation_payload = layer.get("modulation", {})
+        raw_lfos = modulation_payload.get("lfos", [])
+        sanitized_lfos = []
+        if isinstance(raw_lfos, list):
+            for lfo in raw_lfos[:8]:
+                if not isinstance(lfo, dict):
+                    continue
+                sanitized_lfos.append(
+                    {
+                        "id": str(lfo.get("id") or f"lfo_{len(sanitized_lfos) + 1}"),
+                        "target": str(lfo.get("target", "filter.cutoff_hz")),
+                        "shape": str(lfo.get("shape", "sine")).lower(),
+                        "rate_hz": float(np.clip(float(lfo.get("rate_hz", lfo.get("rate", 1.0))), 0.01, 20.0)),
+                        "depth": float(np.clip(float(lfo.get("depth", 1.0)), 0.0, 1.0)),
+                        "phase": float(np.clip(float(lfo.get("phase", 0.0)), 0.0, 1.0)),
+                        "amount": float(np.clip(float(lfo.get("amount", lfo.get("amount_hz", lfo.get("amount_db", 0.0)))), -12000.0, 12000.0)),
+                        "center": float(np.clip(float(lfo.get("center", 0.0)), -12000.0, 20000.0)),
+                    }
+                )
         waveform = str(synth.get("waveform", "saw")).lower()
         wavetable_name = str(synth.get("wavetable", synth.get("waveform", "saw_stack"))).lower()
         default_wavetable_position = {
@@ -246,9 +299,10 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                     ),
                 },
                 "modulation": {
-                    "lfo_rate_hz": float(np.clip(float(layer.get("modulation", {}).get("lfo_rate_hz", 0.15)), 0.0, 8.0)),
-                    "lfo_depth": float(np.clip(float(layer.get("modulation", {}).get("lfo_depth", 0.05)), 0.0, 1.0)),
-                    "gate_points": sanitize_points(layer.get("modulation", {}).get("gate_points"), duration, "level", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}], 0.0, 1.0),
+                    "lfo_rate_hz": float(np.clip(float(modulation_payload.get("lfo_rate_hz", 0.15)), 0.0, 8.0)),
+                    "lfo_depth": float(np.clip(float(modulation_payload.get("lfo_depth", 0.05)), 0.0, 1.0)),
+                    "gate_points": sanitize_points(modulation_payload.get("gate_points"), duration, "level", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}], 0.0, 1.0),
+                    "lfos": sanitized_lfos,
                 },
                 "gain_points": sanitize_points(layer.get("gain_points"), duration, "db", [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}], -36.0, 12.0),
                 "effects": {
@@ -642,6 +696,8 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
         gain_curve = automation_curve(layer.get("gain_points", [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}]), "db", samples, duration)
         gate_curve = automation_curve(mod.get("gate_points", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}]), "level", samples, duration)
         cutoff_curve = automation_curve(filt.get("cutoff_points", [{"time": 0.0, "hz": filt["cutoff_start_hz"]}, {"time": duration, "hz": filt["cutoff_end_hz"]}]), "hz", samples, duration)
+        lfo_curves = modulation_curves(mod, samples, sr, duration)
+        cutoff_curve = np.clip(cutoff_curve + lfo_curves["filter_hz"], 40.0, sr / 2.0)
         for channel in range(2):
             stereo[channel] = moving_lowpass(stereo[channel].astype(np.float32), sr, filt["cutoff_start_hz"], filt["cutoff_end_hz"], filt["resonance"], cutoff_curve)
         if float(mod.get("lfo_depth", 0.0)) > 0 and float(mod.get("lfo_rate_hz", 0.0)) > 0:
@@ -649,14 +705,16 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
             tremolo = 1.0 + float(mod["lfo_depth"]) * 0.15 * np.sin(2.0 * np.pi * float(mod["lfo_rate_hz"]) * t)
             stereo *= tremolo[None, :].astype(np.float32)
         stereo *= gate_curve[None, :]
-        stereo *= np.power(10.0, gain_curve / 20.0)[None, :]
+        stereo *= np.power(10.0, (gain_curve + lfo_curves["gain_db"]) / 20.0)[None, :]
         stereo = stereo_layer_eq(stereo, sr, layer["effects"])
         stereo = apply_saturation(stereo, float(layer["effects"].get("saturation", 0.0)))
         stereo = apply_compressor(stereo, sr, layer["effects"])
         stereo = apply_chorus(stereo, sr, float(layer["effects"].get("chorus_mix", 0.0)), float(layer.get("width", 1.0)))
         stereo = apply_phaser(stereo, sr, float(layer["effects"].get("phaser_mix", 0.0)), float(mod.get("lfo_rate_hz", 0.23)) or 0.23)
         stereo = apply_delay(stereo, sr, float(layer["effects"].get("delay_time", 0.18)), float(layer["effects"].get("delay_mix", 0.0)))
-        stereo = apply_pan_width(stereo, float(layer.get("pan", 0.0)), float(layer.get("width", 1.0)))
+        dynamic_pan = float(layer.get("pan", 0.0)) + float(np.mean(lfo_curves["pan"])) if lfo_curves["pan"].size else float(layer.get("pan", 0.0))
+        dynamic_width = float(layer.get("width", 1.0)) + float(np.mean(lfo_curves["width"])) if lfo_curves["width"].size else float(layer.get("width", 1.0))
+        stereo = apply_pan_width(stereo, dynamic_pan, dynamic_width)
         stereo *= db_to_amp(layer["gain_db"])
         stereo = apply_stereo_reverb(stereo, sr, float(layer["effects"].get("reverb_mix", 0.0)))
         return stereo.astype(np.float32)
@@ -667,6 +725,8 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     gain_curve = automation_curve(layer.get("gain_points", [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}]), "db", samples, duration)
     gate_curve = automation_curve(mod.get("gate_points", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}]), "level", samples, duration)
     cutoff_curve = automation_curve(filt.get("cutoff_points", [{"time": 0.0, "hz": filt["cutoff_start_hz"]}, {"time": duration, "hz": filt["cutoff_end_hz"]}]), "hz", samples, duration)
+    lfo_curves = modulation_curves(mod, samples, sr, duration)
+    cutoff_curve = np.clip(cutoff_curve + lfo_curves["filter_hz"], 40.0, sr / 2.0)
     for note in layer["notes"]:
         start = int(note["start"] * sr)
         count = max(1, int(note["duration"] * sr))
@@ -694,7 +754,7 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
         note_audio = moving_lowpass(note_audio.astype(np.float32), sr, filt["cutoff_start_hz"], filt["cutoff_end_hz"], filt["resonance"], cutoff_curve[start:end])
         mono[start:end] += note_audio.astype(np.float32)
     mono *= gate_curve
-    mono *= np.power(10.0, gain_curve / 20.0)
+    mono *= np.power(10.0, (gain_curve + lfo_curves["gain_db"]) / 20.0)
     mono = layer_eq(mono, sr, layer["effects"])
     saturation = float(layer["effects"].get("saturation", 0.0))
     if saturation:
@@ -831,9 +891,10 @@ Read these files before answering:
 - Latest accepted/current reconstruction audio if present: read the latest audio_path in {history_path}
 - Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
 - Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
-- Current chunked session manifest if present: {analyzer_path.parent / "session_chunks" / "current" / "manifest.json"}
+- Canonical DAW session folder: {analyzer_path.parent / "session_chunks" / "current"}
+- Current chunked session manifest: {analyzer_path.parent / "session_chunks" / "current" / "manifest.json"}
 
-Task: Work like a DAW producer reconstructing the target clip. Listen/reason over the target source audio, the current reconstruction audio, and the latest loss file. Then update the requested session artifact with a concrete full-session JSON state that should reduce the next reconstruction loss.
+Task: Work like a DAW producer reconstructing the target clip. Listen/reason over the target source audio, the current reconstruction audio, and the latest loss file. The canonical state is the DAW session folder with tracks, instruments, modulators, effects, routing, timeline, and master files. Update your reasoning from those files, then write the requested compiled session JSON artifact so the renderer can score it.
 
 Renderer capabilities:
 - Up to {max_layers} synth layers.
@@ -851,12 +912,13 @@ Rules:
 - Write a complete session JSON file, not prose and not a patch fragment.
 - Preserve useful existing layers and stable layer ids.
 - Add/remove tracks, set Vital synth parameters, add LFO/modulation, add sidechain-like gate/gain movement, add compression/EQ/reverb/chorus/phaser/delay, or change MIDI/patterns as needed.
+- Think in DAW state terms: tracks/* are audio/MIDI tracks, instruments/* are Vital synth settings, modulators/* are LFOs/automation routed to parameters, effects/* are insert/return effects, routing.json controls sends/order, timeline.json captures notes and automation.
 - Prefer a small number of meaningful DAW decisions, then let the loss decide. Do not blindly add layers when a synth parameter, LFO, effect, sidechain, or MIDI/pattern change is the better DAW move.
 - Use synth/noise-like approximation only; do not reference external samples.
 - The previous Critic's producer_prompt and success_metrics are binding. Follow the intent, but choose the actual session edits yourself.
 - If the Critic or pattern constraints say MIDI/pattern/onsets are weak, update the notes list concretely. Do not describe an arpeggio without writing the note events.
 - If the source motion is cyclic/modulated, use continuous modulation/LFO-style settings or dense smooth automation. Do not fake an LFO with one isolated chop or note hit.
-- Optimize actual reconstruction metrics: multi-resolution spectral, mel spectrogram, envelope, segment_envelope, late_energy_ratio, sustain_coverage, frontload_balance, band_envelope_by_time, pitch chroma, spectral motion, transient/onset, stereo width, embedding.
+- Optimize actual reconstruction metrics: exact 50ms envelope/band match, beat-grid envelope/band match, modulation periodicity/rate/depth, directional movement, transient classification, multi-resolution spectral, mel spectrogram, pitch chroma, spectral motion, stereo width, and timbre features. The final score is gated by time-series and modulation accuracy, so a good chord with wrong movement should still fail.
 
 The session JSON must use this shape:
 {session_shape()}
@@ -877,7 +939,7 @@ Read these files before answering:
 
 Task: Update the requested recommendation artifact for the next Producer run. You are not writing a rigid action list. Write a clear Producer prompt that explains what is wrong perceptually and metrically, what kind of DAW decisions to consider, and what success would look like on the next loss file.
 
-Important: Latest audio similarity/diff JSON contains diagnostics.beat_grid_scores.slices and weak_slices. Use those per-slice records to name exact grid indices and time ranges that need work. Recommendations should say things like "increase mid energy at slices 28-34, 2.86s-3.48s" or "add missing note attacks at grid indices 12, 15, 16" when supported by the diff.
+Important: Latest audio similarity/diff JSON contains diagnostics.fixed_50ms.weak_windows, diagnostics.beat_grid_scores.slices, diagnostics.beat_grid_scores.weak_slices, and diagnostics.modulation_analysis. Use those records to name exact time ranges, modulation rate/depth mismatches, and whether the source needs cyclic LFO-style motion or discrete MIDI attacks. Recommendations should say things like "increase mid energy at 2.85-3.10s" or "source has 3.2Hz cyclic filter movement; candidate has one chop" when supported by the diff.
 
 The recommendation JSON must use this shape:
 {{
@@ -1027,28 +1089,59 @@ def trace_file(agent: str, role: str, path: Path) -> Path:
 def write_chunked_session(root: Path, session: dict[str, Any]) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     tracks_dir = root / "tracks"
+    instruments_dir = root / "instruments"
+    modulators_dir = root / "modulators"
     effects_dir = root / "effects"
     tracks_dir.mkdir(exist_ok=True)
+    instruments_dir.mkdir(exist_ok=True)
+    modulators_dir.mkdir(exist_ok=True)
     effects_dir.mkdir(exist_ok=True)
     manifest = {
         "version": session.get("version", 1),
         "sample_rate": session.get("sample_rate", 44100),
         "duration": session.get("duration", 5.0),
         "tracks": [],
+        "instruments": [],
+        "modulators": [],
+        "effects": [],
         "returns": [],
         "master": "master.json",
+        "routing": "routing.json",
+        "timeline": "timeline.json",
     }
+    routing = {"track_order": [], "sends": []}
+    timeline = {"duration": session.get("duration", 5.0), "notes": [], "automation": []}
     for index, layer in enumerate(session.get("layers", [])):
         track_id = str(layer.get("id") or f"track_{index + 1}")
         track_path = tracks_dir / f"{track_id}.json"
-        write_json(track_path, layer)
+        track_payload = {key: value for key, value in layer.items() if key not in {"synth", "modulation", "effects"}}
+        track_payload["instrument"] = f"../instruments/{track_id}.json"
+        track_payload["modulators"] = []
+        track_payload["effects"] = f"../effects/{track_id}.json"
+        write_json(track_path, track_payload)
+        write_json(instruments_dir / f"{track_id}.json", {"track_id": track_id, **layer.get("synth", {})})
+        write_json(effects_dir / f"{track_id}.json", {"track_id": track_id, **layer.get("effects", {})})
         manifest["tracks"].append(str(track_path.relative_to(root)))
+        manifest["instruments"].append(str((instruments_dir / f"{track_id}.json").relative_to(root)))
+        manifest["effects"].append(str((effects_dir / f"{track_id}.json").relative_to(root)))
+        routing["track_order"].append(track_id)
+        routing["sends"].append({"track_id": track_id, "return_id": "space", "amount": float(layer.get("effects", {}).get("return_send", 0.0))})
+        timeline["notes"].append({"track_id": track_id, "notes": layer.get("notes", [])})
+        timeline["automation"].append({"track_id": track_id, "gain_points": layer.get("gain_points", []), "filter": layer.get("filter", {})})
+        for lfo_index, lfo in enumerate(layer.get("modulation", {}).get("lfos", [])):
+            mod_path = modulators_dir / f"{track_id}_lfo_{lfo_index + 1}.json"
+            write_json(mod_path, {"track_id": track_id, **lfo})
+            track_payload["modulators"].append(f"../modulators/{mod_path.name}")
+            manifest["modulators"].append(str(mod_path.relative_to(root)))
+        write_json(track_path, track_payload)
     for index, ret in enumerate(session.get("returns", [])):
         return_id = str(ret.get("id") or f"return_{index + 1}")
         return_path = effects_dir / f"{return_id}.json"
         write_json(return_path, ret)
         manifest["returns"].append(str(return_path.relative_to(root)))
     write_json(root / "master.json", session.get("master", {}))
+    write_json(root / "routing.json", routing)
+    write_json(root / "timeline.json", timeline)
     return write_json(root / "manifest.json", manifest)
 
 
@@ -1063,7 +1156,30 @@ def read_chunked_session(root: Path) -> dict[str, Any]:
         "master": json.loads((root / manifest.get("master", "master.json")).read_text()),
     }
     for track in manifest.get("tracks", []):
-        session["layers"].append(json.loads((root / track).read_text()))
+        track_payload = json.loads((root / track).read_text())
+        track_id = str(track_payload.get("id") or Path(track).stem)
+        instrument_path = track_payload.get("instrument", f"../instruments/{track_id}.json")
+        effects_path = track_payload.get("effects", f"../effects/{track_id}.json")
+        instrument = json.loads((root / Path(track).parent / instrument_path).resolve().read_text()) if (root / Path(track).parent / instrument_path).resolve().exists() else {}
+        effects = json.loads((root / Path(track).parent / effects_path).resolve().read_text()) if (root / Path(track).parent / effects_path).resolve().exists() else {}
+        lfos = []
+        for mod_path in track_payload.get("modulators", []):
+            full = (root / Path(track).parent / mod_path).resolve()
+            if full.exists():
+                mod = json.loads(full.read_text())
+                mod.pop("track_id", None)
+                lfos.append(mod)
+        layer = {key: value for key, value in track_payload.items() if key not in {"instrument", "effects", "modulators"}}
+        instrument.pop("track_id", None)
+        effects.pop("track_id", None)
+        layer["synth"] = instrument
+        layer["effects"] = effects
+        modulation = layer.get("modulation", {})
+        if not isinstance(modulation, dict):
+            modulation = {}
+        modulation["lfos"] = lfos
+        layer["modulation"] = modulation
+        session["layers"].append(layer)
     for ret in manifest.get("returns", []):
         session["returns"].append(json.loads((root / ret).read_text()))
     return sanitize_session(session, float(session["duration"]), int(session["sample_rate"]))
@@ -1144,6 +1260,10 @@ def temporal_scores_ok(score: AudioScore) -> bool:
         "sustain_coverage": 0.72,
         "frontload_balance": 0.72,
         "band_envelope_by_time": 0.68,
+        "exact_envelope_50ms": 0.72,
+        "exact_band_50ms": 0.70,
+        "directional_delta": 0.70,
+        "modulation_periodicity": 0.62,
         "onset_count": 0.72,
         "onset_timing": 0.72,
         "centroid_trajectory": 0.68,
@@ -1162,7 +1282,7 @@ def structural_scores_ok(score: AudioScore, diagnostics: dict[str, Any]) -> bool
         return False
     if score.spectral_features < 0.38 or score.harmonic_noise < 0.38:
         return False
-    if score.beat_grid_mel < 0.58 or score.beat_grid_band < 0.58:
+    if score.beat_grid_mel < 0.58 or score.beat_grid_band < 0.58 or score.exact_band_50ms < 0.58:
         return False
     return True
 
@@ -1210,7 +1330,7 @@ def score_candidate_with_inner_trials(
         gated_final = score.final if gate else score.final * 0.82
         results.append((gated_final, label, candidate_session, score, diagnostics, residual, out_path, diff_path))
         print(
-            f"step={step} candidate={label} phase=producer_trial score={score.final:.4f} gated={gated_final:.4f} structural_gate={str(gate).lower()} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} f0={score.f0_contour:.4f} motion={score.spectral_motion:.4f} timbre={score.spectral_features:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+            f"step={step} candidate={label} phase=producer_trial score={score.final:.4f} gated={gated_final:.4f} structural_gate={str(gate).lower()} exact_env_50ms={score.exact_envelope_50ms:.4f} exact_band_50ms={score.exact_band_50ms:.4f} mod_period={score.modulation_periodicity:.4f} mod_rate={score.modulation_rate:.4f} mod_depth={score.modulation_depth:.4f} direction={score.directional_delta:.4f} transient_class={score.transient_classification:.4f} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} f0={score.f0_contour:.4f} motion={score.spectral_motion:.4f} timbre={score.spectral_features:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
             flush=True,
         )
     results.sort(key=lambda item: item[0], reverse=True)
@@ -1398,7 +1518,7 @@ def main() -> None:
         print(f"trace_file agent=loss step={step} role=audio_diff_winner path={diff_path}", flush=True)
         print(f"trace_file agent=loss step={step} role=render_winner path={out_path}", flush=True)
         print(
-            f"step={step} candidate={label} phase=producer score={score.final:.4f} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
+            f"step={step} candidate={label} phase=producer score={score.final:.4f} exact_env_50ms={score.exact_envelope_50ms:.4f} exact_band_50ms={score.exact_band_50ms:.4f} mod_period={score.modulation_periodicity:.4f} mod_rate={score.modulation_rate:.4f} mod_depth={score.modulation_depth:.4f} direction={score.directional_delta:.4f} transient_class={score.transient_classification:.4f} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} motion={score.spectral_motion:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
             flush=True,
         )
         print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(label == 'codex').lower()} score={score.final:.4f}", flush=True)
