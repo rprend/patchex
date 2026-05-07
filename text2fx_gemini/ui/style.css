@@ -1554,27 +1554,49 @@ textarea {
   padding-top: .8rem;
 }
 
-.activity-live {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: .25rem .6rem;
-  align-items: center;
-  padding: .8rem 0;
+.codex-status-line {
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.2;
+  padding: .15rem 0 .8rem;
   border-bottom: 1px solid var(--line-soft);
 }
 
-.activity-live p {
-  grid-column: 2;
-  color: var(--muted);
-  font-size: .84rem;
+.codex-message {
+  padding: 1.05rem 0 1rem;
 }
 
-.activity-live:not(.active) {
-  grid-template-columns: 1fr;
+.codex-message p {
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.6;
 }
 
-.activity-live:not(.active) p {
-  grid-column: 1;
+.codex-tool-line {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  min-width: 0;
+  padding: .55rem 0 .8rem;
+  color: #a3a3a3;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.codex-tool-line:hover {
+  color: var(--accent);
+}
+
+.codex-tool-line span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-glyph {
+  flex: 0 0 auto;
+  font-size: 1rem;
 }
 
 .activity-notes {
@@ -1624,6 +1646,23 @@ textarea {
 .activity-empty {
   padding: 1rem 0;
   color: var(--muted);
+}
+
+.thinking-shimmer {
+  margin-top: 1rem;
+  color: transparent;
+  width: max-content;
+  background: linear-gradient(90deg, #a3a3a3 0%, #d4d4d4 35%, #8a8a8a 70%, #a3a3a3 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer-text 1.5s ease-in-out infinite;
+  font-size: 1rem;
+}
+
+@keyframes shimmer-text {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
 }
 
 .sidebar-loading {

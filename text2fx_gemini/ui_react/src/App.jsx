@@ -524,14 +524,30 @@ function activityKind(trace) {
 function AgentActivity({ selected }) {
   const traces = [...(selected.traces || [])].sort((a, b) => traceOrder(a) - traceOrder(b));
   const active = selected.status === "running";
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!active) {
+      setElapsed(0);
+      return undefined;
+    }
+    setElapsed(0);
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed(Math.max(1, Math.floor((Date.now() - started) / 1000))), 1000);
+    return () => clearInterval(timer);
+  }, [active, selected.id]);
+  const latestTrace = traces.at(-1);
+  const latestNote = selected.notes?.at(-1);
   return h("div", { className: "agent-activity" },
-    h("div", { className: active ? "activity-live active" : "activity-live" },
-      active ? h("span", { className: "node-spinner inline", "aria-label": "In progress" }) : null,
-      h("strong", null, active ? `${selected.label} is working` : `${selected.label} ${selected.status === "completed" ? "finished" : "is waiting"}`),
-      h("p", null, active ? "Waiting for the next file event from the run." : "Open an output row on the card to inspect a specific artifact.")
+    h("div", { className: "codex-status-line" }, active ? `Working for ${elapsed || 1}s` : selected.status === "completed" ? "Finished" : "Waiting"),
+    h("div", { className: "codex-message" },
+      h("p", null, latestNote || (active ? `${selected.label} is running. Waiting for the next update from the process.` : "Open an output row on the card to inspect a specific artifact."))
     ),
-    selected.notes?.length ? h("div", { className: "activity-notes" },
-      selected.notes.slice(-3).map((note, index) => h("p", { key: `${note}-${index}` }, note))
+    latestTrace ? h("a", { className: "codex-tool-line", href: latestTrace.url || "#", target: latestTrace.url ? "_blank" : undefined },
+      h("span", { className: "tool-glyph", "aria-hidden": true }, "◇"),
+      h("span", null, `${activityKind(latestTrace)} ${latestTrace.name || latestTrace.path?.split("/").pop() || ""}`)
+    ) : null,
+    selected.notes?.length > 1 ? h("div", { className: "activity-notes" },
+      selected.notes.slice(-3, -1).map((note, index) => h("p", { key: `${note}-${index}` }, note))
     ) : null,
     h("div", { className: "activity-events" },
       traces.length ? traces.map((trace) => {
@@ -541,7 +557,8 @@ function AgentActivity({ selected }) {
           h("strong", null, name)
         );
       }) : h("div", { className: "activity-empty" }, active ? "No files written yet." : "No files for this agent yet.")
-    )
+    ),
+    active ? h("div", { className: "thinking-shimmer" }, "Thinking") : null
   );
 }
 
