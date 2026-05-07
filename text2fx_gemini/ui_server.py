@@ -60,7 +60,7 @@ IMPORTANT_LOG_PATTERNS = [
         r"^agent_stage",
         r"^trace_file",
         r"^winner_summary",
-        r"^premix_winner",
+        r"^producer_winner",
         r"^layer_building_stopped",
         r"^wrote ",
         r"^analysis ",
@@ -491,7 +491,7 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
     return run_id
 
 
-def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 4, max_layers: int = 5) -> str:
+def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, max_layers: int = 5) -> str:
     reference_path = safe_reference_path(reference)
     run_id = time.strftime("%Y%m%d_%H%M%S_v1_") + uuid.uuid4().hex[:8]
     out_dir = RUNS / run_id
@@ -700,7 +700,7 @@ class Handler(BaseHTTPRequestHandler):
                 run_id = start_reconstruction(
                     reference=payload["clip"],
                     steps=int(payload.get("steps", 5)),
-                    local_trials=int(payload.get("local_trials", 4)),
+                    local_trials=int(payload.get("local_trials", 0)),
                     max_layers=int(payload.get("max_layers", 5)),
                 )
                 json_response(self, {"run_id": run_id})

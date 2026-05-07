@@ -49,7 +49,7 @@
         <div class="panel-head">
           <div>
             <h2>Autonomous Pipeline</h2>
-            <p>Extract the selected clip, analyze its layers, run Builder/Critic passes, mix, simplify, score, and export the reconstruction plus playable patch.</p>
+            <p>Extract the selected clip, analyze its layers, run Producer/Critic passes, score each Producer render, and export the best reconstruction plus playable patch.</p>
           </div>
           <button id="startReconstruction" class="primary inline-primary">Start V1 Reconstruction</button>
         </div>
@@ -60,7 +60,7 @@
         <div class="section-head">
           <div>
             <h2>Agent Timeline</h2>
-            <p>Each loop groups Producer, Mixer, Calculate Accuracy, and Critic stages with audio previews and details.</p>
+            <p>Each loop groups Producer, Calculate Accuracy, and Critic stages with audio previews and details.</p>
           </div>
         </div>
         <pre id="runLog" class="log run-log"></pre>

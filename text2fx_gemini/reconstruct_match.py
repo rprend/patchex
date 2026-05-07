@@ -811,7 +811,7 @@ Prefer 2-5 layers for dense clips and 1-3 layers for sparse clips. Treat this as
 """
 
 
-def codex_layer_builder_prompt(
+def codex_producer_prompt(
     analyzer_path: Path,
     current_session_path: Path,
     recommendation_path: Path,
@@ -1291,7 +1291,7 @@ def main() -> None:
     parser.add_argument("--render-session-dir", type=Path, help="Render a chunked session directory containing manifest.json and exit.")
     parser.add_argument("--render-output", type=Path)
     parser.add_argument("--steps", type=int, default=5)
-    parser.add_argument("--local-trials", type=int, default=4)
+    parser.add_argument("--local-trials", type=int, default=0)
     parser.add_argument("--max-layers", type=int, default=5)
     parser.add_argument("--seconds", type=float, default=5.0)
     parser.add_argument("--sample-rate", type=int, default=44100)
@@ -1349,8 +1349,19 @@ def main() -> None:
     best_score = AudioScore(**{field: 0.0 for field in AudioScore.__dataclass_fields__})
     recommendation = {
         "missing": ["empty session"],
-        "recommendations": ["add the dominant audible layer first"],
+        "producer_prompt": "Start from the empty session and make the first DAW-style reconstruction decision. Add the dominant audible synth track, set its Vital instrument parameters, MIDI/held notes or pattern, core modulation, and essential effects so the first render captures the target's main body.",
+        "success_metrics": {
+            "primary": ["mel_spectrogram", "envelope", "band_envelope_by_time", "spectral_motion"],
+            "targets": ["render should have audible sustained body across the full 5 seconds", "first pass should identify whether motion is cyclic LFO/modulation or discrete note events"],
+            "failure_modes": ["silent or near-empty render", "one-shot chop used to imitate cyclic modulation"],
+        },
+        "recommendations": ["add the dominant audible synth track first"],
+        "must_fix": ["empty session"],
+        "do_not": ["do not fake cyclic modulation with a single isolated chop"],
+        "success_criteria": ["audible full-duration reconstruction body and clear first hypothesis for pitch, timbre, envelope, and modulation"],
         "priority": "layer",
+        "target_files": [],
+        "target_slices": [],
         "stop_layer_building": False,
     }
     recommendation_path = trace_file("residual_critic", "recommendation_initial", write_json(args.output_dir / "recommendation_initial.json", recommendation))
@@ -1358,16 +1369,16 @@ def main() -> None:
     min_builder_steps = min(args.steps, 5)
 
     for step in range(args.steps):
-        print(f"agent_stage layer_builder step={step}", flush=True)
+        print(f"agent_stage producer step={step}", flush=True)
         proposed = run_codex_json(
             args.output_dir,
-            f"layer_builder_step_{step:02d}",
-            codex_layer_builder_prompt(analyzer_path, current_session_path, recommendation_path, history_path, step, args.max_layers),
+            f"producer_step_{step:02d}",
+            codex_producer_prompt(analyzer_path, current_session_path, recommendation_path, history_path, step, args.max_layers),
             args.seconds,
             args.sample_rate,
             json_output_path=args.output_dir / f"session_step_{step:02d}_codex_proposal.json",
         )
-        proposed_session_path = trace_file(f"layer_builder_step_{step:02d}", "session_proposal", write_json(args.output_dir / f"session_step_{step:02d}_codex_proposal.json", proposed))
+        proposed_session_path = trace_file(f"producer_step_{step:02d}", "session_proposal", write_json(args.output_dir / f"session_step_{step:02d}_codex_proposal.json", proposed))
         step_results = score_candidate_with_inner_trials(
             reference_audio,
             proposed,
@@ -1403,7 +1414,7 @@ def main() -> None:
         if len(best_session.get("layers", [])) < 2 and best_score.final < 0.72:
             deterministic_residual.setdefault("recommendations", []).append("prefer adding one concrete layer over overfitting the first layer")
         history_item = {
-            "stage": "layer_builder",
+            "stage": "producer",
             "step": step,
             "accepted": accepted,
             "winner": label,
@@ -1444,14 +1455,14 @@ def main() -> None:
         if forced_continue and recommendation["stop_layer_building"]:
             recommendation["stop_layer_building"] = False
             recommendation.setdefault("do_not", []).append("do not stop yet; the orchestrator requires more Producer passes, a higher final score, and passing temporal scores")
-            recommendation.setdefault("recommendations", []).append("continue the Builder/Critic loop and address the weakest temporal and spectral metrics")
+            recommendation.setdefault("recommendations", []).append("continue the Producer/Critic loop and address the weakest temporal and spectral metrics")
             recommendation.setdefault("success_criteria", []).append("before stopping, final >= 0.78, temporal scores pass, and structural gate passes: enough onsets, onset timing, f0 contour, timbre features")
         recommendation_path = trace_file(f"residual_critic_step_{step:02d}", "recommendation", write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation))
         history_item["recommendation_path"] = str(recommendation_path)
         history_item["residual_critic"] = recommendation
         history.append(history_item)
         history_path = write_json(args.output_dir / "history.json", history)
-        trace_file(f"layer_builder_step_{step:02d}", "accepted_session", write_json(args.output_dir / f"session_step_{step:02d}_accepted.json", best_session))
+        trace_file(f"producer_step_{step:02d}", "accepted_session", write_json(args.output_dir / f"session_step_{step:02d}_accepted.json", best_session))
         print(f"step_complete index={step} winner={label} accepted={str(accepted).lower()} best_score={best_score.final:.4f}", flush=True)
         if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1 and step + 1 >= min_builder_steps and best_score.final >= 0.78 and temporal_scores_ok(best_score) and structural_scores_ok(best_score, diagnostics):
             print(f"layer_building_stopped step={step} reason=residual_critic", flush=True)
