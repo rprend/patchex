@@ -1269,27 +1269,45 @@ textarea {
 }
 
 .workflow-canvas .react-flow__edge-path {
-  stroke: #b8c2dd;
-  stroke-width: 1.7;
+  stroke: #8fa0cf;
+  stroke-width: 1.8;
 }
 
 .workflow-node {
   width: 214px;
-  min-height: 72px;
+  min-height: 68px;
+  position: relative;
   display: grid;
   gap: .25rem;
   justify-items: start;
   padding: .78rem .85rem;
   border: 1px solid var(--line);
+  border-left-width: 4px;
   background: rgba(255, 255, 255, .96);
   color: var(--text);
   text-align: left;
   box-shadow: 0 6px 18px rgba(24, 24, 24, .04);
 }
 
+.workflow-node.status-completed {
+  border-left-color: #4f8a6b;
+  background: #fbfdfc;
+}
+
+.workflow-node.status-running {
+  border-left-color: var(--accent);
+  background: #f7f9ff;
+}
+
+.workflow-node.status-waiting {
+  border-left-color: #d4d4d4;
+  background: #fff;
+}
+
 .workflow-node:hover,
 .workflow-node.selected {
   border-color: var(--blue-4);
+  border-left-color: var(--accent);
   background: #f7f9ff;
 }
 
@@ -1308,17 +1326,16 @@ textarea {
   white-space: nowrap;
 }
 
-.workflow-node-status {
-  margin-top: .18rem;
-  color: var(--muted);
-  font-size: .72rem;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.workflow-node-status.active {
-  color: var(--accent);
+.node-spinner {
+  position: absolute;
+  top: .75rem;
+  right: .75rem;
+  width: .72rem;
+  height: .72rem;
+  border: 2px solid var(--blue-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
 }
 
 .iteration-frame-node {

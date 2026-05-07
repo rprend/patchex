@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Background, Controls, ReactFlow } from '@xyflow/react';
+import { Background, Controls, MarkerType, ReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Terminal } from './components/ui/terminal.jsx';
 import { Button } from './components/ui/button.jsx';
@@ -363,11 +363,12 @@ function AgentTranscript({ traces }) {
 }
 
 function FlowAgentNode({ data, selected }) {
-  const status = data.status === "completed" ? "Done" : data.status === "running" ? "Working" : "Waiting";
-  return h("button", { type: "button", className: selected ? "workflow-node selected" : "workflow-node" },
+  const classes = ["workflow-node", `status-${data.status || "waiting"}`];
+  if (selected) classes.push("selected");
+  return h("button", { type: "button", className: classes.join(" ") },
     h("span", { className: "workflow-node-title" }, data.label),
     data.detail ? h("span", { className: "workflow-node-detail" }, data.detail) : null,
-    h("span", { className: data.status === "running" ? "workflow-node-status active" : "workflow-node-status" }, status)
+    data.status === "running" ? h("span", { className: "node-spinner", "aria-label": "In progress" }) : null
   );
 }
 
@@ -420,6 +421,16 @@ function WorkflowCanvas({ traces, statuses, notes, winners, runNotes }) {
     };
   };
 
+  const arrowMarker = { type: MarkerType.ArrowClosed, width: 18, height: 18, color: "#8fa0cf" };
+  const makeEdge = (id, source, target, animated = false) => ({
+    id,
+    source,
+    target,
+    type: "smoothstep",
+    animated,
+    markerEnd: arrowMarker,
+  });
+
   const nodes = [
     makeAgentNode("analyzer", "Analyzer", "analyzer", null, 24, 26, undefined, "one-time source analysis"),
   ];
@@ -443,10 +454,10 @@ function WorkflowCanvas({ traces, statuses, notes, winners, runNotes }) {
     nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 32, 54, frameId, "writes session files"));
     nodes.push(makeAgentNode(`loss-${step}`, "Calculate Accuracy", "loss", step, 314, 54, frameId, "renders and scores"));
     nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 596, 54, frameId, "writes next brief"));
-    edges.push({ id: `p-l-${step}`, source: `producer-${step}`, target: `loss-${step}`, type: "smoothstep", animated: statuses[`loss_${step}`] === "running" });
-    edges.push({ id: `l-c-${step}`, source: `loss-${step}`, target: `critic-${step}`, type: "smoothstep", animated: statuses[`residual_critic_${step}`] === "running" });
-    if (index === 0) edges.push({ id: "a-p-0", source: "analyzer", target: `producer-${step}`, type: "smoothstep" });
-    if (index > 0) edges.push({ id: `c-p-${step}`, source: `critic-${steps[index - 1]}`, target: `producer-${step}`, type: "smoothstep" });
+    edges.push(makeEdge(`p-l-${step}`, `producer-${step}`, `loss-${step}`, statuses[`loss_${step}`] === "running"));
+    edges.push(makeEdge(`l-c-${step}`, `loss-${step}`, `critic-${step}`, statuses[`residual_critic_${step}`] === "running"));
+    if (index === 0) edges.push(makeEdge("a-p-0", "analyzer", `producer-${step}`));
+    if (index > 0) edges.push(makeEdge(`c-p-${step}`, `critic-${steps[index - 1]}`, `producer-${step}`));
   });
 
   const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.id === "analyzer");
@@ -465,7 +476,9 @@ function WorkflowCanvas({ traces, statuses, notes, winners, runNotes }) {
           edges,
           nodeTypes,
           fitView: true,
-          fitViewOptions: { padding: 0.18 },
+          fitViewOptions: { padding: 0.28, maxZoom: 0.82 },
+          minZoom: 0.18,
+          maxZoom: 1.25,
           nodesDraggable: false,
           nodesConnectable: false,
           elementsSelectable: true,
