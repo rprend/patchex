@@ -196,6 +196,8 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
         amp = layer.get("amp_envelope", {})
         filt = layer.get("filter", {})
         effects = layer.get("effects", {})
+        if not isinstance(effects, dict):
+            effects = {}
         compression_payload = effects.get("compression", effects.get("compressor", {}))
         compression = compression_payload if isinstance(compression_payload, dict) else {}
         compression_mix = compression.get("mix", compression.get("amount", effects.get("compression_mix", effects.get("compressor_mix", 0.0))))
@@ -322,7 +324,7 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                     "compression_ratio": float(np.clip(float(compression_ratio), 1.0, 20.0)),
                     "compression_attack": float(np.clip(float(compression_attack), 0.001, 0.5)),
                     "compression_release": float(np.clip(float(compression_release), 0.01, 2.0)),
-                    "return_send": float(np.clip(float(effects.get("return_send", 0.0)), 0.0, 1.0)),
+                    "return_send": sanitize_return_send(effects.get("return_send", 0.0)),
                 },
             }
         )
@@ -332,6 +334,21 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
         "width": float(np.clip(float(master.get("width", 1.0)), 0.0, 1.5)),
     }
     return session
+
+
+def sanitize_return_send(value: Any) -> float:
+    if isinstance(value, dict):
+        values = []
+        for amount in value.values():
+            try:
+                values.append(float(amount))
+            except (TypeError, ValueError):
+                continue
+        value = max(values) if values else 0.0
+    try:
+        return float(np.clip(float(value), 0.0, 1.0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def oscillator(phase: np.ndarray, waveform: str, blend: float) -> np.ndarray:
