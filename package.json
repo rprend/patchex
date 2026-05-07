@@ -1,0 +1,24 @@
+{
+  "name": "patchex-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:v1": "vite build --config text2fx_gemini/ui_react/vite.config.js"
+  },
+  "dependencies": {
+    "@radix-ui/react-accordion": "latest",
+    "@radix-ui/react-collapsible": "latest",
+    "@vitejs/plugin-react": "latest",
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "framer-motion": "latest",
+    "lucide-react": "latest",
+    "motion": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwind-merge": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {}
+}

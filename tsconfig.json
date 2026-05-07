@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "text2fx_gemini/ui_react/src/*"
+      ],
+      "components/*": [
+        "text2fx_gemini/ui_react/src/components/*"
+      ],
+      "ui/*": [
+        "text2fx_gemini/ui_react/src/components/ui/*"
+      ],
+      "lib/*": [
+        "text2fx_gemini/ui_react/src/lib/*"
+      ],
+      "utils/*": [
+        "text2fx_gemini/ui_react/src/lib/utils.js"
+      ],
+      "hooks/*": [
+        "text2fx_gemini/ui_react/src/hooks/*"
+      ]
+    },
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": false,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2020",
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "text2fx_gemini/ui_react/src"
+  ]
+}

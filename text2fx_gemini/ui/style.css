@@ -944,9 +944,13 @@ textarea {
 }
 
 .iteration-summary {
+  width: 100%;
   padding: .8rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
-  list-style: none;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -954,18 +958,15 @@ textarea {
   column-gap: .65rem;
 }
 
-.iteration-summary::-webkit-details-marker {
-  display: none;
-}
 
-.iteration-summary::before {
-  content: ">";
+.trace-chevron {
   color: var(--muted);
-  font-weight: 700;
+  transition: transform .16s ease;
 }
 
-.iteration-group[open] > .iteration-summary::before {
-  content: "v";
+.iteration-group[data-state="open"] > .iteration-summary .trace-chevron,
+.agent-card[data-state="open"] > .agent-card-head .trace-chevron {
+  transform: rotate(90deg);
 }
 
 .iteration-summary span {
@@ -993,9 +994,14 @@ textarea {
 }
 
 .agent-card-head {
+  width: 100%;
   margin-bottom: .25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
-  list-style: none;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -1003,19 +1009,6 @@ textarea {
   column-gap: .65rem;
 }
 
-.agent-card-head::-webkit-details-marker {
-  display: none;
-}
-
-.agent-card-head::before {
-  content: ">";
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.agent-card[open] > .agent-card-head::before {
-  content: "v";
-}
 
 .agent-card-head strong {
   color: var(--text);
@@ -1047,6 +1040,28 @@ textarea {
   border-top: 1px solid var(--line-soft);
   color: var(--soft);
   font: .78rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap;
+}
+
+.agent-terminal {
+  display: block;
+}
+
+.agent-terminal > div:first-child {
+  display: none;
+}
+
+.agent-terminal pre {
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+}
+
+.agent-terminal code {
+  display: block;
+}
+
+.agent-terminal-text {
   white-space: pre-wrap;
 }
 

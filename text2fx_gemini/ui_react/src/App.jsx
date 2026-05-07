@@ -1,4 +1,9 @@
-const { useCallback, useEffect, useRef, useState } = React;
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import * as Collapsible from '@radix-ui/react-collapsible';
+import { ChevronRight } from 'lucide-react';
+import { Terminal } from './components/ui/terminal.jsx';
+
 const h = React.createElement;
 
 const CLIP_SECONDS = 5;
@@ -314,11 +319,14 @@ function AgentTranscript({ traces }) {
     return () => { cancelled = true; };
   }, [tracesKey]);
 
-  if (!traces.length) return h("pre", { className: "agent-transcript" }, "waiting for files...");
-  if (!items.length) return h("pre", { className: "agent-transcript" }, "loading...");
+  const transcript = !traces.length
+    ? "waiting for files..."
+    : !items.length
+      ? "loading..."
+      : items.map(({ text }) => text || "").join("\n");
 
-  return h("pre", { className: "agent-transcript" },
-    items.map(({ text }) => text || "").join("\n")
+  return h(Terminal, { className: "agent-transcript agent-terminal", sequence: false, startOnView: false },
+    h("span", { className: "agent-terminal-text" }, transcript)
   );
 }
 
@@ -362,17 +370,25 @@ function TraceFile({ trace }) {
 }
 
 function AgentCard({ agent, traces, status, notes }) {
+  const [open, setOpen] = useState(false);
   const completed = status === "completed";
   const title = agentName(agent);
-  return h("details", { className: `agent-card ${completed ? "completed" : "running"}`, open: false },
-    h("summary", { className: "agent-card-head" },
+  return h(Collapsible.Root, {
+    className: `agent-card ${completed ? "completed" : "running"}`,
+    open,
+    onOpenChange: setOpen,
+  },
+    h(Collapsible.Trigger, { className: "agent-card-head" },
+      h(ChevronRight, { className: "trace-chevron", "aria-hidden": true, size: 16 }),
       h("div", null,
         h("strong", null, title),
         notes?.length ? h("p", null, notes[notes.length - 1]) : null
       ),
       h("span", { className: "agent-state" }, completed ? "Done" : "Working")
     ),
-    h(AgentTranscript, { traces })
+    h(Collapsible.Content, { className: "agent-content" },
+      h(AgentTranscript, { traces })
+    )
   );
 }
 
@@ -382,30 +398,22 @@ function IterationGroup({ step, traces, statuses, notes, winners }) {
   const loss = traces.filter((trace) => agentBase(trace.agent) === "loss" || trace.role?.includes("audio_diff") || trace.role?.includes("winner_render"));
   const critic = traces.filter((trace) => agentBase(trace.agent) === "residual_critic");
   const winner = winners[step];
-  return h("details", { className: "iteration-group", open },
-    h("button", {
-      type: "button",
+  return h(Collapsible.Root, { className: "iteration-group", open, onOpenChange: setOpen },
+    h(Collapsible.Trigger, {
       className: "iteration-rail",
-      onClick: (event) => {
-        event.preventDefault();
-        setOpen((value) => !value);
-      },
       "aria-label": `${open ? "Collapse" : "Expand"} iteration ${step + 1}`,
     }),
-    h("summary", {
-      className: "iteration-summary",
-      onClick: (event) => {
-        event.preventDefault();
-        setOpen((value) => !value);
-      },
-    },
+    h(Collapsible.Trigger, { className: "iteration-summary" },
+      h(ChevronRight, { className: "trace-chevron", "aria-hidden": true, size: 16 }),
       h("span", null, `Iteration ${step + 1}`),
       h("strong", null, winner ? `Winner: ${friendlyWinner(winner.winner)} · ${winner.score}` : "Produce, calculate accuracy, critique")
     ),
-    h("div", { className: "iteration-body" },
-      h(AgentCard, { agent: "producer", traces: producer, status: statuses[`producer_${step}`], notes: notes[`producer_${step}`] || [] }),
-      h(AgentCard, { agent: "loss", traces: loss, status: statuses[`loss_${step}`], notes: notes[`loss_${step}`] || [] }),
-      h(AgentCard, { agent: "residual_critic", traces: critic, status: statuses[`residual_critic_${step}`], notes: notes[`residual_critic_${step}`] || [] })
+    h(Collapsible.Content, { className: "iteration-content" },
+      h("div", { className: "iteration-body" },
+        h(AgentCard, { agent: "producer", traces: producer, status: statuses[`producer_${step}`], notes: notes[`producer_${step}`] || [] }),
+        h(AgentCard, { agent: "loss", traces: loss, status: statuses[`loss_${step}`], notes: notes[`loss_${step}`] || [] }),
+        h(AgentCard, { agent: "residual_critic", traces: critic, status: statuses[`residual_critic_${step}`], notes: notes[`residual_critic_${step}`] || [] })
+      )
     )
   );
 }
@@ -907,4 +915,4 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("v1-root")).render(h(App));
+createRoot(document.getElementById("v1-root")).render(h(App));

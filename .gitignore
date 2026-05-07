@@ -4,6 +4,7 @@ __pycache__/
 
 .venv/
 .gstack/
+node_modules/
 
 .env
 *.env
