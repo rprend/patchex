@@ -5,11 +5,14 @@
 
 ## Patchex Run Inspection
 
-- For a Patchex V1 run id such as `20260507_153650_v1_6ef61ecb`, inspect the harness bundle before guessing from the page shell:
+- When the user says something like "this run failed <run_id>" or asks what happened in a Patchex run, first collect the full run harness bundle by ID. Do not infer from the HTML page shell alone.
+- Preferred local command:
+  - `scripts/inspect_run.py <run_id>`
+- If the site server is running, these API endpoints return the same harness context:
   - `GET http://127.0.0.1:8765/api/reconstructions/<run_id>`
   - `GET http://127.0.0.1:8765/api/reconstructions/<run_id>/logs`
   - `GET http://127.0.0.1:8765/api/reconstructions/<run_id>/harness`
-- The log bundle includes the inferred lifecycle status, manifest, `events.jsonl`, `raw_subprocess.log`, `logs/*.log`, and artifacts.
+- The harness bundle includes the inferred lifecycle status, manifest, `events.jsonl`, `raw_subprocess.log`, `logs/*.log`, artifact URLs, and inline content for text artifacts such as prompts, answers, JSON reports, summaries, and logs.
 - Local fallbacks:
   - `scripts/show_run.py <run_id>`
   - `scripts/tail_run.py <run_id> --no-follow`

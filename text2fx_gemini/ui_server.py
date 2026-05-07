@@ -857,7 +857,20 @@ def read_text_limited(path: Path, max_chars: int = 200_000) -> str:
     return text[-max_chars:]
 
 
-def run_log_bundle(run_id: str) -> dict:
+def artifact_record(run_dir: Path, path: Path, inline_max_chars: int = 200_000) -> dict:
+    rel = str(path.relative_to(run_dir))
+    record = {
+        "name": rel,
+        "size": path.stat().st_size,
+        "url": f"/media/runs/{run_dir.name}/{'/'.join(quote(part) for part in path.relative_to(run_dir).parts)}",
+    }
+    if inline_max_chars > 0 and path.suffix.lower() in {".json", ".jsonl", ".md", ".txt", ".log", ".sh", ".csv", ".tsv"}:
+        record["content"] = read_text_limited(path, inline_max_chars)
+        record["truncated"] = path.stat().st_size > inline_max_chars
+    return record
+
+
+def run_log_bundle(run_id: str, inline_artifacts: bool = True) -> dict:
     run_dir = (RUNS / run_id).resolve()
     if not run_dir.is_dir():
         raise KeyError(run_id)
@@ -885,14 +898,16 @@ def run_log_bundle(run_id: str) -> dict:
     if logs_dir.exists():
         for path in sorted(logs_dir.glob("*.log")):
             agent_logs.append({"name": path.name, "content": read_text_limited(path), "size": path.stat().st_size})
+    artifacts = [artifact_record(run_dir, path, inline_max_chars=80_000 if inline_artifacts else 0) for path in sorted(run_dir.rglob("*")) if path.is_file()]
     return {
         "run_id": run_id,
+        "run_path": str(run_dir),
         "status": disk_reconstruction_status(run_dir, manifest),
         "manifest": manifest,
         "events": events,
         "raw_subprocess_log": read_text_limited(run_dir / "raw_subprocess.log"),
         "agent_logs": agent_logs,
-        "artifacts": list_artifacts(run_dir),
+        "artifacts": artifacts,
     }
 
 
