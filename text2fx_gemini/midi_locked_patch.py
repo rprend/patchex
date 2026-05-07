@@ -1431,7 +1431,7 @@ def command_run(args: argparse.Namespace) -> int:
     print(f"trace_file agent=analyzer role=arrangement path={arrangement_path}", flush=True)
     session = neutral_session(arrangement, args.sample_rate, args.seconds)
     write_json(current_session_path, session)
-    print(f"trace_file agent=producer_step_00 role=session_proposal path={current_session_path}", flush=True)
+    print(f"trace_file agent=session role=current path={current_session_path}", flush=True)
     reference_audio, sr = load_audio(args.reference, args.seconds)
     source_clip_path = args.output_dir / "source_clip.wav"
     sf.write(source_clip_path, reference_audio.T, sr)
