@@ -936,6 +936,8 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
 
   const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.type === "agent");
   const selected = selectedNode?.data || { label: "Select a block", traces: [] };
+  const liveSourceArtifact = artifacts?.find((artifact) => artifact.name === "source_clip.wav") ||
+    traces.find((trace) => trace.name === "source_clip.wav" || trace.role === "source_clip");
 
   return h("section", { className: "workflow-section" },
     h("div", { className: "workflow-layout" },
@@ -965,7 +967,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
           h(Controls, { showInteractive: false })
         )
       ),
-      h(SidebarDetail, { selected, detail: selectedDetail, sourceArtifact: artifacts?.find((artifact) => artifact.name === "source_clip.wav"), allTraces: traces })
+      h(SidebarDetail, { selected, detail: selectedDetail, sourceArtifact: liveSourceArtifact, allTraces: traces })
     )
   );
 }
