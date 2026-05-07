@@ -53,6 +53,8 @@ IMPORTANT_LOG_PATTERNS = [
     for pattern in [
         r"^codex_start",
         r"^codex_done",
+        r"^codex_request",
+        r"^codex_response",
         r"^codex_prompt_path",
         r"^candidate=",
         r"^step=",
@@ -475,6 +477,32 @@ def parse_trace_event(line: str) -> dict | None:
     return payload
 
 
+def parse_codex_file_event(line: str) -> dict | None:
+    stripped = line.strip()
+    if not (stripped.startswith("codex_request ") or stripped.startswith("codex_response ")):
+        return None
+    event_type = "codex_request" if stripped.startswith("codex_request ") else "codex_response"
+    payload: dict[str, str | int | None] = {"type": event_type, "line": stripped}
+    for key, value in re.findall(r"\b(agent|step)=([^ ]+)", stripped):
+        payload[key] = int(value) if key == "step" else value
+    if " path=" in stripped:
+        payload["path"] = stripped.split(" path=", 1)[1]
+    path = payload.get("path")
+    if isinstance(path, str):
+        payload["url"] = run_media_url(Path(path))
+        payload["name"] = Path(path).name
+    return payload
+
+
+def parse_codex_log_event(line: str) -> dict | None:
+    stripped = line.strip()
+    if not stripped.startswith("codex_log "):
+        return None
+    agent, step = agent_from_log_line(stripped)
+    text = re.sub(r"^codex_log agent=[^ ]+\s*", "", stripped)
+    return {"type": "codex_log", "agent": agent, "step": step, "line": text}
+
+
 def agent_from_log_line(line: str) -> tuple[str | None, int | None]:
     agent = None
     step = None
@@ -515,6 +543,27 @@ def append_agent_log(out_dir: Path, agent: str | None, line: str) -> None:
         fh.write(line.rstrip() + "\n")
 
 
+def write_run_state(out_dir: Path, status: str, returncode: int | None = None, pid: int | None = None) -> None:
+    payload = {
+        "run_id": out_dir.name,
+        "status": status,
+        "returncode": returncode,
+        "pid": pid,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    (out_dir / "run_state.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    manifest_path = out_dir / "run_manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return
+        manifest["status"] = status
+        manifest["returncode"] = returncode
+        manifest["updated_at"] = payload["updated_at"]
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
 def enqueue_compacted(event_queue: queue.Queue[dict], compacted: str, out_dir: Path | None = None) -> None:
     trace_event = parse_trace_event(compacted)
     if trace_event is not None:
@@ -522,11 +571,21 @@ def enqueue_compacted(event_queue: queue.Queue[dict], compacted: str, out_dir: P
             append_run_event(out_dir, {k: v for k, v in trace_event.items() if k != "type"} | {"type": "file_written"})
             append_agent_log(out_dir, str(trace_event.get("agent") or ""), compacted)
         event_queue.put(trace_event)
+    elif (codex_file_event := parse_codex_file_event(compacted)) is not None:
+        if out_dir is not None:
+            append_run_event(out_dir, {k: v for k, v in codex_file_event.items() if k != "type"} | {"type": codex_file_event["type"]})
+            append_agent_log(out_dir, str(codex_file_event.get("agent") or ""), compacted)
+        event_queue.put(codex_file_event)
+    elif (codex_log_event := parse_codex_log_event(compacted)) is not None:
+        if out_dir is not None:
+            append_run_event(out_dir, codex_log_event)
+            append_agent_log(out_dir, str(codex_log_event.get("agent") or ""), codex_log_event["line"])
+        event_queue.put(codex_log_event)
     elif out_dir is not None:
         agent, step = agent_from_log_line(compacted)
         append_run_event(out_dir, {"type": "log", "agent": agent, "step": step, "line": compacted})
         append_agent_log(out_dir, agent, compacted)
-    event_queue.put({"type": "log", "line": compacted})
+        event_queue.put({"type": "log", "line": compacted})
 
 
 def start_run(reference: str, prompt: str, instrument_type: str, candidates: int, axis_trials: int, target_part: str = "", analysis: dict | None = None) -> str:
@@ -677,6 +736,7 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
             "cmd": cmd,
         },
     )
+    write_run_state(out_dir, "running")
 
     def worker() -> None:
         env = os.environ.copy()
@@ -694,6 +754,7 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
             env=env,
         )
         reconstruction_jobs[run_id]["pid"] = process.pid
+        write_run_state(out_dir, "running", pid=process.pid)
         append_run_event(out_dir, {"type": "process_start", "run_id": run_id, "pid": process.pid})
         assert process.stdout is not None
         with raw_log_path.open("w") as raw_log:
@@ -712,6 +773,7 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
         status = "cancelled" if was_cancelled else ("completed" if returncode == 0 else "failed")
         reconstruction_jobs[run_id]["returncode"] = returncode
         reconstruction_jobs[run_id]["status"] = status
+        write_run_state(out_dir, status, returncode=returncode, pid=process.pid)
         append_run_event(out_dir, {"type": "process_done", "run_id": run_id, "status": status, "returncode": returncode})
         if returncode != 0 and not was_cancelled:
             event_queue.put({"type": "log", "line": "last raw subprocess lines before failure:"})
@@ -740,6 +802,7 @@ def kill_reconstruction(run_id: str) -> dict:
             pass
     job["status"] = "cancelled"
     job["returncode"] = -15
+    write_run_state(out_dir, "cancelled", returncode=-15, pid=pid)
     append_run_event(out_dir, {"type": "process_kill", "run_id": run_id, "status": "cancelled", "pid": pid})
     try:
         job["queue"].put({"type": "log", "line": "run killed by user"})
@@ -752,6 +815,14 @@ def kill_reconstruction(run_id: str) -> dict:
 def disk_reconstruction_status(run_dir: Path, manifest: dict | None = None) -> str:
     if (run_dir / "reconstruction_report.json").exists():
         return "completed"
+    state_path = run_dir / "run_state.json"
+    if state_path.exists():
+        try:
+            status = json.loads(state_path.read_text()).get("status")
+            if status:
+                return "interrupted" if status == "running" else status
+        except (json.JSONDecodeError, OSError):
+            pass
     if manifest is None:
         manifest_path = run_dir / "run_manifest.json"
         if manifest_path.exists():
@@ -774,6 +845,55 @@ def disk_reconstruction_status(run_dir: Path, manifest: dict | None = None) -> s
             pass
     status = (manifest or {}).get("status")
     return "interrupted" if status == "running" else (status or "partial")
+
+
+def read_text_limited(path: Path, max_chars: int = 200_000) -> str:
+    try:
+        text = path.read_text(errors="replace")
+    except OSError:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    return text[-max_chars:]
+
+
+def run_log_bundle(run_id: str) -> dict:
+    run_dir = (RUNS / run_id).resolve()
+    if not run_dir.is_dir():
+        raise KeyError(run_id)
+    if RUNS.resolve() not in run_dir.parents and run_dir != RUNS.resolve():
+        raise ValueError("Run path escapes runs directory.")
+    manifest = None
+    manifest_path = run_dir / "run_manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            manifest = None
+    events = []
+    events_path = run_dir / "events.jsonl"
+    if events_path.exists():
+        for line in events_path.read_text(errors="replace").splitlines():
+            if not line.strip():
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                events.append({"type": "raw", "line": line})
+    agent_logs = []
+    logs_dir = run_dir / "logs"
+    if logs_dir.exists():
+        for path in sorted(logs_dir.glob("*.log")):
+            agent_logs.append({"name": path.name, "content": read_text_limited(path), "size": path.stat().st_size})
+    return {
+        "run_id": run_id,
+        "status": disk_reconstruction_status(run_dir, manifest),
+        "manifest": manifest,
+        "events": events,
+        "raw_subprocess_log": read_text_limited(run_dir / "raw_subprocess.log"),
+        "agent_logs": agent_logs,
+        "artifacts": list_artifacts(run_dir),
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -868,6 +988,10 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/reconstructions/") and path.endswith("/events"):
                 run_id = path.split("/")[-2]
                 self.stream_reconstruction_events(run_id)
+                return
+            log_match = re.match(r"^/api/reconstructions/([^/]+)/(?:logs|harness)$", path)
+            if log_match:
+                json_response(self, run_log_bundle(log_match.group(1)))
                 return
             if path.startswith("/api/reconstructions/"):
                 run_id = path.split("/")[-1]

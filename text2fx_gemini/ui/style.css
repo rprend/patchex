@@ -1613,6 +1613,14 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.producer-plain-line {
+  margin: 0 0 .8rem;
+  color: var(--text);
+  font: .92rem/1.55 "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .thinking-shimmer {
   margin-top: 1rem;
   color: transparent;

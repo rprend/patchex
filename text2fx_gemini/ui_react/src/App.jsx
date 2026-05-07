@@ -130,8 +130,29 @@ function friendlyWinner(name) {
   return String(name).replaceAll("_", " ");
 }
 
+function runStatusTitle(run) {
+  if (run.status === "running") return "Running";
+  if (run.status === "failed") return "Failed";
+  if (run.status === "cancelled") return "Cancelled";
+  if (run.status === "interrupted") return "Interrupted";
+  if (Number.isFinite(run.final_score)) return run.final_score.toFixed(3);
+  return "n/a";
+}
+
+function viewStatusForRun(statusValue) {
+  if (statusValue === "running") return "Running";
+  if (statusValue === "failed") return "Failed";
+  if (statusValue === "cancelled") return "Cancelled";
+  if (statusValue === "interrupted") return "Interrupted";
+  return "Viewing past run";
+}
+
 function traceKey(trace) {
   return `${trace.agent}:${trace.step ?? "root"}:${trace.role}:${trace.url || trace.path}`;
+}
+
+function codexEventKey(event, index = 0) {
+  return `${event.type}:${event.agent}:${event.step ?? "root"}:${event.url || event.path || event.line || index}`;
 }
 
 function parseStep(line) {
@@ -151,6 +172,18 @@ function cleanLogLine(line) {
     .replaceAll("layer_builder", "producer")
     .replaceAll("residual_critic", "critic")
     .replaceAll("Loop ", "Iteration ");
+}
+
+function cleanCodexLine(line) {
+  const text = String(line || "").trim();
+  if (!text) return null;
+  if (text.includes("/site-packages/") || text.includes("FutureWarning")) return null;
+  if (text.startsWith("codex_") || text.startsWith("trace_file")) return null;
+  return text
+    .replaceAll("•", "-")
+    .replace(/\s+/g, " ")
+    .replace(/^codex\s*/i, "")
+    .trim();
 }
 
 function WaveformPlayer({ url, label, compact = false, color = "#323a85" }) {
@@ -634,6 +667,16 @@ function AgentActivity({ selected }) {
   const traces = [...(selected.traces || [])].sort((a, b) => traceOrder(a) - traceOrder(b));
   const active = selected.status === "running";
   const [elapsed, setElapsed] = useState(0);
+  const [loadedText, setLoadedText] = useState({});
+  const codexEvents = selected.codexEvents || [];
+  const requestEvent = codexEvents.find((event) => event.type === "codex_request") || traces.find((trace) => trace.role === "prompt");
+  const responseEvent = [...codexEvents].reverse().find((event) => event.type === "codex_response") || traces.find((trace) => trace.role === "answer");
+  const progressLines = codexEvents
+    .filter((event) => event.type === "codex_log")
+    .map((event) => cleanCodexLine(event.line))
+    .filter(Boolean)
+    .slice(-8);
+  const textKey = [requestEvent?.url || requestEvent?.path || "", responseEvent?.url || responseEvent?.path || ""].join("|");
   useEffect(() => {
     if (!active) {
       setElapsed(0);
@@ -644,20 +687,39 @@ function AgentActivity({ selected }) {
     const timer = setInterval(() => setElapsed(Math.max(1, Math.floor((Date.now() - started) / 1000))), 1000);
     return () => clearInterval(timer);
   }, [active, selected.id]);
+  useEffect(() => {
+    let cancelled = false;
+    const events = [requestEvent, responseEvent].filter((event) => event?.url);
+    if (!events.length) return undefined;
+    Promise.all(events.map(async (event) => {
+      try {
+        const res = await fetch(event.url);
+        if (!res.ok) throw new Error(`Could not load ${event.url}`);
+        const text = await res.text();
+        return [event.url, text.length > 18000 ? `${text.slice(0, 18000)}\n\n[Open the file for the full text.]` : text];
+      } catch (error) {
+        return [event.url, error.stack || String(error)];
+      }
+    })).then((entries) => {
+      if (!cancelled) setLoadedText((current) => ({ ...current, ...Object.fromEntries(entries) }));
+    });
+    return () => { cancelled = true; };
+  }, [textKey]);
   const latestNote = selected.notes?.at(-1);
-  const rawLines = [
-    ...(selected.notes || []).map((note) => note),
-    ...traces.map((trace) => `trace_file agent=${trace.agent} role=${trace.role} path=${trace.path || trace.name || ""}`),
-  ];
+  const requestText = requestEvent?.url ? loadedText[requestEvent.url] : "";
+  const responseText = responseEvent?.url ? loadedText[responseEvent.url] : "";
+  const artifacts = traces.filter((trace) => !["prompt", "answer"].includes(trace.role));
   return h("div", { className: "agent-activity" },
     h("div", { className: "codex-status-line" }, active ? `Working for ${elapsed || 1}s` : selected.status === "completed" ? "Finished" : "Waiting"),
-    latestNote ? h("div", { className: "codex-message" }, h("p", null, latestNote)) : null,
-    h("pre", { className: "raw-agent-log" }, rawLines.length ? rawLines.join("\n") : active ? "waiting for agent logs..." : "no logs for this agent"),
+    requestEvent ? h("p", { className: "producer-plain-line" }, requestText || "Loading request...") : null,
+    progressLines.length ? progressLines.map((line, index) => h("p", { className: "producer-plain-line", key: `${line}-${index}` }, line)) : latestNote ? h("p", { className: "producer-plain-line" }, latestNote) : null,
+    responseEvent ? h("p", { className: "producer-plain-line" }, responseText || (active ? "Waiting for the Producer response..." : "Response file is not available yet.")) : null,
+    artifacts.length ? h("p", { className: "producer-plain-line" }, artifacts.slice(0, 8).map((trace) => roleName(trace.role, trace.agent)).join(", ")) : null,
     active ? h("div", { className: "thinking-shimmer" }, "Thinking") : null
   );
 }
 
-function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
+function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEvents }) {
   const traceSteps = traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined);
   const statusSteps = Object.keys(statuses)
     .map((key) => key.match(/_(\d+)$/)?.[1])
@@ -676,6 +738,11 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
     const statusKey = step === null ? base : `${base}_${step}`;
     const icon = base === "producer" ? SlidersHorizontal : base === "loss" ? Activity : base === "harness_improver" ? RefreshCw : MessageSquareText;
     const nodeTraces = traceSet(traces, base, step);
+    const nodeCodexEvents = (codexEvents || []).filter((event) => {
+      const eventStep = event.step ?? agentStep(event.agent, null);
+      const sameStep = step === null ? eventStep === null || eventStep === undefined : eventStep === step;
+      return sameStep && agentBase(event.agent) === base;
+    });
     const rows = outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey);
     return {
       id,
@@ -700,6 +767,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
         step,
         status: statuses[statusKey] || (traceSet(traces, base, step).length ? "running" : "waiting"),
         traces: nodeTraces,
+        codexEvents: nodeCodexEvents,
         notes: notes[statusKey] || [],
       },
     };
@@ -863,16 +931,16 @@ function RunHistory({ runs, onLoad, onRefresh }) {
     ),
     h("div", { className: "run-history react-run-history" },
       runs.length
-        ? runs.map((run) => h(Card, { key: run.id, className: run.status === "running" ? "run-card active-run-card" : "run-card", role: "button", tabIndex: 0, onClick: () => onLoad(run), onKeyDown: (event) => {
+        ? runs.map((run) => h(Card, { key: run.id, className: run.status === "running" ? "run-card active-run-card" : `run-card status-${run.status || "unknown"}`, role: "button", tabIndex: 0, onClick: () => onLoad(run), onKeyDown: (event) => {
           if (event.key === "Enter" || event.key === " ") onLoad(run);
         } },
           h(CardHeader, null,
             h(CardDescription, { className: "run-time" }, formatRunDate(run.id)),
-            h(CardTitle, null, run.status === "running" ? "Running" : Number.isFinite(run.final_score) ? run.final_score.toFixed(3) : "n/a")
+            h(CardTitle, null, runStatusTitle(run))
           ),
           h(CardContent, null,
             h("span", null, run.overall_mix || "Reconstruction run"),
-            h("em", null, `${run.stage_count || 0} stages`)
+            h("em", null, `${run.status || "unknown"} · ${run.stage_count || 0} stages`)
           )
         ))
         : h("div", { className: "empty-history" }, "No V1 runs yet.")
@@ -891,6 +959,7 @@ function App() {
   const [playLabel, setPlayLabel] = useState("Play selection");
   const [runNotes, setRunNotes] = useState([]);
   const [traces, setTraces] = useState([]);
+  const [codexEvents, setCodexEvents] = useState([]);
   const [statuses, setStatuses] = useState({});
   const [notes, setNotes] = useState({});
   const [winners, setWinners] = useState({});
@@ -939,6 +1008,17 @@ function App() {
     }
   }, [addAgentNote]);
 
+  const addCodexEvent = useCallback((payload) => {
+    const agent = normalizeAgent(payload.agent || "producer");
+    const step = payload.step ?? agentStep(agent, null);
+    const item = { ...payload, agent, step };
+    setCodexEvents((current) => current.some((event, index) => codexEventKey(event, index) === codexEventKey(item, index)) ? current : [...current, item]);
+    const statusId = step === null || step === undefined ? agentBase(agent) : `${agentBase(agent)}_${step}`;
+    if (payload.type === "codex_request" || payload.type === "codex_log") {
+      setStatuses((current) => ({ ...current, [statusId]: current[statusId] === "completed" ? "completed" : "running" }));
+    }
+  }, []);
+
   const loadSongs = useCallback(async () => {
     const data = await api("/api/songs");
     setSongs(data.songs || []);
@@ -959,6 +1039,7 @@ function App() {
   const resetRunView = useCallback(() => {
     setRunNotes([]);
     setTraces([]);
+    setCodexEvents([]);
     setStatuses({});
     setNotes({});
     setWinners({});
@@ -1167,6 +1248,7 @@ function App() {
     events.onmessage = async (event) => {
       const payload = JSON.parse(event.data);
       if (payload.type === "trace_file") addTrace(payload);
+      if (["codex_request", "codex_response", "codex_log"].includes(payload.type)) addCodexEvent(payload);
       if (payload.type === "log") routeRunLog(payload.line);
       if (payload.type === "heartbeat") addRunNote("Still running.");
       if (payload.type === "done") {
@@ -1183,7 +1265,7 @@ function App() {
     };
     events.onerror = () => addRunNote("Event stream disconnected; refresh to reconnect.");
     return events;
-  }, [addRunNote, addTrace, loadRuns, renderTraceArtifacts, routeRunLog]);
+  }, [addCodexEvent, addRunNote, addTrace, loadRuns, renderTraceArtifacts, routeRunLog]);
 
   const startRun = useCallback(async () => {
     if (!currentSongId) return;
@@ -1254,7 +1336,7 @@ function App() {
       addRunNote(`Reconnected to ${run.id}.`);
       return;
     }
-    setStatus("Viewing past run");
+    setStatus(viewStatusForRun(run.status));
     setArtifacts(run.artifacts || []);
     const reportArtifact = run.artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
     let loadedReport = null;
@@ -1291,7 +1373,7 @@ function App() {
         if (run) return loadPastRun(run, { push: false });
         return api(`/api/reconstructions/${routeId}`)
           .then(async (job) => {
-            setStatus(job.status === "running" ? "Running" : "Viewing past run");
+            setStatus(viewStatusForRun(job.status));
             setArtifacts(job.artifacts || []);
             await renderTraceArtifacts(job.artifacts || []);
             if (job.status === "running") {
@@ -1359,7 +1441,7 @@ function App() {
       disabled: starting || !currentSongId,
       running: starting,
     }),
-    showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts }) : null,
+    showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts, codexEvents }) : null,
     showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Scoreboard, { report }) : null,
     showRunDetail && hasLoadedRun ? h(Artifacts, { artifacts, onReport: setReport }) : null,
