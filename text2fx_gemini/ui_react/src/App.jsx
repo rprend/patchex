@@ -45,6 +45,7 @@ const ROLE_LABELS = {
   accepted_session: "Accepted session",
   candidate_session: "Candidate session",
   audio_diff: "Accuracy report",
+  source_clip: "Target audio",
   winner_audio_diff: "Winning accuracy report",
   winner_render: "Winning audio",
   render: "Audio",
@@ -487,6 +488,16 @@ function outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey, a
       { label: "Audio", value: filename(byRole("winner_render", "render")), trace: byRole("winner_render", "render") },
     ];
   }
+  if (base === "baseline") {
+    const sourceTrace = byRole("source_clip") || allTraces.find((trace) => trace.name === "source_clip.wav");
+    const renderTrace = byRole("winner_render") || allTraces.find((trace) => trace.name === "current_render_step_initial.wav");
+    const lossTrace = byRole("audio_diff") || allTraces.find((trace) => trace.name === "loss_report_step_initial.json");
+    return [
+      { label: "Target", value: filename(sourceTrace), trace: sourceTrace },
+      { label: "First render", value: filename(renderTrace), trace: renderTrace },
+      { label: "Initial loss", value: filename(lossTrace), trace: lossTrace },
+    ];
+  }
   const latestNote = (notes[statusKey] || []).at(-1);
   if (base === "harness_improver") {
     return [
@@ -799,6 +810,35 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
 
   const nodes = [];
   const edges = [];
+  const baselineTraces = traces.filter((trace) => ["source_clip.wav", "current_render_step_initial.wav", "loss_report_step_initial.json"].includes(trace.name));
+  if (baselineTraces.length) {
+    const rows = outputRowsForAgent("baseline", null, baselineTraces, winners, notes, "baseline", traces);
+    nodes.push({
+      id: "baseline",
+      type: "agent",
+      position: { x: 300, y: 28 },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      draggable: false,
+      data: {
+        id: "baseline",
+        label: "Initial Baseline",
+        detail: "before first Critic brief",
+        icon: Activity,
+        rows: rows.map((row) => ({ ...row, value: row.value || "pending" })),
+        onOpen: (trace, nodeData) => {
+          setSelectedId(nodeData.id);
+          setSelectedDetail({ trace, label: `${nodeData.label}: ${roleName(trace.role, trace.agent)}` });
+        },
+        base: "baseline",
+        step: null,
+        status: baselineTraces.some((trace) => trace.name === "loss_report_step_initial.json") ? "completed" : "running",
+        traces: baselineTraces,
+        codexEvents: [],
+        notes: [],
+      },
+    });
+  }
   const makeAccuracyNode = (step, x, y, parentId) => {
     const winner = winners[step];
     const accuracyTrace = traceSet(traces, "loss", step).find((trace) => trace.role?.includes("winner_audio_diff") || trace.role?.includes("audio_diff"));
@@ -821,7 +861,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
   };
   steps.forEach((step, index) => {
     const frameId = `iteration-${step}`;
-    const y = 180 + index * 290;
+    const y = 250 + index * 290;
     nodes.push({
       id: frameId,
       type: "iterationFrame",
@@ -834,6 +874,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
     nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 36, 34, frameId, "writes Producer brief"));
     nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 336, 34, frameId, "writes session files"));
     nodes.push(makeAccuracyNode(step, 636, 78, frameId));
+    if (index === 0 && baselineTraces.length) edges.push(makeEdge("baseline-critic-0", "baseline", `critic-${step}`, statuses[`residual_critic_${step}`] === "running"));
     edges.push(makeEdge(`c-p-${step}`, `critic-${step}`, `producer-${step}`, statuses[`producer_${step}`] === "running"));
     edges.push(makeEdge(`p-a-${step}`, `producer-${step}`, `accuracy-${step}`, statuses[`loss_${step}`] === "running"));
     const nextStep = steps[index + 1];
@@ -933,49 +974,6 @@ function Comparison({ artifacts }) {
         h(WaveformPlayer, { url: final.url, label: "Output", color: "#657cc2" })
       )
     )
-  );
-}
-
-function artifactTrace(artifact, role = "file", agent = "run", step = null) {
-  if (!artifact) return null;
-  const runId = artifact.url?.split("/")[3];
-  return {
-    agent,
-    role,
-    step,
-    path: runId ? `/ui_runs/${runId}/${artifact.name}` : artifact.name,
-    url: artifact.url,
-    name: artifact.name,
-  };
-}
-
-function InitialBaseline({ artifacts, traces }) {
-  const source = artifacts.find((artifact) => artifact.name === "source_clip.wav") ||
-    traces.find((trace) => trace.name === "source_clip.wav");
-  const initialRender = artifacts.find((artifact) => artifact.name === "current_render_step_initial.wav") ||
-    traces.find((trace) => trace.name === "current_render_step_initial.wav");
-  const initialLossArtifact = artifacts.find((artifact) => artifact.name === "loss_report_step_initial.json");
-  const initialLoss = traces.find((trace) => trace.name === "loss_report_step_initial.json") ||
-    artifactTrace(initialLossArtifact, "audio_diff", "loss", null);
-  if (!source && !initialRender && !initialLoss) return null;
-  return h("section", { className: "section-block initial-baseline" },
-    h("div", { className: "section-title" },
-      h("h2", null, "Initial Baseline"),
-      h("p", null, "First target/render comparison before the Critic writes the first brief.")
-    ),
-    source || initialRender ? h("div", { className: "comparison-grid react-comparison" },
-      source ? h("section", { className: "comparison-item" },
-        h("div", { className: "comparison-head" }, h("span", null, "Target"), h("strong", null, "Selected clip")),
-        h(WaveformPlayer, { url: source.url, label: "Target" })
-      ) : null,
-      initialRender ? h("section", { className: "comparison-item" },
-        h("div", { className: "comparison-head" }, h("span", null, "First render"), h("strong", null, "Before Critic")),
-        h(WaveformPlayer, { url: initialRender.url, label: "Initial render", color: "#657cc2" })
-      ) : null
-    ) : null,
-    initialLoss ? h("div", { className: "initial-loss-panel" },
-      h(AccuracyViewer, { trace: initialLoss })
-    ) : h("div", { className: "sidebar-loading" }, "Waiting for initial accuracy report...")
   );
 }
 
@@ -1287,7 +1285,7 @@ function App() {
       if (role === "producer_render" && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
       if (["accepted_session", "candidate_session", "session_proposal"].includes(role) && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
       if (role === "audio_diff" && step !== null) agent = `loss_step_${String(step).padStart(2, "0")}`;
-      if (artifact.name === "loss_report_step_initial.json" || artifact.name === "current_render_step_initial.wav") agent = "loss";
+      if (["source_clip.wav", "loss_report_step_initial.json", "current_render_step_initial.wav"].includes(artifact.name)) agent = "baseline";
       if (role === "harness_improvement" && step !== null) agent = `harness_improver_step_${String(step).padStart(2, "0")}`;
       if (role === "recommendation" && step !== null) agent = `residual_critic_step_${String(step).padStart(2, "0")}`;
       addTrace({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name, step });
@@ -1505,7 +1503,6 @@ function App() {
       disabled: starting || !currentSongId,
       running: starting,
     }),
-    showRunDetail && hasLoadedRun ? h(InitialBaseline, { artifacts, traces }) : null,
     showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts, codexEvents }) : null,
     showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Scoreboard, { report }) : null,
