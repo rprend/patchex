@@ -24,13 +24,16 @@ from text2fx import (
     LLM_MODEL,
     FxParams,
     cosine,
-    embed_text,
-    embed_wav,
     extract_json_object,
     load_runtime_dependencies,
     render_audio,
     sanitize_params,
 )
+
+try:
+    from audio_diff import compare_audio, estimate_beat_grid
+except ModuleNotFoundError:
+    from .audio_diff import compare_audio, estimate_beat_grid
 
 sf: Any = None
 genai: Any = None
@@ -515,29 +518,68 @@ def feature_distance(a: dict[str, float], b: dict[str, float]) -> float:
 
 
 def score_candidate(
-    client: Any,
-    reference_embedding: np.ndarray,
-    text_embedding: np.ndarray,
-    reference_features: dict[str, float],
+    reference_audio: np.ndarray,
+    reference_sr: int,
+    beat_grid: dict[str, Any],
     candidate_path: Path,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     candidate_audio, sr = load_audio(candidate_path)
-    candidate_features = spectral_features(candidate_audio, sr)
-    candidate_embedding = embed_wav(client, candidate_path)
-    audio_audio = cosine(reference_embedding, candidate_embedding)
-    audio_text = cosine(text_embedding, candidate_embedding)
-    feature_score = math.exp(-feature_distance(reference_features, candidate_features))
-    final = 0.45 * audio_audio + 0.25 * audio_text + 0.30 * feature_score
-    return {
-        "final": float(final),
-        "audio_audio": float(audio_audio),
-        "audio_text": float(audio_text),
-        "feature": float(feature_score),
-    }
+    if sr != reference_sr:
+        raise ValueError(f"Candidate sample rate {sr} does not match reference sample rate {reference_sr}.")
+    return compare_audio(reference_audio, candidate_audio, sr, beat_grid)
 
 
 def benchmark_loss(scores: dict[str, float]) -> float:
     return float(1.0 - scores["final"])
+
+
+def harness_improvement_plan(
+    axis: str,
+    objective: str,
+    iteration: int,
+    diff: dict[str, Any],
+    previous_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    scores = diff["scores"]
+    residual = diff.get("residual", {})
+    diagnostics = diff.get("diagnostics", {})
+    weakest = diagnostics.get("weakest_components", [])[:6]
+    score_groups = diagnostics.get("score_groups", {})
+    weak_names = [name for name, _value in weakest]
+    loss_changes: list[str] = []
+    graph_changes: list[str] = []
+    prompt_changes: list[str] = []
+
+    if any(name in weak_names for name in ("exact_envelope_50ms", "exact_band_50ms", "beat_grid_mel", "beat_grid_band", "beat_grid_envelope")):
+        loss_changes.append("Keep time-local 50ms and beat-grid scores weighted highly; they expose audible arrangement and automation errors that whole-clip averages hide.")
+        graph_changes.append("Add or emphasize a timing/automation producer pass before broad timbre changes when time-local scores are weak.")
+        prompt_changes.append("Ask the producer to name the exact weak windows or beat slices and change notes, gate, gain_points, or cutoff_points for those times.")
+    if any(name in weak_names for name in ("modulation_periodicity", "modulation_rate", "modulation_depth", "spectral_motion", "centroid_trajectory", "directional_delta")):
+        graph_changes.append("Add or emphasize a modulation specialist node when motion metrics are among the weakest components.")
+        prompt_changes.append("Require an explicit LFO or automation plan: target, rate, depth, phase, and whether motion is cyclic or one-shot.")
+    if any(name in weak_names for name in ("mel_spectrogram", "multi_resolution_spectral", "a_weighted_spectral", "spectral_features", "harmonic_noise", "codec_latent")):
+        graph_changes.append("Add or emphasize a timbre specialist node for oscillator, filter, saturation, and harmonic/noise balance.")
+        prompt_changes.append("Constrain the next producer answer to make one conservative timbre move tied to the lowest spectral metric.")
+    if any(name in weak_names for name in ("pitch_chroma", "f0_contour")):
+        graph_changes.append("Add a pitch/octave validation node before accepting candidates when pitch metrics are weak.")
+        prompt_changes.append("Force the producer to explain note, octave, and chord-tone choices before returning JSON.")
+    if float(score_groups.get("structural_penalty", 1.0)) < 0.9:
+        loss_changes.append("Preserve the structural gate; it prevents high average scores from masking onset, pitch, or spectral-structure failures.")
+    if previous_history and scores["final"] <= float(previous_history[-1]["scores"].get("final", 0.0)):
+        prompt_changes.append("The last producer change did not improve final score; ask for a smaller targeted edit instead of a full rewrite.")
+
+    return {
+        "agent": "harness_improver",
+        "axis": axis,
+        "objective": objective,
+        "iteration": iteration,
+        "observed_loss": benchmark_loss(scores),
+        "weakest_components": weakest,
+        "loss_function_updates": loss_changes or ["Current loss is directionally adequate; keep weighting focused on the weakest residual components."],
+        "graph_updates": graph_changes or ["No node topology change is indicated; keep the current producer -> loss -> critic loop for the next iteration."],
+        "prompt_updates": prompt_changes + list(residual.get("recommendations", []))[:4],
+        "missing_result_traits": list(residual.get("missing", []))[:6],
+    }
 
 
 def run_iterative_codex_candidate(
@@ -553,8 +595,9 @@ def run_iterative_codex_candidate(
     iterations: int,
     seconds: float,
     sample_rate: int,
-    reference_embedding: np.ndarray,
-    text_embedding: np.ndarray,
+    reference_audio: np.ndarray,
+    reference_sr: int,
+    beat_grid: dict[str, Any],
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     if iterations < 1:
         raise ValueError("Candidate iterations must be at least 1.")
@@ -579,8 +622,12 @@ def run_iterative_codex_candidate(
         attempt_path = output_dir / f"candidate_{candidate_index:03d}_iter_{iteration:02d}.wav"
         rendered = render_recipe(recipe, seconds, sample_rate)
         sf.write(attempt_path, rendered.T, sample_rate)
-        scores = score_candidate(client, reference_embedding, text_embedding, analysis["features"], attempt_path)
+        diff = score_candidate(reference_audio, reference_sr, beat_grid, attempt_path)
+        scores = diff["scores"]
         loss = benchmark_loss(scores)
+        harness_plan = harness_improvement_plan(axis, objective, iteration, diff, benchmark_history)
+        harness_path = output_dir / f"harness_improver_step_{candidate_index:03d}_iter_{iteration:02d}.json"
+        harness_path.write_text(json.dumps(harness_plan, indent=2) + "\n")
         attempt = {
             "candidate_index": candidate_index,
             "iteration": iteration,
@@ -588,6 +635,10 @@ def run_iterative_codex_candidate(
             "path": str(attempt_path),
             "scores": scores,
             "loss": loss,
+            "residual": diff.get("residual", {}),
+            "diagnostics": diff.get("diagnostics", {}),
+            "harness_improvement": harness_plan,
+            "harness_improvement_path": str(harness_path),
             "recipe": recipe,
         }
         attempts.append(attempt)
@@ -597,6 +648,8 @@ def run_iterative_codex_candidate(
                 "iteration": iteration,
                 "loss": loss,
                 "scores": scores,
+                "residual": diff.get("residual", {}),
+                "harness_improvement": harness_plan,
                 "recipe": recipe_to_json(recipe),
                 "audio_path": str(attempt_path),
             }
@@ -620,6 +673,9 @@ def run_iterative_codex_candidate(
                 "path": item["path"],
                 "scores": item["scores"],
                 "loss": item["loss"],
+                "residual": item["residual"],
+                "harness_improvement": item["harness_improvement"],
+                "harness_improvement_path": item["harness_improvement_path"],
                 "recipe": recipe_to_json(item["recipe"]),
             }
             for item in attempts
@@ -714,11 +770,11 @@ def codex_recipe_prompt(
         "Do not design the musical pattern. The pattern is fixed across every candidate and every iteration; copy it exactly into the JSON.\n\n"
         "Quantitative benchmark used after each answer:\n"
         "- Render your JSON to audio with the fixed renderer.\n"
-        "- Embed the rendered WAV and reference WAV with the configured audio embedding model.\n"
-        "- Embed the target prompt with the configured text embedding model.\n"
-        "- Compute final_score = 0.45 * audio_audio_similarity + 0.25 * audio_text_similarity + 0.30 * feature_similarity.\n"
+        "- Compare rendered audio to the reference with time-local, beat-grid, timbre, motion, pitch, stereo, and structural-gate metrics.\n"
+        "- Compute final_score from those metric groups; exact 50ms windows, beat slices, motion, and structural penalties can dominate when they are poor.\n"
         "- Compute loss = 1.0 - final_score. Lower loss is better.\n"
-        "Use benchmark history below to make a concrete improvement, not a generic rewrite.\n\n"
+        "- The harness improver inspects each loss/result pair and may recommend loss-function emphasis, graph-node emphasis, or prompt edits.\n"
+        "Use benchmark history below to make a concrete improvement, not a generic rewrite. Treat harness_improvement.prompt_updates as binding guidance for the next answer.\n\n"
         f"Candidate index: {candidate_index}\n"
         f"Candidate axis: {axis}\n"
         f"Candidate objective: {objective}\n"
@@ -997,8 +1053,7 @@ def main() -> None:
         tmp_path = Path(tmp)
         reference_clip = tmp_path / "reference.wav"
         sf.write(reference_clip, reference_audio.T, reference_sr)
-        reference_embedding = embed_wav(client, reference_clip)
-        text_embedding = embed_text(client, target_prompt)
+        beat_grid = estimate_beat_grid(reference_audio, reference_sr)
         specs = list(enumerate(build_candidate_specs(args.candidates, args.axis_trials)))
         max_workers = max(1, min(4, len(specs)))
         print(f"parallel_candidates count={len(specs)} max_workers={max_workers}", flush=True)
@@ -1018,8 +1073,9 @@ def main() -> None:
                 iterations=args.candidate_iterations,
                 seconds=args.seconds,
                 sample_rate=args.sample_rate,
-                reference_embedding=reference_embedding,
-                text_embedding=text_embedding,
+                reference_audio=reference_audio,
+                reference_sr=reference_sr,
+                beat_grid=beat_grid,
             )
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1063,6 +1119,9 @@ def main() -> None:
                 "path": item["path"],
                 "scores": item["scores"],
                 "loss": item["loss"],
+                "residual": item.get("residual", {}),
+                "harness_improvement": item.get("harness_improvement", {}),
+                "harness_improvement_path": item.get("harness_improvement_path", ""),
                 "recipe": recipe_to_json(item["recipe"]),
                 "iterations": item["iterations"],
             }

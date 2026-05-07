@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Activity, ArrowLeft, Brain, MessageSquareText, SlidersHorizontal } from 'lucide-react';
+import { Activity, ArrowLeft, Brain, MessageSquareText, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { Terminal } from './components/ui/terminal.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
@@ -54,6 +54,7 @@ const AGENT_LABELS = {
   analyzer: "Analyzer",
   producer: "Producer",
   residual_critic: "Critic",
+  harness_improver: "Harness Improver",
   loss: "Calculate Accuracy",
 };
 
@@ -85,6 +86,7 @@ function normalizeAgent(agent) {
   if (agent.startsWith("layer_builder")) return agent.replace("layer_builder", "producer");
   if (agent.startsWith("producer")) return agent;
   if (agent.startsWith("residual_critic")) return agent;
+  if (agent.startsWith("harness_improver")) return agent;
   if (agent.startsWith("loss")) return agent;
   return agent;
 }
@@ -103,6 +105,7 @@ function agentName(agent) {
   const base = agentBase(agent);
   if (base === "producer") return "Producer";
   if (base === "residual_critic") return "Critic";
+  if (base === "harness_improver") return "Harness Improver";
   if (base === "loss") return "Calculate Accuracy";
   return AGENT_LABELS[base] || base.replaceAll("_", " ");
 }
@@ -115,6 +118,7 @@ function roleName(role, agent) {
   if (role === "prompt") {
     if (agentBase(agent) === "producer") return "Producer instructions";
     if (agentBase(agent) === "residual_critic") return "Critic instructions";
+    if (agentBase(agent) === "harness_improver") return "Harness instructions";
     if (agentBase(agent) === "analyzer") return "Analyzer instructions";
   }
   return ROLE_LABELS[role] || String(role || "File").replaceAll("_", " ");
@@ -427,6 +431,12 @@ function outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey) {
     ];
   }
   const latestNote = (notes[statusKey] || []).at(-1);
+  if (base === "harness_improver") {
+    return [
+      { label: "Improvement plan", value: filename(byRole("harness_improvement", "file")), trace: byRole("harness_improvement", "file") },
+      { label: "Focus", value: latestNote || "loss, graph, prompt advice" },
+    ];
+  }
   return [
     { label: "Brief", value: filename(byRole("recommendation")), trace: byRole("recommendation") },
     { label: "Prompt", value: filename(byRole("prompt")) || latestNote || "Open", trace: byRole("prompt") },
@@ -557,7 +567,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
 
   const makeAgentNode = (id, label, base, step, x, y, parentId = undefined, detail = "") => {
     const statusKey = step === null ? base : `${base}_${step}`;
-    const icon = base === "analyzer" ? Brain : base === "producer" ? SlidersHorizontal : base === "loss" ? Activity : MessageSquareText;
+    const icon = base === "analyzer" ? Brain : base === "producer" ? SlidersHorizontal : base === "loss" ? Activity : base === "harness_improver" ? RefreshCw : MessageSquareText;
     const nodeTraces = traceSet(traces, base, step);
     const rows = outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey);
     return {
@@ -613,14 +623,16 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
       position: { x: 8, y: y + 22 },
       draggable: false,
       selectable: false,
-      style: { width: 920, height: 196 },
+      style: { width: 1220, height: 196 },
       data: {},
     });
     nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 36, 34, frameId, "writes session files"));
     nodes.push(makeAgentNode(`loss-${step}`, "Calculate Accuracy", "loss", step, 336, 34, frameId, "renders and scores"));
-    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 636, 34, frameId, "writes next brief"));
+    nodes.push(makeAgentNode(`harness-${step}`, "Harness Improver", "harness_improver", step, 636, 34, frameId, "improves loss, graph, and prompts"));
+    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 936, 34, frameId, "writes next brief"));
     edges.push(makeEdge(`p-l-${step}`, `producer-${step}`, `loss-${step}`, statuses[`loss_${step}`] === "running"));
-    edges.push(makeEdge(`l-c-${step}`, `loss-${step}`, `critic-${step}`, statuses[`residual_critic_${step}`] === "running"));
+    edges.push(makeEdge(`l-h-${step}`, `loss-${step}`, `harness-${step}`, statuses[`harness_improver_${step}`] === "running"));
+    edges.push(makeEdge(`h-c-${step}`, `harness-${step}`, `critic-${step}`, statuses[`residual_critic_${step}`] === "running"));
     if (index === 0) edges.push(makeEdge("a-p-0", "analyzer", `producer-${step}`));
     if (index > 0) edges.push(makeEdge(`c-p-${step}`, `critic-${steps[index - 1]}`, `producer-${step}`));
   });
@@ -963,6 +975,7 @@ function App() {
           ...current,
           [`producer_${idx}`]: "completed",
           [`loss_${idx}`]: "completed",
+          [`harness_improver_${idx}`]: "completed",
           [`residual_critic_${idx}`]: "completed",
         }));
       }
@@ -983,6 +996,7 @@ function App() {
         name.startsWith("codex_") ||
         name.startsWith("audio_diff_") ||
         name.startsWith("producer_audio_diff_") ||
+        name.startsWith("harness_improver_step_") ||
         name.match(/^producer_reconstruction_step_\d+_.+\.wav$/) ||
         name === "final_reconstruction.wav" ||
         name.startsWith("recommendation_step_") ||
@@ -999,6 +1013,7 @@ function App() {
       const role = artifact.name.startsWith("codex_")
         ? artifact.name.includes("_prompt") ? "prompt" : "answer"
         : artifact.name.startsWith("producer_audio_diff") ? "producer_audio_diff"
+        : artifact.name.startsWith("harness_improver_step_") ? "harness_improvement"
         : artifact.name.startsWith("audio_diff") ? "audio_diff"
         : artifact.name.match(/^producer_reconstruction_step_/) ? "producer_render"
         : artifact.name === "final_reconstruction.wav" ? "render"
@@ -1014,6 +1029,7 @@ function App() {
       const step = stepMatch ? Number(stepMatch[1]) : null;
       if (role === "producer_render" && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
       if (role === "audio_diff" && step !== null) agent = `loss_step_${String(step).padStart(2, "0")}`;
+      if (role === "harness_improvement" && step !== null) agent = `harness_improver_step_${String(step).padStart(2, "0")}`;
       addTrace({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name, step });
     });
     (loadedReport?.history || []).forEach((item) => {
@@ -1021,7 +1037,7 @@ function App() {
       const step = Number(item.step);
       const score = Number(item.scores?.final || item.scores || 0);
       setWinners((current) => ({ ...current, [step]: { winner: item.winner, score: score.toFixed(3) } }));
-      setStatuses((current) => ({ ...current, [`producer_${step}`]: "completed", [`loss_${step}`]: "completed", [`residual_critic_${step}`]: "completed" }));
+      setStatuses((current) => ({ ...current, [`producer_${step}`]: "completed", [`loss_${step}`]: "completed", [`harness_improver_${step}`]: "completed", [`residual_critic_${step}`]: "completed" }));
       const audioName = item.audio_path?.split("/").pop();
       const diffName = item.audio_diff_path?.split("/").pop();
       const audioArtifact = artifactList.find((artifact) => artifact.name === audioName);
