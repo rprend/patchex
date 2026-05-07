@@ -652,7 +652,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Run media path escapes run directory.")
                 self.serve_file(target)
                 return
-            if path in {"/v1", "/v1.html", "/v1_reconstruct", "/v1_reconstruct.html"}:
+            route_run_id = path.strip("/").split("/", 1)[0]
+            is_run_route = (RUNS / route_run_id).is_dir() if route_run_id else False
+            if path in {"/v1", "/v1.html", "/v1_reconstruct", "/v1_reconstruct.html"} or path.startswith("/v1/") or is_run_route:
                 target = UI / "v1.html"
             else:
                 target = UI / ("index.html" if path == "/" else path.lstrip("/"))

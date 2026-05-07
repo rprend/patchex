@@ -9,6 +9,7 @@
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-collapsible": "latest",
     "@vitejs/plugin-react": "latest",
+    "@xyflow/react": "^12.10.2",
     "class-variance-authority": "latest",
     "clsx": "latest",
     "framer-motion": "latest",

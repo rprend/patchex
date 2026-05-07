@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import * as Collapsible from '@radix-ui/react-collapsible';
-import { ChevronRight } from 'lucide-react';
+import { Background, Controls, ReactFlow } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { Terminal } from './components/ui/terminal.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
@@ -55,6 +55,8 @@ const AGENT_LABELS = {
   residual_critic: "Critic",
   loss: "Calculate Accuracy",
 };
+
+const RUN_ID_PATTERN = /^\d{8}_\d{6}_v1_[A-Za-z0-9]+$/;
 
 function api(path, options = {}) {
   return fetch(path, options).then(async (res) => {
@@ -306,6 +308,22 @@ function transcriptLabel(trace) {
   return `${roleName(trace.role, trace.agent)} (${name})`;
 }
 
+function currentRouteRunId() {
+  const path = window.location.pathname.replace(/^\/+/, "");
+  if (!path || path === "v1" || path === "v1.html") return null;
+  if (path.startsWith("v1/")) {
+    const id = path.split("/")[1];
+    return RUN_ID_PATTERN.test(id) ? id : null;
+  }
+  return RUN_ID_PATTERN.test(path) ? path : null;
+}
+
+function pushRunRoute(runId) {
+  if (!runId) return;
+  const target = `/${runId}`;
+  if (window.location.pathname !== target) window.history.pushState({}, "", target);
+}
+
 function AgentTranscript({ traces }) {
   const [items, setItems] = useState([]);
   const tracesKey = traces.map(traceKey).join("|");
@@ -344,113 +362,133 @@ function AgentTranscript({ traces }) {
   );
 }
 
-function TraceFile({ trace }) {
-  const [content, setContent] = useState(trace.text || "");
-  const [loading, setLoading] = useState(false);
-  const name = trace.name || trace.path?.split("/").pop() || "artifact";
-  const isAudio = name.endsWith(".wav");
-  const startsOpen = isAudio || trace.role?.includes("recommendation") || trace.role?.includes("winner_audio_diff");
+function FlowAgentNode({ data, selected }) {
+  const status = data.status === "completed" ? "Done" : data.status === "running" ? "Working" : "Waiting";
+  return h("button", { type: "button", className: selected ? "workflow-node selected" : "workflow-node" },
+    h("span", { className: "workflow-node-title" }, data.label),
+    data.detail ? h("span", { className: "workflow-node-detail" }, data.detail) : null,
+    h("span", { className: data.status === "running" ? "workflow-node-status active" : "workflow-node-status" }, status)
+  );
+}
+
+function IterationFrameNode({ data }) {
+  return h("div", { className: "iteration-frame-node" },
+    h("strong", null, data.label),
+    data.detail ? h("span", null, data.detail) : null
+  );
+}
+
+const nodeTypes = { agent: FlowAgentNode, iterationFrame: IterationFrameNode };
+
+function traceSet(traces, base, step = null) {
+  return traces.filter((trace) => {
+    const sameStep = step === null ? trace.step === null || trace.step === undefined : trace.step === step;
+    if (!sameStep) return false;
+    if (base === "loss") return agentBase(trace.agent) === "loss" || trace.role?.includes("audio_diff") || trace.role?.includes("winner_render");
+    return agentBase(trace.agent) === base;
+  });
+}
+
+function WorkflowCanvas({ traces, statuses, notes, winners, runNotes }) {
+  const steps = Array.from(new Set(traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined))).sort((a, b) => a - b);
+  const [selectedId, setSelectedId] = useState("analyzer");
 
   useEffect(() => {
-    if (!trace.url || isAudio || content) return undefined;
-    let cancelled = false;
-    setLoading(true);
-    fetch(trace.url)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Could not load ${trace.url}`);
-        return res.text();
-      })
-      .then((text) => {
-        if (!cancelled) setContent(text.length > 24000 ? `${text.slice(0, 24000)}\n... [truncated; open artifact for full file]` : text);
-      })
-      .catch((error) => {
-        if (!cancelled) setContent(error.stack || String(error));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [trace.url, isAudio]);
+    if (selectedId === "analyzer" || steps.some((step) => selectedId.endsWith(`-${step}`))) return;
+    setSelectedId("analyzer");
+  }, [steps.join(","), selectedId]);
 
-  return h("details", { className: "trace-file react-trace-file", open: startsOpen },
-    h("summary", null,
-      h("span", null, roleName(trace.role, trace.agent)),
-      trace.url ? h("a", { href: trace.url, target: "_blank" }, "Open") : null
-    ),
-    isAudio
-      ? h(WaveformPlayer, { url: trace.url, label: roleName(trace.role, trace.agent), compact: true })
-      : h("pre", null, loading ? "loading..." : content || trace.path)
-  );
-}
-
-function AgentCard({ agent, traces, status, notes }) {
-  const [open, setOpen] = useState(false);
-  const completed = status === "completed";
-  const title = agentName(agent);
-  return h(Collapsible.Root, {
-    className: `agent-card ${completed ? "completed" : "running"}`,
-    open,
-    onOpenChange: setOpen,
-  },
-    h(Collapsible.Trigger, { className: "agent-card-head" },
-      h(ChevronRight, { className: "trace-chevron", "aria-hidden": true, size: 16 }),
-      h("div", null,
-        h("strong", null, title),
-        notes?.length ? h("p", null, notes[notes.length - 1]) : null
-      ),
-      h("span", { className: "agent-state" }, completed ? "Done" : "Working")
-    ),
-    h(Collapsible.Content, { className: "agent-content" },
-      h(AgentTranscript, { traces })
-    )
-  );
-}
-
-function IterationGroup({ step, traces, statuses, notes, winners }) {
-  const [open, setOpen] = useState(true);
-  const producer = traces.filter((trace) => agentBase(trace.agent) === "producer");
-  const loss = traces.filter((trace) => agentBase(trace.agent) === "loss" || trace.role?.includes("audio_diff") || trace.role?.includes("winner_render"));
-  const critic = traces.filter((trace) => agentBase(trace.agent) === "residual_critic");
-  const winner = winners[step];
-  return h(Collapsible.Root, { className: "iteration-group", open, onOpenChange: setOpen },
-    h(Collapsible.Trigger, {
-      className: "iteration-rail",
-      "aria-label": `${open ? "Collapse" : "Expand"} iteration ${step + 1}`,
-    }),
-    h(Collapsible.Trigger, { className: "iteration-summary" },
-      h(ChevronRight, { className: "trace-chevron", "aria-hidden": true, size: 16 }),
-      h("span", null, `Iteration ${step + 1}`),
-      h("strong", null, winner ? `Winner: ${friendlyWinner(winner.winner)} · ${winner.score}` : "Produce, calculate accuracy, critique")
-    ),
-    h(Collapsible.Content, { className: "iteration-content" },
-      h("div", { className: "iteration-body" },
-        h(AgentCard, { agent: "producer", traces: producer, status: statuses[`producer_${step}`], notes: notes[`producer_${step}`] || [] }),
-        h(AgentCard, { agent: "loss", traces: loss, status: statuses[`loss_${step}`], notes: notes[`loss_${step}`] || [] }),
-        h(AgentCard, { agent: "residual_critic", traces: critic, status: statuses[`residual_critic_${step}`], notes: notes[`residual_critic_${step}`] || [] })
-      )
-    )
-  );
-}
-
-function Timeline({ traces, statuses, notes, winners, runNotes }) {
-  const analyzerTraces = traces.filter((trace) => agentBase(trace.agent) === "analyzer");
-  const steps = Array.from(new Set(traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined))).sort((a, b) => a - b);
-  return h("section", { className: "section-block timeline-section" },
-    h("div", { className: "section-title" },
-      h("h2", null, "Trace"),
-      h("p", null, "Analyzer plans the target once. Each iteration then shows the Producer change, the scored audio, and the Critic brief that drives the next pass.")
-    ),
-    runNotes.length ? h("div", { className: "activity-strip" }, runNotes.slice(-5).map((note, index) => h("span", { key: `${note}-${index}` }, note))) : null,
-    analyzerTraces.length ? h(AgentCard, { agent: "analyzer", traces: analyzerTraces, status: statuses.analyzer, notes: notes.analyzer || [] }) : null,
-    h("div", { className: "iterations" },
-      steps.map((step) => h(IterationGroup, {
-        key: step,
+  const makeAgentNode = (id, label, base, step, x, y, parentId = undefined, detail = "") => {
+    const statusKey = step === null ? base : `${base}_${step}`;
+    return {
+      id,
+      type: "agent",
+      position: { x, y },
+      parentId,
+      extent: parentId ? "parent" : undefined,
+      draggable: false,
+      data: {
+        id,
+        label,
+        detail,
+        base,
         step,
-        traces: traces.filter((trace) => trace.step === step),
-        statuses,
-        notes,
-        winners,
-      }))
+        status: statuses[statusKey] || (traceSet(traces, base, step).length ? "running" : "waiting"),
+        traces: traceSet(traces, base, step),
+        notes: notes[statusKey] || [],
+      },
+    };
+  };
+
+  const nodes = [
+    makeAgentNode("analyzer", "Analyzer", "analyzer", null, 24, 26, undefined, "one-time source analysis"),
+  ];
+  const edges = [];
+  steps.forEach((step, index) => {
+    const frameId = `iteration-${step}`;
+    const y = 170 + index * 240;
+    const winner = winners[step];
+    nodes.push({
+      id: frameId,
+      type: "iterationFrame",
+      position: { x: 8, y },
+      draggable: false,
+      selectable: false,
+      style: { width: 840, height: 178 },
+      data: {
+        label: `Iteration ${step + 1}`,
+        detail: winner ? `${friendlyWinner(winner.winner)} · ${winner.score}` : "produce → calculate accuracy → critique",
+      },
+    });
+    nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 32, 54, frameId, "writes session files"));
+    nodes.push(makeAgentNode(`loss-${step}`, "Calculate Accuracy", "loss", step, 314, 54, frameId, "renders and scores"));
+    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 596, 54, frameId, "writes next brief"));
+    edges.push({ id: `p-l-${step}`, source: `producer-${step}`, target: `loss-${step}`, type: "smoothstep", animated: statuses[`loss_${step}`] === "running" });
+    edges.push({ id: `l-c-${step}`, source: `loss-${step}`, target: `critic-${step}`, type: "smoothstep", animated: statuses[`residual_critic_${step}`] === "running" });
+    if (index === 0) edges.push({ id: "a-p-0", source: "analyzer", target: `producer-${step}`, type: "smoothstep" });
+    if (index > 0) edges.push({ id: `c-p-${step}`, source: `critic-${steps[index - 1]}`, target: `producer-${step}`, type: "smoothstep" });
+  });
+
+  const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.id === "analyzer");
+  const selected = selectedNode?.data || { label: "Select a block", traces: [] };
+
+  return h("section", { className: "section-block workflow-section" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Run Canvas"),
+      h("p", null, "Click any block to inspect the exact prompt and output files for that agent.")
+    ),
+    runNotes.length ? h("div", { className: "activity-strip" }, runNotes.slice(-4).map((note, index) => h("span", { key: `${note}-${index}` }, note))) : null,
+    h("div", { className: "workflow-layout" },
+      h("div", { className: "workflow-canvas" },
+        h(ReactFlow, {
+          nodes,
+          edges,
+          nodeTypes,
+          fitView: true,
+          fitViewOptions: { padding: 0.18 },
+          nodesDraggable: false,
+          nodesConnectable: false,
+          elementsSelectable: true,
+          panOnScroll: true,
+          onNodeClick: (_, node) => {
+            if (node.type === "agent") setSelectedId(node.id);
+          },
+        },
+          h(Background, { gap: 18, color: "#ececec" }),
+          h(Controls, { showInteractive: false })
+        )
+      ),
+      h("aside", { className: "workflow-sidebar" },
+        h("div", { className: "sidebar-head" },
+          h("div", null,
+            h("span", null, selected.step === null || selected.step === undefined ? "Agent" : `Iteration ${selected.step + 1}`),
+            h("h3", null, selected.label)
+          ),
+          h(Badge, { variant: "outline" }, selected.status === "completed" ? "Done" : selected.status === "running" ? "Working" : "Waiting")
+        ),
+        selected.notes?.length ? h("p", { className: "sidebar-note" }, selected.notes[selected.notes.length - 1]) : null,
+        h(AgentTranscript, { traces: selected.traces || [] })
+      )
     )
   );
 }
@@ -628,6 +666,7 @@ function App() {
   const loadRuns = useCallback(async () => {
     const data = await api("/api/reconstruction-runs");
     setRuns(data.runs || []);
+    return data.runs || [];
   }, []);
 
   const resetRunView = useCallback(() => {
@@ -858,6 +897,7 @@ function App() {
           });
           activeRun.current = data.run_id;
           localStorage.setItem("v1ActiveRunId", data.run_id);
+          pushRunRoute(data.run_id);
           attachEvents(data.run_id);
         }
       };
@@ -868,8 +908,9 @@ function App() {
     }
   }, [addRunNote, attachEvents, clipStart, currentFile, resetRunView]);
 
-  const loadPastRun = useCallback(async (run) => {
+  const loadPastRun = useCallback(async (run, options = {}) => {
     resetRunView();
+    if (options.push !== false) pushRunRoute(run.id);
     setStatus("Viewing past run");
     setArtifacts(run.artifacts || []);
     const reportArtifact = run.artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
@@ -884,15 +925,30 @@ function App() {
 
   useEffect(() => {
     loadFiles().catch((error) => addRunNote(error.stack || String(error)));
-    loadRuns().catch((error) => addRunNote(error.stack || String(error)));
+    loadRuns()
+      .then((loadedRuns) => {
+        const routeId = currentRouteRunId();
+        if (!routeId) return;
+        const run = loadedRuns.find((item) => item.id === routeId);
+        if (run) return loadPastRun(run, { push: false });
+        return api(`/api/reconstructions/${routeId}`)
+          .then(async (job) => {
+            setStatus(job.status === "running" ? "Running" : "Viewing past run");
+            setArtifacts(job.artifacts || []);
+            await renderTraceArtifacts(job.artifacts || []);
+            if (job.status === "running") {
+              activeRun.current = routeId;
+              localStorage.setItem("v1ActiveRunId", routeId);
+              attachEvents(routeId);
+            }
+          })
+          .catch(() => addRunNote(`Run ${routeId} is not available.`));
+      })
+      .catch((error) => addRunNote(error.stack || String(error)));
   }, []);
 
   useEffect(() => {
-    if (!currentFile) return;
-    resetRunView();
-  }, [currentFile]);
-
-  useEffect(() => {
+    if (currentRouteRunId()) return undefined;
     if (!activeRun.current) return undefined;
     let events = null;
     api(`/api/reconstructions/${activeRun.current}`)
@@ -917,6 +973,7 @@ function App() {
 
   const audioUrl = currentFile ? `/media/references/${encodeURIComponent(currentFile)}` : "";
   const runActive = status === "Running" || status === "Extracting";
+  const hasRunView = runActive || traces.length > 0 || artifacts.length > 0 || report;
   return h("main", { className: "react-shell" },
     h(SourceSelector, {
       files,
@@ -934,10 +991,10 @@ function App() {
       disabled: runActive || !currentFile,
       running: runActive,
     }),
-    h(Timeline, { traces, statuses, notes, winners, runNotes }),
-    h(Comparison, { artifacts }),
-    h(Scoreboard, { report }),
-    h(Artifacts, { artifacts, onReport: setReport }),
+    hasRunView ? h(WorkflowCanvas, { traces, statuses, notes, winners, runNotes }) : null,
+    hasRunView ? h(Comparison, { artifacts }) : null,
+    hasRunView ? h(Scoreboard, { report }) : null,
+    hasRunView ? h(Artifacts, { artifacts, onReport: setReport }) : null,
     h(RunHistory, { runs, onLoad: loadPastRun, onRefresh: loadRuns })
   );
 }
