@@ -1656,6 +1656,26 @@ textarea {
   overflow: auto;
 }
 
+.audio-compare-stack {
+  display: grid;
+  gap: .45rem;
+}
+
+.play-both-button {
+  justify-self: start;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: .45rem .75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.play-both-button:hover {
+  filter: brightness(.96);
+}
+
 .session-artifact-viewer {
   min-height: 0;
   overflow: auto;

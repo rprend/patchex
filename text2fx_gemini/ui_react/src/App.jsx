@@ -187,7 +187,7 @@ function cleanCodexLine(line) {
     .trim();
 }
 
-function WaveformPlayer({ url, label, compact = false, color = "#323a85" }) {
+function WaveformPlayer({ url, label, compact = false, color = "#323a85", onReady }) {
   const waveRef = useRef(null);
   const playerRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -211,11 +211,13 @@ function WaveformPlayer({ url, label, compact = false, color = "#323a85" }) {
     wave.on("finish", () => setPlaying(false));
     wave.on("play", () => setPlaying(true));
     wave.on("pause", () => setPlaying(false));
+    onReady?.(wave);
     return () => {
+      onReady?.(null);
       wave.destroy();
       playerRef.current = null;
     };
-  }, [url, compact, color]);
+  }, [url, compact, color, onReady]);
 
   if (!url) return null;
   return h("div", { className: compact ? "audio-player compact" : "audio-player" },
@@ -230,6 +232,40 @@ function WaveformPlayer({ url, label, compact = false, color = "#323a85" }) {
       h("a", { href: url, target: "_blank" }, "Open")
     ),
     h("div", { className: "audio-wave", ref: waveRef })
+  );
+}
+
+function AudioComparePlayers({ sourceUrl, renderUrl, renderLabel = "Rendered audio" }) {
+  const sourceRef = useRef(null);
+  const renderRef = useRef(null);
+  const [playingBoth, setPlayingBoth] = useState(false);
+  const setSourceReady = useCallback((wave) => { sourceRef.current = wave; }, []);
+  const setRenderReady = useCallback((wave) => { renderRef.current = wave; }, []);
+  const toggleBoth = useCallback(() => {
+    const source = sourceRef.current;
+    const render = renderRef.current;
+    if (!source || !render) return;
+    if (playingBoth) {
+      source.pause();
+      render.pause();
+      setPlayingBoth(false);
+      return;
+    }
+    source.setTime(0);
+    render.setTime(0);
+    source.play();
+    render.play();
+    setPlayingBoth(true);
+  }, [playingBoth]);
+
+  return h("div", { className: "audio-compare-stack" },
+    sourceUrl && renderUrl ? h("button", {
+      type: "button",
+      className: "play-both-button",
+      onClick: toggleBoth,
+    }, playingBoth ? "Pause both" : "Play both") : null,
+    sourceUrl ? h(WaveformPlayer, { url: sourceUrl, label: "Target source", compact: true, onReady: setSourceReady }) : null,
+    renderUrl ? h(WaveformPlayer, { url: renderUrl, label: renderLabel, compact: true, color: "#657cc2", onReady: setRenderReady }) : null
   );
 }
 
@@ -655,8 +691,11 @@ function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = []
     ));
   return h("div", { className: "session-artifact-viewer" },
     h("div", { className: "sidebar-audio-compare" },
-      sourceArtifact ? h(WaveformPlayer, { url: sourceArtifact.url, label: "Target source", compact: true }) : null,
-      outputAudio ? h(WaveformPlayer, { url: outputAudio.url, label: "Producer audio", compact: true, color: "#657cc2" }) : null
+      h(AudioComparePlayers, {
+        sourceUrl: sourceArtifact?.url,
+        renderUrl: outputAudio?.url,
+        renderLabel: "Producer audio",
+      })
     ),
     session?.error ? h("pre", { className: "sidebar-pre" }, session.error) : session ? h(MidiTimeline, { session }) : h("div", { className: "sidebar-loading" }, "Loading session...")
   );
@@ -681,10 +720,11 @@ function SidebarDetail({ selected, detail, sourceArtifact, allTraces = [] }) {
     isAudio ? h("div", { className: "sidebar-audio-compare" },
       isSourceAudio
         ? h(WaveformPlayer, { url: trace.url, label: "Target source", compact: true })
-        : [
-            sourceArtifact ? h(WaveformPlayer, { url: sourceArtifact.url, label: "Target source", compact: true, key: "source" }) : null,
-            h(WaveformPlayer, { url: trace.url, label: detail?.label || "Rendered audio", compact: true, color: "#657cc2", key: "render" }),
-          ]
+        : h(AudioComparePlayers, {
+            sourceUrl: sourceArtifact?.url,
+            renderUrl: trace.url,
+            renderLabel: detail?.label || "Rendered audio",
+          })
     ) : isAccuracy ? h(AccuracyViewer, { trace }) : isSession ? h(SessionArtifactViewer, { trace, selected, sourceArtifact, allTraces }) : detail ? h(TextArtifactViewer, { trace }) : h(AgentActivity, { selected })
   );
 }
