@@ -366,14 +366,22 @@ function AgentTranscript({ traces }) {
 function FlowAgentNode({ data, selected }) {
   const classes = ["workflow-node", `status-${data.status || "waiting"}`];
   if (selected) classes.push("selected");
-  return h("button", { type: "button", className: classes.join(" ") },
+  return h("div", { className: classes.join(" ") },
     h(Handle, { className: "workflow-handle workflow-handle-left", type: "target", position: Position.Left }),
     h("span", { className: "workflow-node-head" },
       h("span", { className: "workflow-node-icon" }, data.icon ? h(data.icon, { size: 18, strokeWidth: 2.2 }) : data.label.slice(0, 1)),
       h("span", { className: "workflow-node-title" }, data.label),
       data.status === "running" ? h("span", { className: "node-spinner", "aria-label": "In progress" }) : null
     ),
-    (data.rows || []).map((row) => h("span", { className: "workflow-node-row", key: row.label },
+    (data.rows || []).map((row) => h(row.trace ? "button" : "span", {
+      type: row.trace ? "button" : undefined,
+      className: row.trace ? "workflow-node-row clickable" : "workflow-node-row",
+      key: `${row.label}-${row.value}`,
+      onClick: row.trace ? (event) => {
+        event.stopPropagation();
+        data.onOpen?.(row.trace, data);
+      } : undefined,
+    },
       h("span", null, row.label),
       h("strong", null, row.value)
     )),
@@ -399,9 +407,113 @@ function traceSet(traces, base, step = null) {
   });
 }
 
-function WorkflowCanvas({ traces, statuses, notes, winners }) {
+function outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey) {
+  const byRole = (...patterns) => nodeTraces.find((trace) => patterns.some((pattern) => trace.role === pattern || trace.role?.includes(pattern)));
+  const filename = (trace) => trace?.name || trace?.path?.split("/").pop() || "Open";
+  if (base === "analyzer") {
+    return [
+      { label: "Plan", value: filename(byRole("layer_analysis", "parsed_answer")), trace: byRole("layer_analysis", "parsed_answer") },
+      { label: "Prompt", value: filename(byRole("prompt")), trace: byRole("prompt") },
+    ];
+  }
+  if (base === "producer") {
+    return [
+      { label: "Audio", value: filename(byRole("producer_render", "render")), trace: byRole("producer_render", "render") },
+      { label: "Session", value: filename(byRole("accepted_session", "session_proposal")), trace: byRole("accepted_session", "session_proposal") },
+    ];
+  }
+  if (base === "loss") {
+    const winner = step !== null && step !== undefined ? winners[step] : null;
+    return [
+      { label: "Score", value: winner?.score || "pending", trace: byRole("winner_audio_diff", "audio_diff") },
+      { label: "Audio", value: filename(byRole("winner_render", "render")), trace: byRole("winner_render", "render") },
+    ];
+  }
+  const latestNote = (notes[statusKey] || []).at(-1);
+  return [
+    { label: "Brief", value: filename(byRole("recommendation")), trace: byRole("recommendation") },
+    { label: "Prompt", value: filename(byRole("prompt")) || latestNote || "Open", trace: byRole("prompt") },
+  ];
+}
+
+function scoreMeaning(name) {
+  if (name.includes("envelope")) return "Timing and loudness shape over the clip.";
+  if (name.includes("beat_grid")) return "Beat-aligned similarity, so wrong moments are penalized.";
+  if (name.includes("band")) return "Energy match across frequency bands over time.";
+  if (name.includes("modulation")) return "LFO-like motion rate and depth.";
+  if (name.includes("spectral") || name.includes("mel")) return "Overall tone and frequency shape.";
+  if (name.includes("chroma") || name.includes("pitch")) return "Pitch and harmonic content.";
+  if (name.includes("stereo")) return "Width and mid-side similarity.";
+  if (name.includes("transient")) return "Attack and onset behavior.";
+  return "Higher is closer to the target.";
+}
+
+function AccuracyViewer({ trace }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!trace?.url) return undefined;
+    let cancelled = false;
+    fetch(trace.url)
+      .then((res) => res.json())
+      .then((json) => { if (!cancelled) setData(json); })
+      .catch((error) => { if (!cancelled) setData({ error: error.stack || String(error) }); });
+    return () => { cancelled = true; };
+  }, [trace?.url]);
+  const scores = data?.scores || data?.best_scores || {};
+  const keys = Object.keys(scores).filter((key) => Number.isFinite(Number(scores[key]))).slice(0, 18);
+  if (!trace) return null;
+  if (!data) return h("div", { className: "sidebar-loading" }, "Loading accuracy report...");
+  if (data.error) return h("pre", { className: "sidebar-pre" }, data.error);
+  return h("div", { className: "accuracy-viewer" },
+    h("div", { className: "accuracy-summary" },
+      h("strong", null, Number(scores.final || 0).toFixed(3)),
+      h("span", null, "Final similarity")
+    ),
+    h("div", { className: "accuracy-bars" },
+      keys.map((key) => {
+        const value = Number(scores[key] || 0);
+        return h("div", { className: "accuracy-row", key },
+          h("div", { className: "accuracy-row-head" },
+            h("span", null, key.replaceAll("_", " ")),
+            h("strong", null, value.toFixed(3))
+          ),
+          h("div", { className: "score-bar" }, h("i", { style: { width: `${Math.max(0, Math.min(100, value * 100))}%` } })),
+          h("p", null, scoreMeaning(key))
+        );
+      })
+    )
+  );
+}
+
+function TextArtifactViewer({ trace }) {
+  return h(AgentTranscript, { traces: trace ? [trace] : [] });
+}
+
+function SidebarDetail({ selected, detail, sourceArtifact }) {
+  const trace = detail?.trace;
+  const name = trace?.name || trace?.path?.split("/").pop() || "";
+  const isAudio = name.endsWith(".wav");
+  const isAccuracy = trace?.role?.includes("audio_diff") || name.includes("audio_diff") || name.includes("accuracy");
+  return h("aside", { className: "workflow-sidebar" },
+    h("div", { className: "sidebar-head" },
+      h("div", null,
+        h("span", null, selected.step === null || selected.step === undefined ? "Agent" : `Iteration ${selected.step + 1}`),
+        h("h3", null, detail?.label || selected.label)
+      ),
+      h(Badge, { variant: "outline" }, selected.status === "completed" ? "Done" : selected.status === "running" ? "Working" : "Waiting")
+    ),
+    selected.notes?.length && !detail ? h("p", { className: "sidebar-note" }, selected.notes[selected.notes.length - 1]) : null,
+    isAudio ? h("div", { className: "sidebar-audio-compare" },
+      sourceArtifact ? h(WaveformPlayer, { url: sourceArtifact.url, label: "Target source", compact: true }) : null,
+      h(WaveformPlayer, { url: trace.url, label: detail?.label || "Output audio", compact: true, color: "#657cc2" })
+    ) : isAccuracy ? h(AccuracyViewer, { trace }) : detail ? h(TextArtifactViewer, { trace }) : h(AgentTranscript, { traces: selected.traces || [] })
+  );
+}
+
+function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
   const steps = Array.from(new Set(traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined))).sort((a, b) => a - b);
   const [selectedId, setSelectedId] = useState("analyzer");
+  const [selectedDetail, setSelectedDetail] = useState(null);
 
   useEffect(() => {
     if (selectedId === "analyzer" || steps.some((step) => selectedId.endsWith(`-${step}`))) return;
@@ -412,34 +524,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners }) {
     const statusKey = step === null ? base : `${base}_${step}`;
     const icon = base === "analyzer" ? Brain : base === "producer" ? SlidersHorizontal : base === "loss" ? Activity : MessageSquareText;
     const nodeTraces = traceSet(traces, base, step);
-    const hasRole = (role) => nodeTraces.some((trace) => trace.role === role || trace.role?.includes(role));
-    const latestNote = (notes[statusKey] || []).at(-1);
-    let rows = [
-      { label: "Output", value: hasRole("answer") ? "ready" : "pending" },
-      { label: "Files", value: String(nodeTraces.length || 0) },
-    ];
-    if (base === "analyzer") {
-      rows = [
-        { label: "Output", value: hasRole("layer_analysis") ? "layer plan" : "pending" },
-        { label: "Input", value: "source clip" },
-      ];
-    } else if (base === "producer") {
-      rows = [
-        { label: "Writes", value: hasRole("accepted_session") ? "session update" : hasRole("session_proposal") ? "proposal" : "pending" },
-        { label: "Guided by", value: hasRole("prompt") ? "critic brief" : "analysis" },
-      ];
-    } else if (base === "loss") {
-      const winner = step !== null && step !== undefined ? winners[step] : null;
-      rows = [
-        { label: "Score", value: winner?.score || "pending" },
-        { label: "Winner", value: winner ? friendlyWinner(winner.winner) : "pending" },
-      ];
-    } else if (base === "residual_critic") {
-      rows = [
-        { label: "Writes", value: hasRole("recommendation") ? "next brief" : "pending" },
-        { label: "Focus", value: latestNote || "residuals" },
-      ];
-    }
+    const rows = outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey);
     return {
       id,
       type: "agent",
@@ -454,7 +539,11 @@ function WorkflowCanvas({ traces, statuses, notes, winners }) {
         label,
         detail,
         icon,
-        rows,
+        rows: rows.map((row) => ({ ...row, value: row.value || "pending" })),
+        onOpen: (trace, nodeData) => {
+          setSelectedId(nodeData.id);
+          setSelectedDetail({ trace, label: `${nodeData.label}: ${roleName(trace.role, trace.agent)}` });
+        },
         base,
         step,
         status: statuses[statusKey] || (traceSet(traces, base, step).length ? "running" : "waiting"),
@@ -516,7 +605,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners }) {
           edges,
           nodeTypes,
           fitView: true,
-          fitViewOptions: { padding: 0.26, maxZoom: 0.86, includeHiddenNodes: false },
+          fitViewOptions: { padding: 0.18, maxZoom: 0.98, includeHiddenNodes: false },
           minZoom: 0.18,
           maxZoom: 1.25,
           defaultEdgeOptions: { markerEnd: arrowMarker, style: { stroke: "#323a85", strokeWidth: 2 } },
@@ -525,24 +614,17 @@ function WorkflowCanvas({ traces, statuses, notes, winners }) {
           elementsSelectable: true,
           panOnScroll: true,
           onNodeClick: (_, node) => {
-            if (node.type === "agent") setSelectedId(node.id);
+            if (node.type === "agent") {
+              setSelectedId(node.id);
+              setSelectedDetail(null);
+            }
           },
         },
           h(Background, { gap: 18, color: "#ececec" }),
           h(Controls, { showInteractive: false })
         )
       ),
-      h("aside", { className: "workflow-sidebar" },
-        h("div", { className: "sidebar-head" },
-          h("div", null,
-            h("span", null, selected.step === null || selected.step === undefined ? "Agent" : `Iteration ${selected.step + 1}`),
-            h("h3", null, selected.label)
-          ),
-          h(Badge, { variant: "outline" }, selected.status === "completed" ? "Done" : selected.status === "running" ? "Working" : "Waiting")
-        ),
-        selected.notes?.length ? h("p", { className: "sidebar-note" }, selected.notes[selected.notes.length - 1]) : null,
-        h(AgentTranscript, { traces: selected.traces || [] })
-      )
+      h(SidebarDetail, { selected, detail: selectedDetail, sourceArtifact: artifacts?.find((artifact) => artifact.name === "source_clip.wav") })
     )
   );
 }
@@ -1052,7 +1134,7 @@ function App() {
       disabled: runActive || !currentFile,
       running: runActive,
     }),
-    hasRunView ? h(WorkflowCanvas, { traces, statuses, notes, winners }) : null,
+    hasRunView ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts }) : null,
     hasRunView ? h(Comparison, { artifacts }) : null,
     hasRunView ? h(Scoreboard, { report }) : null,
     hasRunView ? h(Artifacts, { artifacts, onReport: setReport }) : null,
