@@ -514,6 +514,85 @@ BLOCKED_PATCH_PATH_PARTS = {"notes", "id", "role", "arrangement_locked", "source
 ALLOWED_PATCH_ROOTS = {"layers", "returns", "master", "production_notes"}
 
 
+def load_patch_ops_payload(path: Path) -> dict[str, Any]:
+    if path.exists() and path.read_text().strip():
+        payload = json.loads(path.read_text())
+        if not isinstance(payload, dict):
+            raise ValueError("Patch operation file must contain a JSON object.")
+        payload.setdefault("schema", "patchex.patch_ops.v1")
+        payload.setdefault("operations", [])
+        payload.setdefault("loss_trials", [])
+        return payload
+    return {"schema": "patchex.patch_ops.v1", "hypothesis": "", "critic_brief_used": "", "operations": [], "loss_trials": []}
+
+
+def write_patch_ops_payload(path: Path, payload: dict[str, Any]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload["schema"] = "patchex.patch_ops.v1"
+    payload.setdefault("operations", [])
+    payload.setdefault("loss_trials", [])
+    path.write_text(json.dumps(payload, indent=2) + "\n")
+    return path
+
+
+def set_production_hypothesis(operations_path: Path | str, hypothesis: str, critic_brief_used: Path | str = "") -> Path:
+    path = Path(operations_path)
+    payload = load_patch_ops_payload(path)
+    payload["hypothesis"] = str(hypothesis)
+    if critic_brief_used:
+        payload["critic_brief_used"] = str(critic_brief_used)
+    return write_patch_ops_payload(path, payload)
+
+
+def save_patch_change(
+    operations_path: Path | str,
+    *,
+    path: str,
+    value: Any,
+    track_id: str = "",
+    change: str,
+    reason: str,
+    op: str = "set",
+) -> Path:
+    parse_patch_path(path)
+    payload = load_patch_ops_payload(Path(operations_path))
+    payload["operations"].append(
+        {
+            "op": str(op),
+            "path": str(path),
+            "value": deepcopy(value),
+            "track_id": str(track_id),
+            "change": str(change),
+            "reason": str(reason),
+        }
+    )
+    return write_patch_ops_payload(Path(operations_path), payload)
+
+
+def save_loss_trial(
+    operations_path: Path | str,
+    *,
+    command: str,
+    score: float | None = None,
+    loss: float | None = None,
+    window_start: float | None = None,
+    window_duration: float | None = None,
+    notes: str = "",
+) -> Path:
+    payload = load_patch_ops_payload(Path(operations_path))
+    trial: dict[str, Any] = {"command": str(command), "notes": str(notes)}
+    if score is not None:
+        trial["score"] = float(score)
+    if loss is not None:
+        trial["loss"] = float(loss)
+    if window_start is not None:
+        trial["window_start"] = float(window_start)
+    if window_duration is not None:
+        trial["window_duration"] = float(window_duration)
+    payload["loss_trials"].append(trial)
+    return write_patch_ops_payload(Path(operations_path), payload)
+
+
 def parse_patch_path(path: str) -> list[str]:
     parts = [part for part in str(path).strip().split(".") if part]
     if not parts:
@@ -773,7 +852,7 @@ def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, criti
     return f"""
 You are the Producer agent for an audio reconstruction loop.
 
-Your goal is to produce the fixed composition so the rendered audio sounds exactly like the target source. The Critic has listened to the target and current render, studied the loss report, and written a production briefing. Start from that Critic briefing, form a production hypothesis, make concrete patch/mix changes through the patch operation interface, run loss checks, and write patch operations for the harness to apply.
+Your goal is to produce the fixed composition so the rendered audio sounds exactly like the target source. The Critic has listened to the target and current render, studied the loss report, and written a production briefing. Start from that Critic briefing, form a production hypothesis, make concrete patch/mix changes through the patch operation function interface, run loss checks, and save patch operations for the harness to apply.
 
 Read these files:
 - Composition JSON: {arrangement_path}
@@ -781,7 +860,7 @@ Read these files:
 - Critic briefing markdown: {critic_brief_path}
 - Current loss report JSON: {loss_report_path}
 
-Task: Write patch operation JSON to {operations_output_path}. The harness will apply those operations to {current_session_path} and write the resulting patch session to {session_output_path}.
+Task: Call the patch operation helper functions to save changes to {operations_output_path}. The harness will apply those operations to {current_session_path} and write the resulting patch session to {session_output_path}.
 
 Definitions:
 - Composition is the fixed musical performance: track ids, roles, note events, velocities, timing, active ranges, tempo, and meter.
@@ -793,12 +872,49 @@ Workflow:
 1. Read the Critic briefing first. Treat it as the starting point for your pass.
 2. Read the current patch session and identify the exact fields you will edit.
 3. Read the composition only to understand track roles and active timing. Do not solve composition in this step.
-4. Write a short production hypothesis in `production_notes.hypothesis`. Phrase it as production decisions, for example: "The bass is too static and dry, so add subtle filter LFO and saturation while lowering the keys that mask it" or "The pad needs a wider saw-stack source with slower attack and longer reverb tail."
+4. Write a short production hypothesis through `set_production_hypothesis(...)`. Phrase it as production decisions, for example: "The bass is too static and dry, so add subtle filter LFO and saturation while lowering the keys that mask it" or "The pad needs a wider saw-stack source with slower attack and longer reverb tail."
 5. Make the smallest set of high-impact patch/mix changes that follows the hypothesis and Critic briefing.
-6. Run loss checks on the full clip and, when relevant, on the specific time windows or beats where the Critic says the mismatch is worst.
-7. Record every meaningful edit in `production_notes.change_log`.
-8. Record every loss command you ran and the score/loss result in `production_notes.loss_trials`.
-9. Write the final patch operation JSON to {operations_output_path}. Do not write the patch session directly.
+6. Save each intended patch/mix edit by calling `save_patch_change(...)`. This is how changelog entries are created.
+7. Apply your candidate operations to create a candidate session, then run loss checks on the full clip and, when relevant, on the specific time windows or beats where the Critic says the mismatch is worst.
+8. Record every loss command you ran and the score/loss result by calling `save_loss_trial(...)`.
+9. Leave {operations_output_path} as the final patch operation file. Do not write the patch session directly.
+
+Patch operation function interface:
+- Do not hand-write {operations_output_path} as raw JSON.
+- Do not edit {current_session_path} or {session_output_path} directly.
+- Create/update {operations_output_path} only by calling these functions from Python:
+
+```python
+from pathlib import Path
+from text2fx_gemini.midi_locked_patch import set_production_hypothesis, save_patch_change, save_loss_trial
+
+ops = Path("{operations_output_path}")
+
+set_production_hypothesis(
+    ops,
+    "The keys are too bright and static, so darken the filter and add slow filter motion while pushing the bass slightly forward.",
+    critic_brief_used=Path("{critic_brief_path}"),
+)
+
+save_patch_change(
+    ops,
+    path="layers.<track_id>.filter.cutoff_start_hz",
+    value=1800.0,
+    track_id="<track_id>",
+    change="lower starting filter cutoff",
+    reason="Critic says this track is brighter than the target during its active windows.",
+)
+
+save_loss_trial(
+    ops,
+    command="python3 text2fx_gemini/midi_locked_patch.py score-session ...",
+    score=0.42,
+    loss=0.58,
+    window_start=1.0,
+    window_duration=0.75,
+    notes="Targeted window improved after the filter move.",
+)
+```
 
 Scoring commands you can run while iterating:
 - Apply a candidate operation file to create a candidate session:
@@ -811,17 +927,10 @@ Scoring commands you can run while iterating:
 Use targeted windows for exact beats/times called out by the Critic, weak active windows in the loss report, or dense moments where one track dominates. Times are local to the 5-second clip, so `--window-start 1.0 --window-duration 0.75` scores 1.0s-1.75s of the selected clip.
 
 Output contract:
-- Return only JSON. Do not include prose outside the JSON.
-- Do not return a full patch session. Return an operation payload with this shape:
-  {{
-    "schema": "patchex.patch_ops.v1",
-    "hypothesis": "production hypothesis",
-    "critic_brief_used": "{critic_brief_path}",
-    "operations": [
-      {{"op": "set", "path": "layers.<track_id>.synth.waveform", "value": "saw", "track_id": "<track_id>", "change": "change source toward saw", "reason": "why this follows from the Critic/loss"}}
-    ],
-    "loss_trials": []
-  }}
+- Your final answer can be brief, but the required artifact is {operations_output_path}.
+- The required artifact must be created through the helper functions above.
+- Do not return a full patch session.
+- The operation payload created by the helper functions has schema `patchex.patch_ops.v1`.
 - Supported operation types: `set`, `append`, and `extend`.
 - Operation paths use layer ids, not numeric layer indexes: `layers.<track_id>.synth.waveform`, `layers.<track_id>.amp_envelope.attack`, `layers.<track_id>.filter.cutoff_points`, `layers.<track_id>.effects.reverb_mix`, `returns.space.decay`, `master.gain_db`, or `production_notes.hypothesis`.
 - Each operation should include `track_id`, `path`, `value`, `change`, and `reason`.
