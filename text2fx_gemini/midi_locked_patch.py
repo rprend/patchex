@@ -126,6 +126,13 @@ def ticks_to_seconds(tick: int, tempo_map: list[tuple[int, int]], ticks_per_beat
     return float(seconds)
 
 
+def normalize_tempo_map(tempo_map: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    by_tick: dict[int, int] = {}
+    for tick, mpq in tempo_map:
+        by_tick[int(tick)] = int(mpq)
+    return sorted(by_tick.items()) or [(0, 500000)]
+
+
 def slug(value: str) -> str:
     value = value.strip().lower()
     value = re.sub(r"[^a-z0-9]+", "_", value)
@@ -234,7 +241,7 @@ def parse_midi(path: Path, role_map_path: Path | None = None) -> dict[str, Any]:
                     notes.append(MidiNote(channel, note, start_tick, max(0, tick - start_tick), start_velocity))
         raw_tracks.append({"index": track_index, "name": name, "programs": programs, "channels": sorted(channels), "notes": notes})
 
-    tempo_map = sorted(set(tempo_map))
+    tempo_map = normalize_tempo_map(tempo_map)
     tracks = []
     used_ids: set[str] = set()
     for track in raw_tracks:
@@ -310,52 +317,67 @@ def default_layer_for_track(track: dict[str, Any], sample_rate: int, duration: f
     pitch_min, pitch_max = track.get("pitch_range", [48, 72])
     is_bass = "bass" in role or pitch_max < 48
     is_drums = role == "drums"
-    wavetable = "square_saw" if "square" in role else "saw_stack"
+    is_lead = "saw" in role or "square" in role or "fifth" in role
+    wavetable = "square" if "square" in role else "saw_stack"
+    waveform = "saw"
+    gain_db = -14.0 if is_drums else (-9.0 if is_bass else (-12.5 if is_lead else -15.5))
+    width = 0.15 if is_bass or is_drums else (0.45 if is_lead else 0.7)
+    voices = 1 if is_bass or is_drums or is_lead else 3
+    detune = 0.0 if is_bass or is_drums or is_lead else 4.0
+    cutoff_start = 850.0 if is_bass else (7200.0 if is_drums else (5200.0 if is_lead else 2600.0))
+    cutoff_end = 1500.0 if is_bass else (9200.0 if is_drums else (6800.0 if is_lead else 3600.0))
+    attack = 0.001 if is_drums else (0.008 if is_bass or is_lead else 0.025)
+    decay = 0.05 if is_drums else (0.12 if is_lead else 0.25)
+    sustain = 0.0 if is_drums else (0.35 if is_lead else 0.65)
+    release = 0.035 if is_drums else (0.08 if is_lead else 0.25)
     if "piano" in role:
         wavetable = "digital"
+        waveform = "triangle"
     if "strings" in role:
         wavetable = "triangle"
+        waveform = "triangle"
     if is_drums:
         wavetable = "noise"
+        waveform = "noise"
     return {
         "id": track["id"],
         "role": role,
-        "gain_db": -14.0 if is_drums else (-10.0 if is_bass else -16.0),
+        "gain_db": gain_db,
         "pan": 0.0,
-        "width": 0.25 if is_bass else 0.7,
+        "width": width,
         "notes": [{"note": n["note"], "start": n["start"], "duration": n["duration"], "velocity": n["velocity"]} for n in track.get("notes", [])],
         "synth": {
-            "waveform": "noise" if is_drums else "saw",
+            "waveform": waveform,
             "engine": "internal",
             "wavetable": wavetable,
-            "wavetable_position": 0.95 if is_drums else (0.62 if "saw" in wavetable else 0.45),
+            "wavetable_position": 0.95 if is_drums else (0.78 if is_lead else (0.62 if "saw" in wavetable else 0.45)),
             "warp": 0.0,
             "fm_amount": 0.0,
             "fm_ratio": 2.0,
-            "blend": 0.9 if is_drums else 0.55,
-            "voices": 1 if is_bass or is_drums else 4,
-            "detune_cents": 0.0 if is_bass or is_drums else 8.0,
-            "stereo_spread": 0.2 if is_bass else 0.65,
+            "blend": 0.9 if is_drums else (0.72 if is_lead else 0.55),
+            "voices": voices,
+            "detune_cents": detune,
+            "stereo_spread": width,
             "sub_level": 0.35 if is_bass else 0.0,
             "vital_parameters": {},
         },
         "amp_envelope": {
-            "attack": 0.001 if is_drums else (0.01 if is_bass else 0.02),
-            "decay": 0.08 if is_drums else 0.25,
-            "sustain": 0.0 if is_drums else 0.65,
-            "release": 0.04 if is_drums else 0.25,
+            "attack": attack,
+            "decay": decay,
+            "sustain": sustain,
+            "release": release,
         },
         "filter": {
-            "cutoff_start_hz": 900.0 if is_bass else 2600.0,
-            "cutoff_end_hz": 1400.0 if is_bass else 4200.0,
+            "cutoff_start_hz": cutoff_start,
+            "cutoff_end_hz": cutoff_end,
             "resonance": 0.12,
             "drive": 0.08 if is_bass else 0.0,
-            "cutoff_points": [{"time": 0.0, "hz": 900.0 if is_bass else 2600.0}, {"time": duration, "hz": 1400.0 if is_bass else 4200.0}],
+            "cutoff_points": [{"time": 0.0, "hz": cutoff_start}, {"time": duration, "hz": cutoff_end}],
         },
         "modulation": {"lfo_rate_hz": 0.0, "lfo_depth": 0.0, "gate_points": [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}], "lfos": []},
         "gain_points": [{"time": 0.0, "db": 0.0}, {"time": duration, "db": 0.0}],
         "effects": {
-            "chorus_mix": 0.0 if is_bass or is_drums else 0.12,
+            "chorus_mix": 0.0 if is_bass or is_drums or is_lead else 0.08,
             "reverb_mix": 0.04 if is_bass else 0.12,
             "delay_mix": 0.0,
             "delay_time": 0.18,
