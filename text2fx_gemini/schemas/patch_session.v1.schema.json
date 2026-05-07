@@ -45,6 +45,40 @@
       }
     },
     "returns": { "type": "array" },
-    "master": { "type": "object" }
+    "master": { "type": "object" },
+    "production_notes": {
+      "type": "object",
+      "properties": {
+        "hypothesis": { "type": "string" },
+        "critic_brief_used": { "type": "string" },
+        "change_log": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["track_id", "parameter_path", "change", "reason"],
+            "properties": {
+              "track_id": { "type": "string" },
+              "parameter_path": { "type": "string" },
+              "change": { "type": "string" },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "loss_trials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "command": { "type": "string" },
+              "window_start": { "type": "number" },
+              "window_duration": { "type": "number" },
+              "score": { "type": "number" },
+              "loss": { "type": "number" },
+              "notes": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
   }
 }

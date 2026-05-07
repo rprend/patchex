@@ -423,6 +423,35 @@ def slice_arrangement(arrangement: dict[str, Any], start: float, seconds: float)
     return sliced
 
 
+def slice_patch_session(session: dict[str, Any], start: float, seconds: float) -> dict[str, Any]:
+    end = start + seconds
+    sliced = deepcopy(session)
+    sliced["source_session_duration"] = session.get("duration")
+    sliced["window_start"] = float(start)
+    sliced["duration"] = float(seconds)
+    layers = []
+    for layer in session.get("layers", []):
+        clipped = deepcopy(layer)
+        notes = []
+        for note in layer.get("notes", []):
+            note_start = float(note.get("start", 0.0))
+            note_end = note_start + float(note.get("duration", 0.0))
+            if note_end <= start or note_start >= end:
+                continue
+            clipped_start = max(note_start, start)
+            clipped_end = min(note_end, end)
+            payload = deepcopy(note)
+            payload["source_start"] = note_start
+            payload["source_duration"] = float(note.get("duration", 0.0))
+            payload["start"] = round(clipped_start - start, 6)
+            payload["duration"] = round(max(0.0, clipped_end - clipped_start), 6)
+            notes.append(payload)
+        clipped["notes"] = sorted(notes, key=lambda item: (float(item.get("start", 0.0)), int(item.get("note", 0))))
+        layers.append(clipped)
+    sliced["layers"] = layers
+    return sliced
+
+
 def canonical_notes(notes: list[dict[str, Any]]) -> list[tuple[int, int, int, int]]:
     out = []
     for note in notes:
@@ -632,29 +661,146 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
 
 def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, critic_brief_path: Path, loss_report_path: Path, output_path: Path) -> str:
     return f"""
-You are the Patch Producer in a MIDI-locked patch finding workflow.
+You are the Producer agent for an audio reconstruction loop.
+
+Your goal is to produce the fixed composition so the rendered audio sounds exactly like the target source. The Critic has listened to the target and current render, studied the loss report, and written a production briefing. Start from that Critic briefing, form a production hypothesis, make concrete patch/mix changes, run loss checks, and write the next complete patch session JSON.
 
 Read these files:
-- Authoritative arrangement JSON: {arrangement_path}
+- Composition JSON: {arrangement_path}
 - Current patch session JSON: {current_session_path}
 - Critic briefing markdown: {critic_brief_path}
 - Current loss report JSON: {loss_report_path}
 
 Task: Write a complete patch session JSON to {output_path}.
 
+Definitions:
+- Composition is the fixed musical performance: track ids, roles, note events, velocities, timing, active ranges, tempo, and meter.
+- Patch session is the sound design, effects, and mix state: synth settings, envelopes, filters, modulation, effects, sends, gain, pan, width, returns, master, and production_notes.
+- Critic briefing is the production advice you should follow first.
+- Loss report is the measured difference between the target audio and current rendered audio.
+
+Workflow:
+1. Read the Critic briefing first. Treat it as the starting point for your pass.
+2. Read the current patch session and identify the exact fields you will edit.
+3. Read the composition only to understand track roles and active timing. Do not solve composition in this step.
+4. Write a short production hypothesis in `production_notes.hypothesis`. Phrase it as production decisions, for example: "The bass is too static and dry, so add subtle filter LFO and saturation while lowering the keys that mask it" or "The pad needs a wider saw-stack source with slower attack and longer reverb tail."
+5. Make the smallest set of high-impact patch/mix changes that follows the hypothesis and Critic briefing.
+6. Run loss checks on the full clip and, when relevant, on the specific time windows or beats where the Critic says the mismatch is worst.
+7. Record every meaningful edit in `production_notes.change_log`.
+8. Record every loss command you ran and the score/loss result in `production_notes.loss_trials`.
+9. Write the final complete patch session JSON to {output_path}.
+
+Scoring commands you can run while iterating:
+- Full clip:
+  `python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement {arrangement_path} --session <candidate_session.json> --reference {loss_report_path.parent / "source_clip.wav"} --output <candidate_loss.json> --render-output <candidate_render.wav> --seconds 5`
+- Specific time window inside the selected 5-second clip:
+  `python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement {arrangement_path} --session <candidate_session.json> --reference {loss_report_path.parent / "source_clip.wav"} --output <candidate_loss_window.json> --render-output <candidate_render_window.wav> --seconds 5 --window-start <seconds_from_clip_start> --window-duration <seconds>`
+
+Use targeted windows for exact beats/times called out by the Critic, weak active windows in the loss report, or dense moments where one track dominates. Times are local to the 5-second clip, so `--window-start 1.0 --window-duration 0.75` scores 1.0s-1.75s of the selected clip.
+
+Output contract:
+- Return only JSON. Do not include prose outside the JSON.
+- Preserve the current patch session shape and include all existing top-level fields.
+- Include `schema: "patchex.patch_session.v1"`.
+- Include `production_notes` with `hypothesis`, `critic_brief_used`, `change_log`, and `loss_trials`.
+- `change_log` entries should include `track_id`, `parameter_path`, `change`, and `reason`.
+- `loss_trials` entries should include the command, score/loss numbers if available, the time window if applicable, and a short note.
+
 Hard boundary:
-- The Arrangement/MIDI workflow owns track ids, roles, and every note event.
-- You may change synth, amp_envelope, filter, modulation, gain_points, effects, returns, master, pan, width, and gain_db.
-- You must not add, delete, reorder, retime, transpose, or change velocity of notes.
-- Preserve every layer id from arrangement.tracks[].id.
+- Do not add, delete, reorder, retime, transpose, or change velocity of notes.
+- Preserve every layer id from composition tracks.
+- Preserve every layer's `notes` array exactly from the current patch session. The harness will repair note changes, but you should not rely on repair.
+- Do not add/delete composition tracks. If a track should be silent or tucked back, change gain/mix, not notes.
 
-Optimization target:
-- Improve global full-mix similarity.
-- Improve per-track active-window scores.
-- Use track patch diagnostics to choose oscillator, ADSR, filter, modulation, space, saturation/noise, and mix changes.
-- Drums may be left approximate unless their active-window score is the main weakness.
+Allowed patch and production changes:
 
-Return only JSON matching the current session shape. Do not include prose.
+Oscillator/source:
+- Change `synth.waveform` toward sine, triangle, square, pulse, saw, supersaw-style saw, fifth-saw, organ-like, electric-piano-like, string-pad-like, bass-like, noise, air, transient, or drum-like source.
+- Change `synth.wavetable` among renderer-friendly names such as sine, triangle, digital, formant, saw, saw_stack, square_saw, square, noise, or air.
+- Adjust `synth.wavetable_position` to move between purer, brighter, buzzier, hollower, noisier, or more digital tones.
+- Adjust `synth.blend`, `synth.warp`, `synth.fm_amount`, and `synth.fm_ratio`.
+- Add or reduce `synth.sub_level`.
+- Change `synth.voices`, `synth.detune_cents`, and `synth.stereo_spread`.
+- Use `synth.vital_parameters` for named synth parameters when the Critic asks for a more specific patch character.
+
+Pitch and tuning behavior:
+- Add or reduce pitch-like character using FM, detune, unison, wavetable position, or subtle LFOs.
+- Add or reduce vibrato with `modulation.lfos` targeting pitch-like synth parameters when supported by the patch representation.
+- Tighten pitch stability by reducing detune/FM/LFO depth.
+- Make a sound thicker with octave/sub support rather than changing MIDI notes.
+
+Envelope and articulation:
+- Adjust `amp_envelope.attack`, `decay`, `sustain`, and `release`.
+- Make notes pluckier, sharper, softer, more legato, more gated, more sustained, punchier, smoother, shorter, or longer.
+- Shorten releases that smear rhythm.
+- Lengthen releases when the target has more sustain or ambience.
+- Use `gain_points` for clip-level fades, swells, ducking, pulsing, or phrase emphasis.
+
+Filter and brightness:
+- Adjust `filter.cutoff_start_hz`, `filter.cutoff_end_hz`, `filter.cutoff_points`, `filter.resonance`, and `filter.drive`.
+- Make a track brighter, darker, warmer, thinner, more muffled, more open, more nasal, more resonant, or more driven.
+- Use moving `filter.cutoff_points` for sweeps or evolving brightness.
+- Use `modulation.lfos` targeting `filter.cutoff_hz` for periodic brightness motion.
+
+Amplitude, dynamics, and sidechain-like motion:
+- Adjust layer `gain_db`.
+- Adjust `gain_points` for automation, rhythmic pumping, phrase-level fades, or sidechain-like ducking.
+- Use `modulation.gate_points` for amplitude gating.
+- Use `modulation.lfos` targeting gain/amp/volume for tremolo or pumping.
+- Adjust `effects.compression_mix`, `compression_threshold_db`, `compression_ratio`, `compression_attack`, and `compression_release`.
+- Make tracks more forward, tucked back, even, dynamic, aggressive, soft, punchy, or controlled.
+- To approximate sidechain X to Y, duck the masked track with gain automation or gain LFO during the dominant track's active windows.
+
+Modulation and motion:
+- Add, remove, or change `modulation.lfos`.
+- Adjust LFO `target`, `shape`, `rate_hz`, `depth`, `phase`, `amount`, and `center`.
+- Add or reduce tremolo, vibrato-like motion, filter LFO, amplitude LFO, pan LFO, width LFO, or slow pad evolution.
+- Sync motion by choosing rates that match the clip feel, or make it freer if the target is less grid-locked.
+- Remove motion when the target is steadier.
+
+Effects and space:
+- Adjust `effects.reverb_mix`, `return_send`, and session `returns`.
+- Adjust return `gain_db`, `decay`, and `width`.
+- Adjust `effects.delay_mix`, `delay_time`, `phaser_mix`, and `chorus_mix`.
+- Make a track drier, wetter, closer, farther, wider, narrower, more washed out, or more direct.
+- Shorten reverb tails if the mix is blurry.
+- Increase space if the target has more late energy or stereo spread.
+
+Saturation, distortion, EQ, and noise:
+- Adjust `effects.saturation`.
+- Adjust `filter.drive`.
+- Adjust `effects.low_gain_db`, `mid_gain_db`, and `high_gain_db`.
+- Make a sound cleaner, dirtier, warmer, harsher, softer, brighter, duller, boomier, thinner, less muddy, or more harmonically dense.
+- Add noise-like character with waveform/wavetable choices instead of changing notes.
+
+Stereo and placement:
+- Adjust layer `pan` from -1.0 left to 1.0 right.
+- Adjust layer `width`.
+- Adjust `synth.stereo_spread`.
+- Adjust master `width`.
+- Keep bass and low-frequency fundamentals narrower when needed.
+- Widen pads, keys, strings, effects, or hooks when the target image is broader.
+- Narrow tracks that sound too diffuse.
+
+Mix and master:
+- Adjust layer gains to rebalance bass, keys, lead, strings, drums, and effects.
+- Push the main hook forward or tuck supporting material behind it.
+- Reduce masking between bass and keys.
+- Adjust `master.gain_db` if the render is globally too loud or quiet.
+- Adjust `master.width` if the full image is too narrow or too wide.
+- Prefer track-level changes before broad master changes unless the Critic identifies a global issue.
+
+Drums and percussion, if present:
+- Adjust drum layer gain, envelope, noise/source character, saturation, EQ, reverb, compression, and width.
+- Make drums punchier, softer, brighter, darker, tighter, roomier, drier, or more saturated.
+- Add or reduce transient emphasis with envelope attack/decay and compression.
+
+Decision rules:
+- Follow the Critic briefing unless the loss report clearly contradicts it.
+- Prefer high-impact production moves over tiny random parameter changes.
+- Make changes that are coherent as a production hypothesis, not isolated parameter noise.
+- If you try multiple candidates, write the best one to {output_path} and record the rejected trials in `production_notes.loss_trials`.
+- If a targeted window improves but full-clip loss worsens, choose the version that best supports the stated production goal and explain that tradeoff in `production_notes`.
 """
 
 
@@ -965,6 +1111,16 @@ def command_score(args: argparse.Namespace) -> int:
     reference_audio, sr = load_audio(args.reference, args.seconds or float(session.get("duration", arrangement.get("duration", 0.0))))
     if sr != int(session["sample_rate"]):
         raise RuntimeError(f"Reference sample rate {sr} does not match session sample rate {session['sample_rate']}")
+    if args.window_start is not None or args.window_duration is not None:
+        window_start = float(args.window_start or 0.0)
+        max_duration = max(0.0, reference_audio.shape[-1] / sr - window_start)
+        window_duration = float(args.window_duration if args.window_duration is not None else max_duration)
+        window_duration = max(0.01, min(window_duration, max_duration if max_duration > 0 else window_duration))
+        start_i = max(0, int(round(window_start * sr)))
+        end_i = min(reference_audio.shape[-1], start_i + int(round(window_duration * sr)))
+        reference_audio = reference_audio[:, start_i:end_i]
+        arrangement = slice_arrangement(arrangement, window_start, window_duration)
+        session = slice_patch_session(session, window_start, window_duration)
     report = score_midi_locked(arrangement, session, reference_audio, sr)
     write_json(args.output, report)
     if args.render_output:
@@ -1130,6 +1286,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_score.add_argument("--output", required=True, type=Path)
     p_score.add_argument("--render-output", type=Path)
     p_score.add_argument("--seconds", type=float)
+    p_score.add_argument("--window-start", type=float)
+    p_score.add_argument("--window-duration", type=float)
     p_score.set_defaults(func=command_score)
 
     p_run = sub.add_parser("run")
