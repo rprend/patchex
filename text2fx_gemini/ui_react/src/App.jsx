@@ -795,28 +795,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
   );
 }
 
-function artifactGroup(name) {
-  if (name === "final_reconstruction.wav" || name === "source_clip.wav" || name === "distilled_playable_patch.json") return "Essentials";
-  if (name === "reconstruction_report.json" || name.startsWith("audio_diff_") || name.startsWith("producer_audio_diff_") || name.includes("accuracy")) return "Accuracy reports";
-  if (name.startsWith("session") || name === "manifest.json" || name === "master.json" || name === "routing.json" || name === "timeline.json") return "Session state";
-  if (name.startsWith("codex_") || name.startsWith("recommendation") || name === "layer_analysis.json" || name === "source_profile.json" || name === "beat_grid.json" || name === "pattern_constraints.json") return "Agent files";
-  if (name.endsWith(".wav")) return "Audio renders";
-  return "Other";
-}
-
-function groupArtifacts(artifacts) {
-  const order = ["Essentials", "Accuracy reports", "Session state", "Agent files", "Audio renders", "Other"];
-  const groups = new Map(order.map((name) => [name, []]));
-  artifacts.forEach((artifact) => {
-    const group = artifactGroup(artifact.name);
-    if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(artifact);
-  });
-  return order.map((name) => [name, groups.get(name) || []]).filter(([, items]) => items.length);
-}
-
-function Artifacts({ artifacts, onReport, traces = [] }) {
-  const [selectedSessionArtifact, setSelectedSessionArtifact] = useState(null);
+function Artifacts({ artifacts, onReport }) {
   useEffect(() => {
     const reportArtifact = artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
     if (!reportArtifact) return undefined;
@@ -829,65 +808,28 @@ function Artifacts({ artifacts, onReport, traces = [] }) {
   }, [artifacts]);
 
   if (!artifacts.length) return null;
-  const sourceArtifact = artifacts.find((artifact) => artifact.name === "source_clip.wav");
-  const selectedSessionStep = selectedSessionArtifact?.name?.match(/step_(\d+)/)?.[1];
-  const selectedSession = selectedSessionArtifact ? {
-    agent: `producer_step_${String(Number(selectedSessionStep || 0)).padStart(2, "0")}`,
-    step: selectedSessionStep !== undefined ? Number(selectedSessionStep) : null,
-    traces: [],
-  } : null;
+  const sortedArtifacts = [...artifacts].sort((a, b) => a.name.localeCompare(b.name));
   return h("section", { className: "section-block" },
     h("div", { className: "section-title" },
       h("h2", null, "Files"),
-      h("p", null, "Grouped outputs from the run.")
+      h("p", null, "Every output from the run.")
     ),
-    h(Accordion, { className: "artifact-groups", type: "multiple", defaultValue: ["Essentials"] },
-      groupArtifacts(artifacts).map(([group, items]) =>
-        h(AccordionItem, { className: "artifact-group", key: group, value: group },
-          h(AccordionTrigger, null,
-            h("span", null, group),
-            h(Badge, { variant: "outline" }, String(items.length))
-          ),
-          h(AccordionContent, null,
-            h("div", { className: "artifact-list" },
-              items.map((artifact) => {
-                const isSessionArtifact = artifact.name.match(/^session_step_\d+_(codex_proposal|producer_winner|accepted)\.json$/) || artifact.name === "session.json";
-                return h("a", {
-                  className: [
-                    artifact.name.endsWith(".wav") ? "audio-artifact-link" : "",
-                    isSessionArtifact ? "session-artifact-link" : "",
-                    selectedSessionArtifact?.url === artifact.url ? "selected-artifact-link" : "",
-                  ].filter(Boolean).join(" "),
-                  href: artifact.url,
-                  target: isSessionArtifact ? undefined : "_blank",
-                  key: artifact.url,
-                  onClick: isSessionArtifact ? (event) => {
-                    event.preventDefault();
-                    setSelectedSessionArtifact(artifact);
-                  } : undefined,
-                },
-                  h("span", null, artifact.name),
-                  artifact.name.endsWith(".wav") ? h(Badge, { variant: "secondary" }, "audio") : null,
-                  isSessionArtifact ? h(Badge, { variant: "outline" }, "midi") : null
-                );
-              })
-            )
+    h(Accordion, { className: "artifact-groups", type: "single", collapsible: true, defaultValue: "files" },
+      h(AccordionItem, { className: "artifact-group", value: "files" },
+        h(AccordionTrigger, null,
+          h("span", null, "Files"),
+          h(Badge, { variant: "outline" }, String(sortedArtifacts.length))
+        ),
+        h(AccordionContent, null,
+          h("div", { className: "artifact-list" },
+            sortedArtifacts.map((artifact) => h("a", { className: artifact.name.endsWith(".wav") ? "audio-artifact-link" : "", href: artifact.url, target: "_blank", key: artifact.url },
+              h("span", null, artifact.name),
+              artifact.name.endsWith(".wav") ? h(Badge, { variant: "secondary" }, "audio") : null
+            ))
           )
         )
       )
-    ),
-    selectedSessionArtifact ? h("div", { className: "artifact-session-preview" },
-      h("div", { className: "artifact-session-preview-head" },
-        h("span", null, "Session artifact"),
-        h("strong", null, selectedSessionArtifact.name)
-      ),
-      h(SessionArtifactViewer, {
-        trace: { ...selectedSessionArtifact, role: "session", step: selectedSession?.step },
-        selected: selectedSession,
-        sourceArtifact,
-        allTraces: traces,
-      })
-    ) : null
+    )
   );
 }
 
@@ -1405,7 +1347,7 @@ function App() {
     showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Scoreboard, { report }) : null,
-    showRunDetail && hasLoadedRun ? h(Artifacts, { artifacts, onReport: setReport, traces }) : null,
+    showRunDetail && hasLoadedRun ? h(Artifacts, { artifacts, onReport: setReport }) : null,
     showRunDetail ? null : h(RunHistory, { runs, onLoad: loadPastRun, onRefresh: loadRuns })
   );
 }
