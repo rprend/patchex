@@ -476,13 +476,20 @@ function traceSet(traces, base, step = null) {
   });
 }
 
-function outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey) {
+function outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey, allTraces = []) {
   const byRole = (...patterns) => nodeTraces.find((trace) => patterns.some((pattern) => trace.role === pattern || trace.role?.includes(pattern)));
+  const sameStepTraces = allTraces.filter((trace) => {
+    const traceStep = trace.step ?? agentStep(trace.agent, null);
+    return step === null ? traceStep === null || traceStep === undefined : traceStep === step;
+  });
+  const sameStepByRole = (...patterns) => sameStepTraces.find((trace) => patterns.some((pattern) => trace.role === pattern || trace.role?.includes(pattern)));
   const filename = (trace) => trace?.name || trace?.path?.split("/").pop() || "Open";
   if (base === "producer") {
+    const audioTrace = byRole("producer_render", "render") || sameStepByRole("winner_render", "render");
+    const sessionTrace = byRole("accepted_session", "session_proposal", "candidate_session", "session") || sameStepByRole("accepted_session", "session_proposal", "candidate_session", "session");
     return [
-      { label: "Audio", value: filename(byRole("producer_render", "render")), trace: byRole("producer_render", "render") },
-      { label: "Session", value: filename(byRole("accepted_session", "session_proposal")), trace: byRole("accepted_session", "session_proposal") },
+      { label: "Audio", value: filename(audioTrace), trace: audioTrace },
+      { label: "Session", value: filename(sessionTrace), trace: sessionTrace },
     ];
   }
   if (base === "loss") {
@@ -761,7 +768,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
       const sameStep = step === null ? eventStep === null || eventStep === undefined : eventStep === step;
       return sameStep && agentBase(event.agent) === base;
     });
-    const rows = outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey);
+    const rows = outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey, traces);
     return {
       id,
       type: "agent",
@@ -1210,6 +1217,7 @@ function App() {
         name === "arrangement.json" ||
         name === "full_arrangement.json" ||
         name === "patch_session_current.json" ||
+        name.startsWith("patch_session_step_") ||
         name.startsWith("patch_report_step_") ||
         name.startsWith("patch_render_step_") ||
         name.startsWith("patch_ops_step_") ||
@@ -1232,6 +1240,7 @@ function App() {
       const role = artifact.name.startsWith("codex_")
         ? artifact.name.includes("_prompt") ? "prompt" : "answer"
         : artifact.name.startsWith("producer_audio_diff") ? "producer_audio_diff"
+        : artifact.name.startsWith("patch_session_step_") ? "accepted_session"
         : artifact.name.startsWith("patch_report_step_") ? "audio_diff"
         : artifact.name.startsWith("patch_render_step_") ? "winner_render"
         : artifact.name.startsWith("patch_ops_step_") ? "session"
