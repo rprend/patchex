@@ -1745,6 +1745,42 @@ textarea {
   font-size: .86rem;
 }
 
+.session-artifact-link,
+.selected-artifact-link {
+  border-color: rgba(50, 58, 133, .24);
+}
+
+.selected-artifact-link {
+  background: rgba(50, 58, 133, .06);
+}
+
+.artifact-session-preview {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.artifact-session-preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .8rem;
+}
+
+.artifact-session-preview-head span {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.artifact-session-preview-head strong {
+  color: var(--text);
+  font-size: .9rem;
+  overflow-wrap: anywhere;
+}
+
 .accuracy-viewer {
   min-height: 0;
   overflow: auto;

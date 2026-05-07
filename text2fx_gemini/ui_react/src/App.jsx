@@ -815,7 +815,8 @@ function groupArtifacts(artifacts) {
   return order.map((name) => [name, groups.get(name) || []]).filter(([, items]) => items.length);
 }
 
-function Artifacts({ artifacts, onReport }) {
+function Artifacts({ artifacts, onReport, traces = [] }) {
+  const [selectedSessionArtifact, setSelectedSessionArtifact] = useState(null);
   useEffect(() => {
     const reportArtifact = artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
     if (!reportArtifact) return undefined;
@@ -828,6 +829,13 @@ function Artifacts({ artifacts, onReport }) {
   }, [artifacts]);
 
   if (!artifacts.length) return null;
+  const sourceArtifact = artifacts.find((artifact) => artifact.name === "source_clip.wav");
+  const selectedSessionStep = selectedSessionArtifact?.name?.match(/step_(\d+)/)?.[1];
+  const selectedSession = selectedSessionArtifact ? {
+    agent: `producer_step_${String(Number(selectedSessionStep || 0)).padStart(2, "0")}`,
+    step: selectedSessionStep !== undefined ? Number(selectedSessionStep) : null,
+    traces: [],
+  } : null;
   return h("section", { className: "section-block" },
     h("div", { className: "section-title" },
       h("h2", null, "Files"),
@@ -842,15 +850,44 @@ function Artifacts({ artifacts, onReport }) {
           ),
           h(AccordionContent, null,
             h("div", { className: "artifact-list" },
-              items.map((artifact) => h("a", { className: artifact.name.endsWith(".wav") ? "audio-artifact-link" : "", href: artifact.url, target: "_blank", key: artifact.url },
-                h("span", null, artifact.name),
-                artifact.name.endsWith(".wav") ? h(Badge, { variant: "secondary" }, "audio") : null
-              ))
+              items.map((artifact) => {
+                const isSessionArtifact = artifact.name.match(/^session_step_\d+_(codex_proposal|producer_winner|accepted)\.json$/) || artifact.name === "session.json";
+                return h("a", {
+                  className: [
+                    artifact.name.endsWith(".wav") ? "audio-artifact-link" : "",
+                    isSessionArtifact ? "session-artifact-link" : "",
+                    selectedSessionArtifact?.url === artifact.url ? "selected-artifact-link" : "",
+                  ].filter(Boolean).join(" "),
+                  href: artifact.url,
+                  target: isSessionArtifact ? undefined : "_blank",
+                  key: artifact.url,
+                  onClick: isSessionArtifact ? (event) => {
+                    event.preventDefault();
+                    setSelectedSessionArtifact(artifact);
+                  } : undefined,
+                },
+                  h("span", null, artifact.name),
+                  artifact.name.endsWith(".wav") ? h(Badge, { variant: "secondary" }, "audio") : null,
+                  isSessionArtifact ? h(Badge, { variant: "outline" }, "midi") : null
+                );
+              })
             )
           )
         )
       )
-    )
+    ),
+    selectedSessionArtifact ? h("div", { className: "artifact-session-preview" },
+      h("div", { className: "artifact-session-preview-head" },
+        h("span", null, "Session artifact"),
+        h("strong", null, selectedSessionArtifact.name)
+      ),
+      h(SessionArtifactViewer, {
+        trace: { ...selectedSessionArtifact, role: "session", step: selectedSession?.step },
+        selected: selectedSession,
+        sourceArtifact,
+        allTraces: traces,
+      })
+    ) : null
   );
 }
 
@@ -1368,7 +1405,7 @@ function App() {
     showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Scoreboard, { report }) : null,
-    showRunDetail && hasLoadedRun ? h(Artifacts, { artifacts, onReport: setReport }) : null,
+    showRunDetail && hasLoadedRun ? h(Artifacts, { artifacts, onReport: setReport, traces }) : null,
     showRunDetail ? null : h(RunHistory, { runs, onLoad: loadPastRun, onRefresh: loadRuns })
   );
 }
