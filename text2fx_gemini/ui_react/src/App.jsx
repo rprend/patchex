@@ -936,6 +936,49 @@ function Comparison({ artifacts }) {
   );
 }
 
+function artifactTrace(artifact, role = "file", agent = "run", step = null) {
+  if (!artifact) return null;
+  const runId = artifact.url?.split("/")[3];
+  return {
+    agent,
+    role,
+    step,
+    path: runId ? `/ui_runs/${runId}/${artifact.name}` : artifact.name,
+    url: artifact.url,
+    name: artifact.name,
+  };
+}
+
+function InitialBaseline({ artifacts, traces }) {
+  const source = artifacts.find((artifact) => artifact.name === "source_clip.wav") ||
+    traces.find((trace) => trace.name === "source_clip.wav");
+  const initialRender = artifacts.find((artifact) => artifact.name === "current_render_step_initial.wav") ||
+    traces.find((trace) => trace.name === "current_render_step_initial.wav");
+  const initialLossArtifact = artifacts.find((artifact) => artifact.name === "loss_report_step_initial.json");
+  const initialLoss = traces.find((trace) => trace.name === "loss_report_step_initial.json") ||
+    artifactTrace(initialLossArtifact, "audio_diff", "loss", null);
+  if (!source && !initialRender && !initialLoss) return null;
+  return h("section", { className: "section-block initial-baseline" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Initial Baseline"),
+      h("p", null, "First target/render comparison before the Critic writes the first brief.")
+    ),
+    source || initialRender ? h("div", { className: "comparison-grid react-comparison" },
+      source ? h("section", { className: "comparison-item" },
+        h("div", { className: "comparison-head" }, h("span", null, "Target"), h("strong", null, "Selected clip")),
+        h(WaveformPlayer, { url: source.url, label: "Target" })
+      ) : null,
+      initialRender ? h("section", { className: "comparison-item" },
+        h("div", { className: "comparison-head" }, h("span", null, "First render"), h("strong", null, "Before Critic")),
+        h(WaveformPlayer, { url: initialRender.url, label: "Initial render", color: "#657cc2" })
+      ) : null
+    ) : null,
+    initialLoss ? h("div", { className: "initial-loss-panel" },
+      h(AccuracyViewer, { trace: initialLoss })
+    ) : h("div", { className: "sidebar-loading" }, "Waiting for initial accuracy report...")
+  );
+}
+
 function RunHistory({ runs, onLoad, onRefresh }) {
   return h("section", { className: "section-block" },
     h("div", { className: "section-title with-action" },
@@ -1193,6 +1236,9 @@ function App() {
         name.startsWith("patch_render_step_") ||
         name.startsWith("patch_ops_step_") ||
         name.startsWith("patch_ops_applied_step_") ||
+        name === "source_clip.wav" ||
+        name === "current_render_step_initial.wav" ||
+        name === "loss_report_step_initial.json" ||
         name.startsWith("critic_brief_step_") ||
         name.startsWith("harness_improver_step_") ||
         name.match(/^producer_reconstruction_step_\d+_.+\.wav$/) ||
@@ -1216,6 +1262,9 @@ function App() {
         : artifact.name.startsWith("patch_render_step_") ? "winner_render"
         : artifact.name.startsWith("patch_ops_step_") ? "session"
         : artifact.name.startsWith("patch_ops_applied_step_") ? "session"
+        : artifact.name === "source_clip.wav" ? "source_clip"
+        : artifact.name === "current_render_step_initial.wav" ? "winner_render"
+        : artifact.name === "loss_report_step_initial.json" ? "audio_diff"
         : artifact.name.startsWith("critic_brief_step_") ? "recommendation"
         : artifact.name === "arrangement.json" || artifact.name === "full_arrangement.json" ? "layer_analysis"
         : artifact.name.startsWith("harness_improver_step_") ? "harness_improvement"
@@ -1238,6 +1287,7 @@ function App() {
       if (role === "producer_render" && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
       if (["accepted_session", "candidate_session", "session_proposal"].includes(role) && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
       if (role === "audio_diff" && step !== null) agent = `loss_step_${String(step).padStart(2, "0")}`;
+      if (artifact.name === "loss_report_step_initial.json" || artifact.name === "current_render_step_initial.wav") agent = "loss";
       if (role === "harness_improvement" && step !== null) agent = `harness_improver_step_${String(step).padStart(2, "0")}`;
       if (role === "recommendation" && step !== null) agent = `residual_critic_step_${String(step).padStart(2, "0")}`;
       addTrace({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name, step });
@@ -1455,6 +1505,7 @@ function App() {
       disabled: starting || !currentSongId,
       running: starting,
     }),
+    showRunDetail && hasLoadedRun ? h(InitialBaseline, { artifacts, traces }) : null,
     showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts, codexEvents }) : null,
     showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Scoreboard, { report }) : null,
