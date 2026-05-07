@@ -506,7 +506,42 @@ function SidebarDetail({ selected, detail, sourceArtifact }) {
     isAudio ? h("div", { className: "sidebar-audio-compare" },
       sourceArtifact ? h(WaveformPlayer, { url: sourceArtifact.url, label: "Target source", compact: true }) : null,
       h(WaveformPlayer, { url: trace.url, label: detail?.label || "Output audio", compact: true, color: "#657cc2" })
-    ) : isAccuracy ? h(AccuracyViewer, { trace }) : detail ? h(TextArtifactViewer, { trace }) : h(AgentTranscript, { traces: selected.traces || [] })
+    ) : isAccuracy ? h(AccuracyViewer, { trace }) : detail ? h(TextArtifactViewer, { trace }) : h(AgentActivity, { selected })
+  );
+}
+
+function activityKind(trace) {
+  if (trace.role === "prompt") return "Prompt";
+  if (trace.role === "answer") return "Answer";
+  if (trace.role?.includes("render") || trace.name?.endsWith(".wav")) return "Audio render";
+  if (trace.role?.includes("audio_diff")) return "Accuracy report";
+  if (trace.role?.includes("recommendation")) return "Critic brief";
+  if (trace.role?.includes("session")) return "Session file";
+  if (trace.role?.includes("layer_analysis")) return "Layer plan";
+  return roleName(trace.role, trace.agent);
+}
+
+function AgentActivity({ selected }) {
+  const traces = [...(selected.traces || [])].sort((a, b) => traceOrder(a) - traceOrder(b));
+  const active = selected.status === "running";
+  return h("div", { className: "agent-activity" },
+    h("div", { className: active ? "activity-live active" : "activity-live" },
+      active ? h("span", { className: "node-spinner inline", "aria-label": "In progress" }) : null,
+      h("strong", null, active ? `${selected.label} is working` : `${selected.label} ${selected.status === "completed" ? "finished" : "is waiting"}`),
+      h("p", null, active ? "Waiting for the next file event from the run." : "Open an output row on the card to inspect a specific artifact.")
+    ),
+    selected.notes?.length ? h("div", { className: "activity-notes" },
+      selected.notes.slice(-3).map((note, index) => h("p", { key: `${note}-${index}` }, note))
+    ) : null,
+    h("div", { className: "activity-events" },
+      traces.length ? traces.map((trace) => {
+        const name = trace.name || trace.path?.split("/").pop() || "artifact";
+        return h("a", { className: "activity-event", href: trace.url || "#", target: trace.url ? "_blank" : undefined, key: traceKey(trace) },
+          h("span", null, activityKind(trace)),
+          h("strong", null, name)
+        );
+      }) : h("div", { className: "activity-empty" }, active ? "No files written yet." : "No files for this agent yet.")
+    )
   );
 }
 

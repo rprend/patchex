@@ -1303,6 +1303,14 @@ textarea {
   stroke-width: 2;
 }
 
+.workflow-canvas .react-flow__edges {
+  z-index: 1;
+}
+
+.workflow-canvas .react-flow__nodes {
+  z-index: 2;
+}
+
 .workflow-node {
   width: 248px;
   min-height: 128px;
@@ -1433,6 +1441,12 @@ textarea {
   animation: spin .8s linear infinite;
 }
 
+.node-spinner.inline {
+  position: static;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
 .workflow-handle {
   width: .78rem;
   height: 1.55rem;
@@ -1460,13 +1474,23 @@ textarea {
 }
 
 .iteration-frame-node strong {
-  display: block;
+  position: relative;
+  z-index: 3;
+  display: inline-block;
+  padding-right: .5rem;
+  background: rgba(255, 255, 255, .94);
   color: var(--text);
   font-size: .95rem;
 }
 
 .iteration-frame-node span {
+  position: relative;
+  z-index: 3;
   display: block;
+  width: max-content;
+  max-width: calc(100% - 1rem);
+  padding-right: .5rem;
+  background: rgba(255, 255, 255, .94);
   margin-top: .18rem;
   color: var(--muted);
   font-size: .78rem;
@@ -1522,6 +1546,84 @@ textarea {
   padding: 0;
   border-top: 0;
   overflow: auto;
+}
+
+.agent-activity {
+  min-height: 0;
+  overflow: auto;
+  padding-top: .8rem;
+}
+
+.activity-live {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .25rem .6rem;
+  align-items: center;
+  padding: .8rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.activity-live p {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: .84rem;
+}
+
+.activity-live:not(.active) {
+  grid-template-columns: 1fr;
+}
+
+.activity-live:not(.active) p {
+  grid-column: 1;
+}
+
+.activity-notes {
+  display: grid;
+  gap: .45rem;
+  padding: .8rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.activity-notes p {
+  color: var(--soft);
+  font-size: .86rem;
+}
+
+.activity-events {
+  display: grid;
+  padding-top: .6rem;
+}
+
+.activity-event {
+  display: grid;
+  gap: .18rem;
+  padding: .7rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.activity-event:hover {
+  color: var(--accent);
+}
+
+.activity-event span {
+  color: var(--muted);
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.activity-event strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: .9rem;
+}
+
+.activity-empty {
+  padding: 1rem 0;
+  color: var(--muted);
 }
 
 .sidebar-loading {
