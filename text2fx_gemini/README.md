@@ -232,3 +232,15 @@ The report includes global full-mix similarity, per-track active-window scores,
 solo-track isolation proxy scores, patch-control diagnostics, and an arrangement
 preservation penalty. Any note, timing, or velocity change makes the preservation
 penalty nonzero.
+
+The first canonical song workspace is:
+
+```bash
+text2fx_gemini/songs/between_the_buttons/
+```
+
+It contains `source.mp3`, `source.mid`, and full-song `arrangement.json`.
+When the V1 UI reconstructs a five-second clip from "French 79 Between the
+Buttons" and that song MIDI exists, the backend automatically uses the
+MIDI-locked patch workflow and slices the MIDI to the selected five-second
+audio region before the Producer starts.

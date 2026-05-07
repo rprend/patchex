@@ -372,6 +372,41 @@ def neutral_session(arrangement: dict[str, Any], sample_rate: int = 44100, secon
     return session
 
 
+def slice_arrangement(arrangement: dict[str, Any], start: float, seconds: float) -> dict[str, Any]:
+    """Return a clip-local arrangement with overlapping notes shifted to 0s."""
+    end = start + seconds
+    sliced = deepcopy(arrangement)
+    sliced["source_arrangement_duration"] = arrangement.get("duration")
+    sliced["clip_start"] = float(start)
+    sliced["duration"] = float(seconds)
+    tracks = []
+    for track in arrangement.get("tracks", []):
+        notes = []
+        for note in track.get("notes", []):
+            note_start = float(note["start"])
+            note_end = note_start + float(note["duration"])
+            if note_end <= start or note_start >= end:
+                continue
+            clipped_start = max(note_start, start)
+            clipped_end = min(note_end, end)
+            payload = deepcopy(note)
+            payload["source_start"] = note_start
+            payload["source_duration"] = float(note["duration"])
+            payload["start"] = round(clipped_start - start, 6)
+            payload["duration"] = round(max(0.001, clipped_end - clipped_start), 6)
+            notes.append(payload)
+        if not notes:
+            continue
+        clipped = deepcopy(track)
+        clipped["notes"] = sorted(notes, key=lambda item: (item["start"], item["note"], item.get("channel", 0)))
+        clipped["note_count"] = len(notes)
+        clipped["pitch_range"] = [min(item["note"] for item in notes), max(item["note"] for item in notes)]
+        clipped["time_range"] = [round(min(item["start"] for item in notes), 6), round(max(item["start"] + item["duration"] for item in notes), 6)]
+        tracks.append(clipped)
+    sliced["tracks"] = tracks
+    return sliced
+
+
 def canonical_notes(notes: list[dict[str, Any]]) -> list[tuple[int, int, int, int]]:
     out = []
     for note in notes:
@@ -626,6 +661,8 @@ def command_import(args: argparse.Namespace) -> int:
 
 def command_neutral(args: argparse.Namespace) -> int:
     arrangement = json.loads(args.arrangement.read_text())
+    if args.clip_start is not None:
+        arrangement = slice_arrangement(arrangement, args.clip_start, args.seconds or 5.0)
     session = neutral_session(arrangement, args.sample_rate, args.seconds)
     write_json(args.output, session)
     print(f"wrote {args.output}")
@@ -653,13 +690,36 @@ def command_run(args: argparse.Namespace) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     arrangement_path = args.output_dir / "arrangement.json"
     current_session_path = args.output_dir / "patch_session_current.json"
-    arrangement = parse_midi(args.midi)
+    full_arrangement = parse_midi(args.midi)
+    full_arrangement_path = write_json(args.output_dir / "full_arrangement.json", full_arrangement)
+    print(f"trace_file agent=analyzer role=full_arrangement path={full_arrangement_path}", flush=True)
+    arrangement = slice_arrangement(full_arrangement, args.clip_start, args.seconds) if args.clip_start is not None else full_arrangement
     write_json(arrangement_path, arrangement)
+    print(f"trace_file agent=analyzer role=arrangement path={arrangement_path}", flush=True)
     session = neutral_session(arrangement, args.sample_rate, args.seconds)
     write_json(current_session_path, session)
+    print(f"trace_file agent=producer_step_00 role=session_proposal path={current_session_path}", flush=True)
     reference_audio, sr = load_audio(args.reference, args.seconds)
+    source_clip_path = args.output_dir / "source_clip.wav"
+    sf.write(source_clip_path, reference_audio.T, sr)
+    print(f"trace_file agent=analyzer role=source_clip path={source_clip_path}", flush=True)
     previous_report_path: Path | None = None
+    history: list[dict[str, Any]] = []
+    best_report: dict[str, Any] | None = None
+    best_session = session
+    best_render_path: Path | None = None
     for step in range(args.steps):
+        print(f"agent_stage residual_critic step={step}", flush=True)
+        recommendation = {
+            "workflow": "midi_locked_patch",
+            "producer_prompt": "Improve synth, effects, modulation, and mix settings while preserving every MIDI note exactly.",
+            "must_fix": [] if best_report is None else [item["track_id"] for item in best_report.get("weakest_tracks", [])[:3]],
+            "do_not": ["Do not add, delete, retime, transpose, or change velocity of MIDI notes."],
+            "success_metrics": {"primary": ["global_mix", "track_active_window", "patch_control"], "failure_modes": ["arrangement_preservation below 1.0"]},
+        }
+        recommendation_path = write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation)
+        print(f"trace_file agent=residual_critic_step_{step:02d} role=recommendation path={recommendation_path}", flush=True)
+        print(f"agent_stage producer step={step}", flush=True)
         proposal_path = args.output_dir / f"patch_session_step_{step:02d}.json"
         if step == 0 and args.neutral_only:
             proposal = session
@@ -671,13 +731,57 @@ def command_run(args: argparse.Namespace) -> int:
             write_json(proposal_path, proposal)
         report = score_midi_locked(arrangement, proposal, reference_audio, sr)
         report_path = write_json(args.output_dir / f"patch_report_step_{step:02d}.json", report)
+        print(f"trace_file agent=loss step={step} role=audio_diff path={report_path}", flush=True)
         render_path = args.output_dir / f"patch_render_step_{step:02d}.wav"
         sf.write(render_path, render_session(proposal).T, sr)
+        print(f"trace_file agent=loss step={step} role=winner_render path={render_path}", flush=True)
+        accepted = best_report is None or report["scores"]["final"] >= best_report["scores"]["final"]
+        if accepted:
+            best_report = report
+            best_session = proposal
+            best_render_path = render_path
         session = proposal
         current_session_path = write_json(args.output_dir / "patch_session_current.json", session)
         previous_report_path = report_path
-        print(f"step={step} score={report['scores']['final']:.4f} loss={report['scores']['loss']:.4f}")
-    write_json(args.output_dir / "midi_locked_patch_report.json", {"arrangement_path": str(arrangement_path), "current_session_path": str(current_session_path), "last_report_path": str(previous_report_path)})
+        history_item = {
+            "stage": "midi_locked_patch",
+            "step": step,
+            "accepted": accepted,
+            "winner": "midi_locked_patch",
+            "audio_path": str(render_path),
+            "audio_diff_path": str(report_path),
+            "proposal_session_path": str(proposal_path),
+            "scores": report["scores"],
+            "best_scores": (best_report or report)["scores"],
+            "layers": [{"id": layer.get("id"), "role": layer.get("role")} for layer in proposal.get("layers", [])],
+            "arrangement_preservation": report["arrangement_preservation"],
+        }
+        history.append(history_item)
+        write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item)
+        print(f"winner_summary step={step} winner=midi_locked_patch score={report['scores']['final']:.4f}", flush=True)
+        print(f"step_complete index={step} winner=midi_locked_patch accepted={str(accepted).lower()} best_score={(best_report or report)['scores']['final']:.4f}", flush=True)
+    final_render = args.output_dir / "final_reconstruction.wav"
+    if best_render_path is not None:
+        final_render.write_bytes(best_render_path.read_bytes())
+    session_path = write_json(args.output_dir / "reconstruction_session.json", best_session)
+    report_payload = {
+        "workflow": "midi_locked_patch",
+        "reference": str(args.reference),
+        "source_clip": str(args.reference),
+        "midi": str(args.midi),
+        "clip_start": args.clip_start,
+        "arrangement_path": str(arrangement_path),
+        "full_arrangement_path": str(full_arrangement_path),
+        "history": history,
+        "best_scores": (best_report or {"scores": {}})["scores"],
+        "final_path": str(final_render),
+        "session_path": str(session_path),
+        "midi_locked_patch_report": best_report,
+    }
+    write_json(args.output_dir / "reconstruction_report.json", report_payload)
+    write_json(args.output_dir / "midi_locked_patch_report.json", {"arrangement_path": str(arrangement_path), "current_session_path": str(current_session_path), "last_report_path": str(previous_report_path), "best_scores": report_payload["best_scores"]})
+    print(f"wrote {final_render}", flush=True)
+    print(f"wrote {args.output_dir / 'reconstruction_report.json'}", flush=True)
     return 0
 
 
@@ -694,6 +798,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_neutral.add_argument("--output", required=True, type=Path)
     p_neutral.add_argument("--sample-rate", type=int, default=44100)
     p_neutral.add_argument("--seconds", type=float)
+    p_neutral.add_argument("--clip-start", type=float)
     p_neutral.set_defaults(func=command_neutral)
 
     p_score = sub.add_parser("score-session")
@@ -711,6 +816,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--output-dir", required=True, type=Path)
     p_run.add_argument("--sample-rate", type=int, default=44100)
     p_run.add_argument("--seconds", type=float, default=5.0)
+    p_run.add_argument("--clip-start", type=float)
     p_run.add_argument("--steps", type=int, default=1)
     p_run.add_argument("--timeout", type=int, default=180)
     p_run.add_argument("--neutral-only", action="store_true")

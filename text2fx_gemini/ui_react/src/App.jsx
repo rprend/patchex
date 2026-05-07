@@ -1096,6 +1096,11 @@ function App() {
         name.startsWith("codex_") ||
         name.startsWith("audio_diff_") ||
         name.startsWith("producer_audio_diff_") ||
+        name === "arrangement.json" ||
+        name === "full_arrangement.json" ||
+        name === "patch_session_current.json" ||
+        name.startsWith("patch_report_step_") ||
+        name.startsWith("patch_render_step_") ||
         name.startsWith("harness_improver_step_") ||
         name.match(/^producer_reconstruction_step_\d+_.+\.wav$/) ||
         name === "final_reconstruction.wav" ||
@@ -1113,6 +1118,9 @@ function App() {
       const role = artifact.name.startsWith("codex_")
         ? artifact.name.includes("_prompt") ? "prompt" : "answer"
         : artifact.name.startsWith("producer_audio_diff") ? "producer_audio_diff"
+        : artifact.name.startsWith("patch_report_step_") ? "audio_diff"
+        : artifact.name.startsWith("patch_render_step_") ? "winner_render"
+        : artifact.name === "arrangement.json" || artifact.name === "full_arrangement.json" ? "layer_analysis"
         : artifact.name.startsWith("harness_improver_step_") ? "harness_improvement"
         : artifact.name.startsWith("audio_diff") ? "audio_diff"
         : artifact.name.match(/^producer_reconstruction_step_/) ? "producer_render"
@@ -1201,7 +1209,7 @@ function App() {
           const data = await api("/api/reconstruct", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ clip: payload.result.clip, steps: 5, local_trials: 0, max_layers: 5 }),
+            body: JSON.stringify({ clip: payload.result.clip, clip_start: start, steps: 5, local_trials: 0, max_layers: 5 }),
           });
           activeRun.current = data.run_id;
           localStorage.setItem("v1ActiveRunId", data.run_id);

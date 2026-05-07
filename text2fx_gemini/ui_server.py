@@ -23,9 +23,12 @@ from text2fx import LLM_MODEL, extract_json_object
 ROOT = Path(__file__).resolve().parent
 WORKSPACE = ROOT.parent
 REFERENCES = ROOT / "references"
+SONGS = ROOT / "songs"
 UI = ROOT / "ui"
 RUNS = ROOT / "ui_runs"
 FFMPEG = shutil.which("ffmpeg")
+BETWEEN_THE_BUTTONS_MP3 = REFERENCES / "French 79 Between the Buttons.mp3"
+BETWEEN_THE_BUTTONS_MIDI = SONGS / "between_the_buttons" / "source.mid"
 
 jobs: dict[str, dict] = {}
 analysis_jobs: dict[str, dict] = {}
@@ -538,26 +541,52 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
     return run_id
 
 
-def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, max_layers: int = 5) -> str:
+def song_midi_for_reference(reference: str) -> Path | None:
+    if "French 79 Between the Buttons" in reference and BETWEEN_THE_BUTTONS_MIDI.exists():
+        return BETWEEN_THE_BUTTONS_MIDI
+    return None
+
+
+def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, max_layers: int = 5, clip_start: float | None = None) -> str:
     reference_path = safe_reference_path(reference)
     run_id = time.strftime("%Y%m%d_%H%M%S_v1_") + uuid.uuid4().hex[:8]
     out_dir = RUNS / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     event_queue: queue.Queue[dict] = queue.Queue()
-    cmd = [
-        str(WORKSPACE / ".venv/bin/python"),
-        str(ROOT / "reconstruct_match.py"),
-        "--reference",
-        str(reference_path),
-        "--output-dir",
-        str(out_dir),
-        "--steps",
-        str(max(1, min(10, steps))),
-        "--local-trials",
-        str(max(0, min(24, local_trials))),
-        "--max-layers",
-        str(max(1, min(6, max_layers))),
-    ]
+    midi_path = song_midi_for_reference(reference)
+    if midi_path is not None:
+        cmd = [
+            str(WORKSPACE / ".venv/bin/python"),
+            str(ROOT / "midi_locked_patch.py"),
+            "run",
+            "--midi",
+            str(midi_path),
+            "--reference",
+            str(reference_path),
+            "--output-dir",
+            str(out_dir),
+            "--steps",
+            str(max(1, min(10, steps))),
+            "--seconds",
+            "5",
+        ]
+        if clip_start is not None:
+            cmd.extend(["--clip-start", f"{clip_start:.6f}"])
+    else:
+        cmd = [
+            str(WORKSPACE / ".venv/bin/python"),
+            str(ROOT / "reconstruct_match.py"),
+            "--reference",
+            str(reference_path),
+            "--output-dir",
+            str(out_dir),
+            "--steps",
+            str(max(1, min(10, steps))),
+            "--local-trials",
+            str(max(0, min(24, local_trials))),
+            "--max-layers",
+            str(max(1, min(6, max_layers))),
+        ]
     reconstruction_jobs[run_id] = {
         "id": run_id,
         "status": "running",
@@ -574,6 +603,9 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
             "run_id": run_id,
             "status": "running",
             "reference": str(reference_path),
+            "workflow": "midi_locked_patch" if midi_path is not None else "freeform_reconstruction",
+            "midi": str(midi_path) if midi_path is not None else None,
+            "clip_start": clip_start,
             "cmd": cmd,
         },
     )
@@ -833,6 +865,7 @@ class Handler(BaseHTTPRequestHandler):
                     steps=int(payload.get("steps", 5)),
                     local_trials=int(payload.get("local_trials", 0)),
                     max_layers=int(payload.get("max_layers", 5)),
+                    clip_start=float(payload["clip_start"]) if payload.get("clip_start") is not None else None,
                 )
                 json_response(self, {"run_id": run_id})
                 return
