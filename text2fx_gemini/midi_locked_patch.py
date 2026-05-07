@@ -630,16 +630,15 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     }
 
 
-def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, recommendation_path: Path, previous_report_path: Path | None, output_path: Path) -> str:
-    previous_line = f"- Previous MIDI-locked patch report: {previous_report_path}" if previous_report_path else "- No previous patch report exists."
+def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, critic_brief_path: Path, loss_report_path: Path, output_path: Path) -> str:
     return f"""
 You are the Patch Producer in a MIDI-locked patch finding workflow.
 
 Read these files:
 - Authoritative arrangement JSON: {arrangement_path}
 - Current patch session JSON: {current_session_path}
-- Critic recommendation JSON: {recommendation_path}
-{previous_line}
+- Critic briefing markdown: {critic_brief_path}
+- Current loss report JSON: {loss_report_path}
 
 Task: Write a complete patch session JSON to {output_path}.
 
@@ -659,40 +658,166 @@ Return only JSON matching the current session shape. Do not include prose.
 """
 
 
-def codex_critic_prompt(arrangement_path: Path, current_session_path: Path, previous_report_path: Path | None, output_path: Path) -> str:
-    previous_line = f"- Latest MIDI-locked patch report JSON: {previous_report_path}" if previous_report_path else "- No patch has been scored yet."
+def codex_critic_prompt(
+    composition_path: Path,
+    patch_session_path: Path,
+    target_audio_path: Path,
+    current_render_path: Path,
+    loss_report_path: Path,
+    critic_brief_path: Path,
+) -> str:
     return f"""
-You are the Critic agent in a MIDI-locked patch finding workflow.
+You are the Critic agent for an audio reconstruction loop.
 
-Read these files:
-- Authoritative arrangement JSON: {arrangement_path}
-- Current patch session JSON: {current_session_path}
-{previous_line}
+Your goal is to help produce this composition so it sounds exactly like the target source. The music Producer has made a pass at it, and you are an expert musician, sound designer, and mix engineer giving advice on what production steps to take next. You will write this guidance to a file, and we will pass that file to the Producer.
 
-Task: Write the next Producer brief to {output_path}.
+You can listen to the audio files themselves. We have also done an in-depth audio analysis of the differences between the rendered audio and the target audio. Reason over both the audio and the analysis.
 
-Important:
-- MIDI lock is the default workflow contract, not a degraded mode.
-- Do not recommend changing notes, timing, velocities, layer ids, or roles.
-- Use the latest report's global_mix, track_active_window, patch_control, weakest_tracks, per-track active-window scores, isolation proxy scores, and patch-control diagnostics.
-- Name the specific track ids and parameter families that should change next.
+Read and use these inputs:
+- Composition: {composition_path}
+- Current patch session: {patch_session_path}
+- Target audio: {target_audio_path}
+- Current rendered audio: {current_render_path}
+- Loss report: {loss_report_path}
 
-Return only JSON with this shape:
-{{
-  "workflow": "midi_locked_patch",
-  "missing": ["specific measurable mismatches"],
-  "producer_prompt": "specific brief for the Producer focused on patch, effects, modulation, and mix changes",
-  "success_metrics": {{
-    "primary": ["metric names to improve"],
-    "targets": ["concrete directional targets"],
-    "failure_modes": ["what would prove the Producer made the wrong type of patch change"]
-  }},
-  "recommendations": ["specific patch/mix moves"],
-  "must_fix": ["track_id: parameter family and why"],
-  "do_not": ["specific mistakes to avoid"],
-  "priority": "oscillator|envelope|filter|modulation|effects|mix|stereo",
-  "target_tracks": ["track ids that should change"]
-}}
+Definitions:
+- Composition is the fixed musical performance: tracks, roles, note events, velocities, timing, active ranges, tempo, and meter.
+- Patch session is the current sound design, effects, and mix attempt: synth settings, envelopes, filters, modulation, effects, sends, gain, pan, width, returns, and master settings.
+- Target audio is the reference clip we are trying to reconstruct.
+- Current rendered audio is what the current patch session produces from the fixed composition.
+- Loss report contains measured inaccuracies between the target audio and current rendered audio.
+
+Task:
+Write a concise markdown briefing to:
+{critic_brief_path}
+
+Your briefing should tell the Producer what to change next in the patch session so the rendered audio gets closer to the target source.
+
+Do this:
+1. Listen to the target audio.
+2. Listen to the current rendered audio.
+3. Compare what you hear against the loss report.
+4. Read the composition so you understand which tracks are active and what role each track plays.
+5. Read the current patch session so you know what synth, effects, and mix choices are already being used.
+6. Identify the most important inaccuracies blocking a better reconstruction.
+7. Recommend concrete production changes for the next Producer pass.
+
+Use all available evidence:
+- global mix score
+- per-track active-window scores
+- isolation proxy scores
+- weakest tracks
+- envelope/ADSR diagnostics
+- brightness/filter diagnostics
+- modulation diagnostics
+- stereo/space diagnostics
+- saturation/noise diagnostics
+- arrangement preservation diagnostics
+- audible differences between target audio and current rendered audio
+
+Be specific. For each recommendation, name the track id, the problem, and the exact production move.
+
+Possible production changes include:
+
+Oscillator/source:
+- Change a track synth toward sine, triangle, square, pulse, saw, supersaw, fifth-saw, organ, electric piano, string pad, bass, noise, or drum-like source.
+- Add, remove, or rebalance oscillator layers.
+- Detune oscillators more or less.
+- Add octave doubling, sub oscillator, fifth, or unison.
+- Change pulse width or waveform blend.
+- Make the source more pure, buzzy, hollow, nasal, glassy, warm, thin, thick, metallic, or noisy.
+
+Pitch and tuning behavior:
+- Add or reduce pitch drift.
+- Add or reduce pitch envelope.
+- Add or reduce portamento/glide.
+- Change vibrato rate or depth.
+- Tighten or loosen pitch stability.
+
+Envelope and articulation:
+- Increase or decrease attack.
+- Increase or decrease decay.
+- Increase or decrease sustain.
+- Increase or decrease release.
+- Make notes more plucky, more legato, more gated, more sustained, softer, sharper, punchier, or smoother.
+- Shorten long tails that smear the rhythm.
+- Lengthen releases if the target has more sustain or ambience.
+
+Filter and brightness:
+- Raise or lower filter cutoff.
+- Increase or decrease resonance.
+- Use low-pass, high-pass, band-pass, notch, or shelving behavior.
+- Add or reduce filter envelope amount.
+- Make the sound brighter, darker, thinner, warmer, more muffled, more open, more nasal, or more resonant.
+- Change filter attack, decay, sustain, or release if the brightness evolves incorrectly.
+
+Amplitude and dynamics:
+- Raise or lower track gain.
+- Add or reduce velocity sensitivity.
+- Add or reduce compression.
+- Add or reduce transient punch.
+- Make a track more forward, more tucked back, more even, more dynamic, more aggressive, or softer.
+- Change gain automation if a part should grow, fade, pulse, or duck.
+
+Modulation and motion:
+- Add or reduce tremolo.
+- Add or reduce vibrato.
+- Add or reduce filter LFO.
+- Add or reduce amplitude LFO.
+- Change modulation rate.
+- Change modulation depth.
+- Sync modulation to tempo or make it freer.
+- Add slow evolving motion for pads.
+- Remove motion if the target is steadier.
+
+Effects and space:
+- Add or reduce reverb.
+- Change reverb size, decay, pre-delay, damping, or wet level.
+- Add or reduce delay.
+- Change delay time, feedback, filtering, stereo spread, or wet level.
+- Add or reduce chorus, ensemble, phaser, flanger, or widening.
+- Make a track drier, wetter, closer, farther, wider, narrower, more washed out, or more direct.
+- Shorten reverb tails if the mix is blurry.
+- Increase space if the target has more late energy or width.
+
+Saturation, distortion, and noise:
+- Add or reduce saturation.
+- Add or reduce drive, clipping, bitcrush, tape color, harmonic density, or grit.
+- Add or reduce noise floor, breath, hiss, or texture.
+- Make a sound cleaner, dirtier, warmer, harsher, softer, or more compressed.
+
+Stereo and placement:
+- Move a track left, right, or center.
+- Increase or decrease stereo width.
+- Collapse low-frequency tracks toward mono.
+- Widen pads, keys, or effects if the target is broader.
+- Narrow tracks that are too diffuse.
+- Adjust pan or width if the stereo image does not match.
+
+Mix balance:
+- Raise or lower specific tracks.
+- Rebalance bass, chords, lead, strings, drums, and effects.
+- Push the main hook forward.
+- Tuck supporting parts behind the lead.
+- Reduce masking between bass and keys.
+- Adjust master gain if the render is globally too loud or quiet.
+- Adjust EQ balance if the whole render is too bright, dull, boomy, thin, harsh, or muddy.
+
+Drums and percussion, if present:
+- Change drum level.
+- Change kick/snare/hat balance.
+- Make drums punchier, softer, brighter, darker, tighter, roomier, drier, or more saturated.
+- Add or reduce transient emphasis.
+- Add or reduce drum room/reverb.
+- Adjust cymbal/hat brightness and decay.
+
+Prioritization:
+- Start with the changes most likely to improve the full rendered audio.
+- Prefer high-impact track and mix changes over tiny parameter tweaks.
+- If the loss report and your listening disagree, explain the disagreement and choose the more musically plausible action.
+- If the full mix does not provide enough evidence to isolate a track, say so and recommend a conservative change.
+
+Write markdown only. Keep it practical and direct. The Producer should be able to act from the briefing without guessing.
 """
 
 
@@ -767,6 +892,40 @@ def run_codex_json_agent(agent: str, prompt: str, output_dir: Path, json_output_
     return load_codex_json_artifact(json_output_path, answer_path)
 
 
+def run_codex_markdown_agent(agent: str, prompt: str, output_dir: Path, markdown_output_path: Path, timeout: int = 180) -> str:
+    if not Path(CODEX_PATH).exists():
+        raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
+    prompt_path = output_dir / f"codex_{agent}_prompt.txt"
+    answer_path = output_dir / f"codex_{agent}_answer.txt"
+    prompt = (
+        f"{prompt.rstrip()}\n\n"
+        "File-driven orchestration requirement:\n"
+        f"- Write the markdown briefing at: {markdown_output_path}\n"
+        "- The orchestrator will pass that markdown file to the Producer after this run.\n"
+    )
+    prompt_path.write_text(prompt)
+    print(f"codex_start agent={agent}", flush=True)
+    print(f"trace_file agent={agent} role=prompt path={prompt_path}", flush=True)
+    process = subprocess.run(
+        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(answer_path), "-C", str(Path.cwd()), "-"],
+        input=prompt,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=timeout,
+    )
+    if process.returncode != 0:
+        raise RuntimeError(f"Codex agent {agent} failed with return code {process.returncode}:\n{process.stdout}")
+    print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
+    print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
+    if markdown_output_path.exists() and markdown_output_path.read_text().strip():
+        briefing = markdown_output_path.read_text()
+    else:
+        briefing = answer_path.read_text()
+        markdown_output_path.write_text(briefing.rstrip() + "\n")
+    return briefing
+
+
 def load_audio(path: Path, seconds: float | None = None) -> tuple[np.ndarray, int]:
     runtime()
     audio, sr = sf.read(path, always_2d=True)
@@ -833,37 +992,39 @@ def command_run(args: argparse.Namespace) -> int:
     source_clip_path = args.output_dir / "source_clip.wav"
     sf.write(source_clip_path, reference_audio.T, sr)
     print(f"trace_file agent=analyzer role=source_clip path={source_clip_path}", flush=True)
-    previous_report_path: Path | None = None
+    current_render_path = args.output_dir / "current_render_step_initial.wav"
+    sf.write(current_render_path, render_session(session).T, sr)
+    print(f"trace_file agent=loss role=winner_render path={current_render_path}", flush=True)
+    current_loss_report = score_midi_locked(arrangement, session, reference_audio, sr)
+    current_loss_report_path = write_json(args.output_dir / "loss_report_step_initial.json", current_loss_report)
+    print(f"trace_file agent=loss role=audio_diff path={current_loss_report_path}", flush=True)
     history: list[dict[str, Any]] = []
-    best_report: dict[str, Any] | None = None
+    best_report: dict[str, Any] | None = current_loss_report
     best_session = session
-    best_render_path: Path | None = None
+    best_render_path: Path | None = current_render_path
     for step in range(args.steps):
         lock_report: dict[str, Any] = {}
         print(f"agent_stage residual_critic step={step}", flush=True)
-        recommendation_path = args.output_dir / f"recommendation_step_{step:02d}.json"
+        critic_brief_path = args.output_dir / f"critic_brief_step_{step:02d}.md"
         if args.neutral_only:
-            recommendation = {
-                "workflow": "midi_locked_patch",
-                "missing": ["neutral-session smoke run"],
-                "producer_prompt": "Render the neutral MIDI-locked session without Codex patch changes.",
-                "success_metrics": {"primary": ["arrangement_preservation"], "targets": ["arrangement_preservation stays 1.0"], "failure_modes": ["notes changed"]},
-                "recommendations": [],
-                "must_fix": [],
-                "do_not": ["Do not alter MIDI notes."],
-                "priority": "mix",
-                "target_tracks": [],
-            }
-            write_json(recommendation_path, recommendation)
+            critic_brief = "# Critic Brief\n\nNeutral-session smoke run. Render the current session without Codex patch changes.\n"
+            critic_brief_path.write_text(critic_brief)
         else:
-            recommendation = run_codex_json_agent(
+            critic_brief = run_codex_markdown_agent(
                 f"residual_critic_step_{step:02d}",
-                codex_critic_prompt(arrangement_path, current_session_path, previous_report_path, recommendation_path),
+                codex_critic_prompt(
+                    arrangement_path,
+                    current_session_path,
+                    source_clip_path,
+                    current_render_path,
+                    current_loss_report_path,
+                    critic_brief_path,
+                ),
                 args.output_dir,
-                recommendation_path,
+                critic_brief_path,
                 args.timeout,
             )
-        print(f"trace_file agent=residual_critic_step_{step:02d} role=recommendation path={recommendation_path}", flush=True)
+        print(f"trace_file agent=residual_critic_step_{step:02d} role=recommendation path={critic_brief_path}", flush=True)
         print(f"agent_stage producer step={step}", flush=True)
         proposal_path = args.output_dir / f"patch_session_step_{step:02d}.json"
         if step == 0 and args.neutral_only:
@@ -871,7 +1032,7 @@ def command_run(args: argparse.Namespace) -> int:
             proposal, lock_report = enforce_arrangement_lock(arrangement, proposal)
             write_json(proposal_path, proposal)
         else:
-            prompt = codex_patch_prompt(arrangement_path, current_session_path, recommendation_path, previous_report_path, proposal_path)
+            prompt = codex_patch_prompt(arrangement_path, current_session_path, critic_brief_path, current_loss_report_path, proposal_path)
             raw_proposal = run_codex_patch(f"producer_step_{step:02d}", prompt, args.output_dir, proposal_path, args.timeout)
             proposal, lock_report = enforce_arrangement_lock(arrangement, raw_proposal)
             write_json(proposal_path, proposal)
@@ -889,7 +1050,8 @@ def command_run(args: argparse.Namespace) -> int:
             best_render_path = render_path
         session = best_session if best_session is not None else proposal
         current_session_path = write_json(args.output_dir / "patch_session_current.json", session)
-        previous_report_path = report_path
+        current_loss_report_path = report_path if accepted else current_loss_report_path
+        current_render_path = render_path if accepted else current_render_path
         history_item = {
             "stage": "midi_locked_patch",
             "step": step,
@@ -903,7 +1065,8 @@ def command_run(args: argparse.Namespace) -> int:
             "layers": [{"id": layer.get("id"), "role": layer.get("role")} for layer in proposal.get("layers", [])],
             "arrangement_preservation": report["arrangement_preservation"],
             "arrangement_lock_report": lock_report or {"before": report["arrangement_preservation"], "after": report["arrangement_preservation"]},
-            "residual_critic": recommendation,
+            "critic_brief_path": str(critic_brief_path),
+            "critic_brief": critic_brief,
         }
         history.append(history_item)
         write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item)
@@ -928,7 +1091,16 @@ def command_run(args: argparse.Namespace) -> int:
         "midi_locked_patch_report": best_report,
     }
     write_json(args.output_dir / "reconstruction_report.json", report_payload)
-    write_json(args.output_dir / "midi_locked_patch_report.json", {"arrangement_path": str(arrangement_path), "current_session_path": str(current_session_path), "last_report_path": str(previous_report_path), "best_scores": report_payload["best_scores"]})
+    write_json(
+        args.output_dir / "midi_locked_patch_report.json",
+        {
+            "arrangement_path": str(arrangement_path),
+            "current_session_path": str(current_session_path),
+            "current_loss_report_path": str(current_loss_report_path),
+            "current_render_path": str(current_render_path),
+            "best_scores": report_payload["best_scores"],
+        },
+    )
     print(f"wrote {final_render}", flush=True)
     print(f"wrote {args.output_dir / 'reconstruction_report.json'}", flush=True)
     return 0
