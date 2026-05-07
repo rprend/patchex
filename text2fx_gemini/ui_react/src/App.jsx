@@ -390,10 +390,7 @@ function FlowAgentNode({ data, selected }) {
 }
 
 function IterationFrameNode({ data }) {
-  return h("div", { className: "iteration-frame-node" },
-    h("strong", null, data.label),
-    data.detail ? h("span", null, data.detail) : null
-  );
+  return h("div", { className: "iteration-frame-node" });
 }
 
 const nodeTypes = { agent: FlowAgentNode, iterationFrame: IterationFrameNode };
@@ -627,18 +624,15 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
     nodes.push({
       id: frameId,
       type: "iterationFrame",
-      position: { x: 8, y },
+      position: { x: 8, y: y + 22 },
       draggable: false,
       selectable: false,
-      style: { width: 920, height: 220 },
-      data: {
-        label: `Iteration ${step + 1}`,
-        detail: winner ? `${friendlyWinner(winner.winner)} · ${winner.score}` : "produce → calculate accuracy → critique",
-      },
+      style: { width: 920, height: 196 },
+      data: {},
     });
-    nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 36, 68, frameId, "writes session files"));
-    nodes.push(makeAgentNode(`loss-${step}`, "Calculate Accuracy", "loss", step, 336, 68, frameId, "renders and scores"));
-    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 636, 68, frameId, "writes next brief"));
+    nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 36, 34, frameId, "writes session files"));
+    nodes.push(makeAgentNode(`loss-${step}`, "Calculate Accuracy", "loss", step, 336, 34, frameId, "renders and scores"));
+    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 636, 34, frameId, "writes next brief"));
     edges.push(makeEdge(`p-l-${step}`, `producer-${step}`, `loss-${step}`, statuses[`loss_${step}`] === "running"));
     edges.push(makeEdge(`l-c-${step}`, `loss-${step}`, `critic-${step}`, statuses[`residual_critic_${step}`] === "running"));
     if (index === 0) edges.push(makeEdge("a-p-0", "analyzer", `producer-${step}`));
