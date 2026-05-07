@@ -1216,30 +1216,65 @@ def load_codex_json_artifact(json_output_path: Path, answer_path: Path) -> dict[
     raise ValueError(f"Codex did not produce valid JSON for {json_output_path}: {detail}")
 
 
-def run_codex_patch(agent: str, prompt: str, output_dir: Path, answer_path: Path, timeout: int = 180) -> dict[str, Any]:
+def stream_codex_exec(agent: str, prompt: str, answer_path: Path, timeout: int) -> int:
+    try:
+        process = subprocess.run(
+            [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(answer_path), "-C", str(Path.cwd()), "-"],
+            input=prompt,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if stdout.strip():
+            for line in stdout.splitlines():
+                print(f"codex_log agent={agent} {line}", flush=True)
+        print(f"codex_timeout agent={agent} seconds={timeout}", flush=True)
+        return 124
+    if process.stdout.strip():
+        for line in process.stdout.splitlines():
+            print(f"codex_log agent={agent} {line}", flush=True)
+    return process.returncode
+
+
+def recover_codex_json(agent: str, json_output_path: Path, answer_path: Path, returncode: int) -> dict[str, Any]:
+    try:
+        payload = load_codex_json_artifact(json_output_path, answer_path)
+    except Exception as exc:
+        raise RuntimeError(f"Codex agent {agent} failed with return code {returncode} and no valid JSON artifact could be recovered: {exc}") from exc
+    print(f"codex_recovered agent={agent} artifact={json_output_path}", flush=True)
+    print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
+    return payload
+
+
+def run_codex_patch(agent: str, prompt: str, output_dir: Path, answer_path: Path, timeout: int = 600) -> dict[str, Any]:
     if not Path(CODEX_PATH).exists():
         raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
     prompt_path = output_dir / f"codex_{agent}_prompt.txt"
     prompt_path.write_text(prompt)
+    print(f"codex_request agent={agent} path={prompt_path}", flush=True)
     print(f"codex_start agent={agent}", flush=True)
     print(f"trace_file agent={agent} role=prompt path={prompt_path}", flush=True)
-    process = subprocess.run(
-        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(output_dir / f"codex_{agent}_answer.txt"), "-C", str(Path.cwd()), "-"],
-        input=prompt,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        timeout=timeout,
-    )
-    if process.returncode != 0:
-        raise RuntimeError(f"Codex patch producer failed with return code {process.returncode}:\n{process.stdout}")
     codex_answer_path = output_dir / f"codex_{agent}_answer.txt"
+    returncode = stream_codex_exec(
+        agent,
+        prompt,
+        codex_answer_path,
+        timeout,
+    )
+    if returncode != 0:
+        return recover_codex_json(agent, answer_path, codex_answer_path, returncode)
     print(f"codex_done agent={agent} answer_path={codex_answer_path}", flush=True)
+    print(f"codex_response agent={agent} path={codex_answer_path}", flush=True)
     print(f"trace_file agent={agent} role=answer path={codex_answer_path}", flush=True)
     return load_codex_json_artifact(answer_path, codex_answer_path)
 
 
-def run_codex_json_agent(agent: str, prompt: str, output_dir: Path, json_output_path: Path, timeout: int = 180) -> dict[str, Any]:
+def run_codex_json_agent(agent: str, prompt: str, output_dir: Path, json_output_path: Path, timeout: int = 600) -> dict[str, Any]:
     if not Path(CODEX_PATH).exists():
         raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
     prompt_path = output_dir / f"codex_{agent}_prompt.txt"
@@ -1251,24 +1286,24 @@ def run_codex_json_agent(agent: str, prompt: str, output_dir: Path, json_output_
         "- The orchestrator will read that JSON file after this run.\n"
     )
     prompt_path.write_text(prompt)
+    print(f"codex_request agent={agent} path={prompt_path}", flush=True)
     print(f"codex_start agent={agent}", flush=True)
     print(f"trace_file agent={agent} role=prompt path={prompt_path}", flush=True)
-    process = subprocess.run(
-        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(answer_path), "-C", str(Path.cwd()), "-"],
-        input=prompt,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        timeout=timeout,
+    returncode = stream_codex_exec(
+        agent,
+        prompt,
+        answer_path,
+        timeout,
     )
-    if process.returncode != 0:
-        raise RuntimeError(f"Codex agent {agent} failed with return code {process.returncode}:\n{process.stdout}")
+    if returncode != 0:
+        return recover_codex_json(agent, json_output_path, answer_path, returncode)
     print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
+    print(f"codex_response agent={agent} path={answer_path}", flush=True)
     print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
     return load_codex_json_artifact(json_output_path, answer_path)
 
 
-def run_codex_markdown_agent(agent: str, prompt: str, output_dir: Path, markdown_output_path: Path, timeout: int = 180) -> str:
+def run_codex_markdown_agent(agent: str, prompt: str, output_dir: Path, markdown_output_path: Path, timeout: int = 600) -> str:
     if not Path(CODEX_PATH).exists():
         raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
     prompt_path = output_dir / f"codex_{agent}_prompt.txt"
@@ -1280,19 +1315,30 @@ def run_codex_markdown_agent(agent: str, prompt: str, output_dir: Path, markdown
         "- The orchestrator will pass that markdown file to the Producer after this run.\n"
     )
     prompt_path.write_text(prompt)
+    print(f"codex_request agent={agent} path={prompt_path}", flush=True)
     print(f"codex_start agent={agent}", flush=True)
     print(f"trace_file agent={agent} role=prompt path={prompt_path}", flush=True)
-    process = subprocess.run(
-        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(answer_path), "-C", str(Path.cwd()), "-"],
-        input=prompt,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        timeout=timeout,
+    returncode = stream_codex_exec(
+        agent,
+        prompt,
+        answer_path,
+        timeout,
     )
-    if process.returncode != 0:
-        raise RuntimeError(f"Codex agent {agent} failed with return code {process.returncode}:\n{process.stdout}")
+    if returncode != 0:
+        if markdown_output_path.exists() and markdown_output_path.read_text().strip():
+            briefing = markdown_output_path.read_text()
+            print(f"codex_recovered agent={agent} artifact={markdown_output_path}", flush=True)
+            print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
+            return briefing
+        if answer_path.exists() and answer_path.read_text().strip():
+            briefing = answer_path.read_text()
+            markdown_output_path.write_text(briefing.rstrip() + "\n")
+            print(f"codex_recovered agent={agent} artifact={markdown_output_path}", flush=True)
+            print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
+            return briefing
+        raise RuntimeError(f"Codex agent {agent} failed with return code {returncode} and no markdown artifact could be recovered.")
     print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
+    print(f"codex_response agent={agent} path={answer_path}", flush=True)
     print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
     if markdown_output_path.exists() and markdown_output_path.read_text().strip():
         briefing = markdown_output_path.read_text()
@@ -1552,7 +1598,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--seconds", type=float, default=5.0)
     p_run.add_argument("--clip-start", type=float)
     p_run.add_argument("--steps", type=int, default=1)
-    p_run.add_argument("--timeout", type=int, default=180)
+    p_run.add_argument("--timeout", type=int, default=600)
     p_run.add_argument("--neutral-only", action="store_true")
     p_run.set_defaults(func=command_run)
     return parser
