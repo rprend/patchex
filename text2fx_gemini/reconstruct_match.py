@@ -846,52 +846,8 @@ def session_shape() -> str:
     return json.dumps(DEFAULT_SESSION, indent=2)
 
 
-def codex_analyzer_prompt(source_clip_path: Path, source_profile_path: Path, duration: float) -> str:
-    return f"""
-You are the Analyzer agent in a file-driven audio reconstruction pipeline.
-
-Read these files before answering:
-- Source clip WAV: {source_clip_path}
-- Source audio profile JSON: {source_profile_path}
-
-Task: Produce a structured layer plan and reconstruction constraints. This is not vibe analysis. Infer likely layer architecture from the source profile: band energy, centroid motion, onset count, stereo stats, and duration.
-
-Update the JSON artifact requested by the orchestrator with this structure:
-{{
-  "global": {{
-    "tempo": 60-180 or null,
-    "key": "estimated key or unknown",
-    "meter": "4/4 or unknown",
-    "duration_seconds": {duration},
-    "overall_mix": "compact reconstruction summary"
-  }},
-  "layers": [
-    {{
-      "id": "short_layer_id",
-      "role": "what this layer contributes",
-      "instrument": "specific synth/instrument family",
-      "confidence": 0-1,
-      "pitch_content": ["note/chord estimates"],
-      "timing": "held, pulsed, arpeggiated, transient, or ambience",
-      "synth_hypothesis": {{
-        "oscillators": "concrete oscillator/unison idea",
-        "filter": "concrete filter idea",
-        "amp_envelope": "concrete envelope idea",
-        "modulation": "concrete modulation idea"
-      }},
-      "effects": ["specific effects"]
-    }}
-  ],
-  "constraints": ["specific measurable constraints for reconstruction"],
-  "strategy": ["ordered reconstruction steps, each adding or modifying a measurable layer"]
-}}
-
-Prefer 2-5 layers for dense clips and 1-3 layers for sparse clips. Treat this as a hypothesis that later audio-diff files can correct.
-"""
-
-
 def codex_producer_prompt(
-    analyzer_path: Path,
+    source_profile_path: Path,
     current_session_path: Path,
     recommendation_path: Path,
     step: int,
@@ -901,12 +857,12 @@ def codex_producer_prompt(
 You are the Producer agent in an autonomous audio reconstruction pipeline.
 
 Read these files before answering:
-- Analyzer layer plan: {analyzer_path}
+- Source audio profile JSON: {source_profile_path}
 - Current best reconstruction session JSON: {current_session_path}
 - Critic recommendation JSON: {recommendation_path}
-- Target source audio: {analyzer_path.parent / "source_clip.wav"}
-- Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
-- Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
+- Target source audio: {source_profile_path.parent / "source_clip.wav"}
+- Source pattern constraints JSON: {source_profile_path.parent / "pattern_constraints.json"}
+- Deterministic beat grid JSON: {source_profile_path.parent / "beat_grid.json"}
 
 Task: Write the next complete reconstruction session JSON. Use the current session as the starting point and make the smallest useful DAW change that follows the Critic recommendation.
 
@@ -936,23 +892,23 @@ The session JSON must use this shape:
 """
 
 
-def codex_residual_critic_prompt(analyzer_path: Path, session_path: Path, audio_diff_path: Path | None) -> str:
+def codex_residual_critic_prompt(source_profile_path: Path, session_path: Path, audio_diff_path: Path | None) -> str:
     diff_line = f"- Latest audio similarity/diff JSON: {audio_diff_path}" if audio_diff_path is not None else "- No reconstruction has been scored yet."
     diff_guidance = (
         "Use the diff JSON to identify the biggest measurable mismatch: exact time ranges, band/envelope errors, modulation rate/depth errors, onset errors, pitch, stereo, or timbre."
         if audio_diff_path is not None
-        else "Use the analyzer plan and source measurements to recommend the first reconstruction move."
+        else "Use the source measurements to recommend the first reconstruction move."
     )
     return f"""
 You are the Critic agent in an audio reconstruction pipeline.
 
 Read these files before answering:
-- Analyzer layer plan: {analyzer_path}
+- Source audio profile JSON: {source_profile_path}
 - Current best reconstruction session JSON: {session_path}
-- Target source audio: {analyzer_path.parent / "source_clip.wav"}
+- Target source audio: {source_profile_path.parent / "source_clip.wav"}
 {diff_line}
-- Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
-- Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
+- Source pattern constraints JSON: {source_profile_path.parent / "pattern_constraints.json"}
+- Deterministic beat grid JSON: {source_profile_path.parent / "beat_grid.json"}
 
 Task: Write the next Producer brief. {diff_guidance}
 
@@ -1513,29 +1469,13 @@ def main() -> None:
     write_run_manifest(args.output_dir, manifest)
 
     beat_grid = estimate_beat_grid(reference_audio, args.sample_rate, subdivision=4)
-    trace_file("analyzer", "beat_grid", write_json(args.output_dir / "beat_grid.json", beat_grid))
+    trace_file("residual_critic", "beat_grid", write_json(args.output_dir / "beat_grid.json", beat_grid))
     profile = source_profile(reference_audio, args.sample_rate, args.seconds, beat_grid)
     pattern_info = pattern_constraints(profile, args.sample_rate)
     profile["pattern_constraints"] = pattern_info
     profile["synth_engine"] = {"active": "vital_audio_unit", "fallback": "internal_wavetable", "vital": vital_status()}
-    source_profile_path = trace_file("analyzer", "source_profile", write_json(args.output_dir / "source_profile.json", profile))
-    trace_file("analyzer", "pattern_constraints", write_json(args.output_dir / "pattern_constraints.json", pattern_info))
-    print("analysis_start layer_plan", flush=True)
-    analysis = run_codex_json(
-        args.output_dir,
-        "analyzer",
-        codex_analyzer_prompt(reference_clip, source_profile_path, args.seconds),
-        json_output_path=args.output_dir / "analyzer_answer.json",
-    )
-    global_payload = analysis.setdefault("global", {})
-    global_payload.setdefault("meter", "unknown")
-    global_payload.setdefault("duration_seconds", args.seconds)
-    global_payload.setdefault("overall_mix", "unknown overall mix")
-    if not isinstance(analysis.get("layers"), list):
-        raise ValueError(f"Codex Analyzer did not return layers: {analysis}")
-    analyzer_path = trace_file("analyzer", "parsed_answer", write_json(args.output_dir / "analyzer_answer.json", analysis))
-    trace_file("analyzer", "layer_analysis", write_json(args.output_dir / "layer_analysis.json", analysis))
-    print(f"analysis_done layers={len(analysis.get('layers', []))}", flush=True)
+    source_profile_path = trace_file("residual_critic", "source_profile", write_json(args.output_dir / "source_profile.json", profile))
+    trace_file("residual_critic", "pattern_constraints", write_json(args.output_dir / "pattern_constraints.json", pattern_info))
 
     session = sanitize_session(DEFAULT_SESSION, args.seconds, args.sample_rate)
     current_session_path = trace_file("session", "current", write_json(args.output_dir / "session_current.json", session))
@@ -1553,7 +1493,7 @@ def main() -> None:
         critic = run_codex_json(
             args.output_dir,
             f"residual_critic_step_{step:02d}",
-            codex_residual_critic_prompt(analyzer_path, current_session_path, previous_diff_path),
+            codex_residual_critic_prompt(source_profile_path, current_session_path, previous_diff_path),
             json_output_path=args.output_dir / f"recommendation_step_{step:02d}.json",
         )
         recommendation = {
@@ -1575,7 +1515,7 @@ def main() -> None:
         proposed = run_codex_json(
             args.output_dir,
             f"producer_step_{step:02d}",
-            codex_producer_prompt(analyzer_path, current_session_path, recommendation_path, step, args.max_layers),
+            codex_producer_prompt(source_profile_path, current_session_path, recommendation_path, step, args.max_layers),
             args.seconds,
             args.sample_rate,
             json_output_path=args.output_dir / f"session_step_{step:02d}_codex_proposal.json",
@@ -1664,7 +1604,7 @@ def main() -> None:
     report = {
         "reference": str(args.reference),
         "source_clip": str(reference_clip),
-        "analysis": analysis,
+        "source_profile": profile,
         "empty_session_schema": sanitize_session(DEFAULT_SESSION, args.seconds, args.sample_rate),
         "history": history,
         "best_scores": score_to_json(best_score),

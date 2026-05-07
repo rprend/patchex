@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Activity, ArrowLeft, Brain, MessageSquareText, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Activity, ArrowLeft, MessageSquareText, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { Terminal } from './components/ui/terminal.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
@@ -51,7 +51,6 @@ const ROLE_LABELS = {
 };
 
 const AGENT_LABELS = {
-  analyzer: "Analyzer",
   producer: "Producer",
   residual_critic: "Critic",
   harness_improver: "Harness Improver",
@@ -119,7 +118,6 @@ function roleName(role, agent) {
     if (agentBase(agent) === "producer") return "Producer instructions";
     if (agentBase(agent) === "residual_critic") return "Critic instructions";
     if (agentBase(agent) === "harness_improver") return "Harness instructions";
-    if (agentBase(agent) === "analyzer") return "Analyzer instructions";
   }
   return ROLE_LABELS[role] || String(role || "File").replaceAll("_", " ");
 }
@@ -430,12 +428,6 @@ function traceSet(traces, base, step = null) {
 function outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey) {
   const byRole = (...patterns) => nodeTraces.find((trace) => patterns.some((pattern) => trace.role === pattern || trace.role?.includes(pattern)));
   const filename = (trace) => trace?.name || trace?.path?.split("/").pop() || "Open";
-  if (base === "analyzer") {
-    return [
-      { label: "Plan", value: filename(byRole("layer_analysis", "parsed_answer")), trace: byRole("layer_analysis", "parsed_answer") },
-      { label: "Prompt", value: filename(byRole("prompt")), trace: byRole("prompt") },
-    ];
-  }
   if (base === "producer") {
     return [
       { label: "Audio", value: filename(byRole("producer_render", "render")), trace: byRole("producer_render", "render") },
@@ -576,17 +568,17 @@ function AgentActivity({ selected }) {
 
 function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
   const steps = Array.from(new Set(traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined))).sort((a, b) => a - b);
-  const [selectedId, setSelectedId] = useState("analyzer");
+  const [selectedId, setSelectedId] = useState("critic-0");
   const [selectedDetail, setSelectedDetail] = useState(null);
 
   useEffect(() => {
-    if (selectedId === "analyzer" || steps.some((step) => selectedId.endsWith(`-${step}`))) return;
-    setSelectedId("analyzer");
+    if (steps.some((step) => selectedId.endsWith(`-${step}`))) return;
+    setSelectedId(steps.length ? `critic-${steps[0]}` : "critic-0");
   }, [steps.join(","), selectedId]);
 
   const makeAgentNode = (id, label, base, step, x, y, parentId = undefined, detail = "") => {
     const statusKey = step === null ? base : `${base}_${step}`;
-    const icon = base === "analyzer" ? Brain : base === "producer" ? SlidersHorizontal : base === "loss" ? Activity : base === "harness_improver" ? RefreshCw : MessageSquareText;
+    const icon = base === "producer" ? SlidersHorizontal : base === "loss" ? Activity : base === "harness_improver" ? RefreshCw : MessageSquareText;
     const nodeTraces = traceSet(traces, base, step);
     const rows = outputRowsForAgent(base, step, nodeTraces, winners, notes, statusKey);
     return {
@@ -628,9 +620,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
     style: { stroke: "#323a85", strokeWidth: 2 },
   });
 
-  const nodes = [
-    makeAgentNode("analyzer", "Analyzer", "analyzer", null, 24, 26, undefined, "one-time source analysis"),
-  ];
+  const nodes = [];
   const edges = [];
   const makeAccuracyNode = (step, x, y, parentId) => {
     const winner = winners[step];
@@ -669,12 +659,11 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
     nodes.push(makeAccuracyNode(step, 636, 78, frameId));
     edges.push(makeEdge(`c-p-${step}`, `critic-${step}`, `producer-${step}`, statuses[`producer_${step}`] === "running"));
     edges.push(makeEdge(`p-a-${step}`, `producer-${step}`, `accuracy-${step}`, statuses[`loss_${step}`] === "running"));
-    if (index === 0) edges.push(makeEdge("a-c-0", "analyzer", `critic-${step}`));
     const nextStep = steps[index + 1];
     if (nextStep !== undefined) edges.push(makeEdge(`a-c-${step}-${nextStep}`, `accuracy-${step}`, `critic-${nextStep}`, statuses[`residual_critic_${nextStep}`] === "running"));
   });
 
-  const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.id === "analyzer");
+  const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.type === "agent");
   const selected = selectedNode?.data || { label: "Select a block", traces: [] };
 
   return h("section", { className: "workflow-section" },
