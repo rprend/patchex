@@ -362,8 +362,7 @@ def compact_log_line(line: str, state: dict[str, int]) -> str | None:
         state["prompt_lines"] = state.get("prompt_lines", 0) + 1
         return None
     if stripped.startswith("codex_log "):
-        state["suppressed_codex"] = state.get("suppressed_codex", 0) + 1
-        return None
+        return stripped[:1600] + (" ... [truncated]" if len(stripped) > 1600 else "")
     if "FutureWarning:" in stripped or stripped.startswith("warnings.warn(") or "/site-packages/" in stripped:
         return None
     if stripped.startswith("codex_prompt_hidden") or stripped.startswith("codex_prompt_path"):

@@ -793,7 +793,7 @@ function App() {
 
   const addAgentNote = useCallback((id, note) => {
     if (!note) return;
-    setNotes((current) => ({ ...current, [id]: [...(current[id] || []).slice(-4), note] }));
+    setNotes((current) => ({ ...current, [id]: [...(current[id] || []).slice(-200), note] }));
   }, []);
 
   const addTrace = useCallback((payload) => {
@@ -914,6 +914,21 @@ function App() {
 
   const routeRunLog = useCallback((line) => {
     const step = parseStep(line);
+    if (line.startsWith("codex_log ")) {
+      const agent = normalizeAgent(line.match(/\bagent=([^ ]+)/)?.[1] || "");
+      const stepId = agentStep(agent, null);
+      const id = stepId === null ? agentBase(agent) : `${agentBase(agent)}_${stepId}`;
+      addAgentNote(id, line);
+      return;
+    }
+    if (line.startsWith("codex_start")) {
+      const agent = normalizeAgent(line.match(/\bagent=([^ ]+)/)?.[1] || "");
+      const stepId = agentStep(agent, null);
+      const id = stepId === null ? agentBase(agent) : `${agentBase(agent)}_${stepId}`;
+      setStatuses((current) => ({ ...current, [id]: "running" }));
+      addAgentNote(id, line);
+      return;
+    }
     if (line.startsWith("winner_summary") || line.startsWith("producer_winner")) {
       const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
       const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
@@ -928,6 +943,7 @@ function App() {
       const stepId = agentStep(agent, null);
       const id = stepId === null ? agentBase(agent) : `${agentBase(agent)}_${stepId}`;
       setStatuses((current) => ({ ...current, [id]: "completed" }));
+      addAgentNote(id, line);
       return;
     }
     const agentMatch = line.match(/\bagent_stage ([a-z_]+)(?: step=(\d+))?/);
