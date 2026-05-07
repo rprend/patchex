@@ -791,6 +791,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/songs":
                 songs = []
+                errors = []
                 for song_dir in sorted(SONGS.glob("*")):
                     if not song_dir.is_dir() or not (song_dir / "song.json").exists():
                         continue
@@ -798,7 +799,9 @@ class Handler(BaseHTTPRequestHandler):
                         song = load_song(song_dir.name)
                         audio = song_asset_path(song, "audio")
                         midi = song_asset_path(song, "midi")
-                    except Exception:
+                        arrangement = song_asset_path(song, "arrangement") if song.get("arrangement") else None
+                    except Exception as exc:
+                        errors.append({"id": song_dir.name, "path": str(song_dir), "error": str(exc)})
                         continue
                     songs.append(
                         {
@@ -811,10 +814,11 @@ class Handler(BaseHTTPRequestHandler):
                             "arrangement": song.get("arrangement"),
                             "audio_size": audio.stat().st_size,
                             "midi_size": midi.stat().st_size,
+                            "arrangement_size": arrangement.stat().st_size if arrangement is not None else None,
                             "url": f"/media/songs/{quote(song['id'])}/audio",
                         }
                     )
-                json_response(self, {"songs": songs})
+                json_response(self, {"songs": songs, "errors": errors})
                 return
             if path == "/api/runs":
                 json_response(self, {"runs": list_runs()})

@@ -696,7 +696,26 @@ Return only JSON with this shape:
 """
 
 
-def run_codex_patch(agent: str, prompt: str, output_dir: Path, answer_path: Path, timeout: int = 180) -> None:
+def load_codex_json_artifact(json_output_path: Path, answer_path: Path) -> dict[str, Any]:
+    sources: list[tuple[str, Path]] = []
+    if json_output_path.exists() and json_output_path.read_text().strip():
+        sources.append(("artifact", json_output_path))
+    if answer_path.exists() and answer_path.read_text().strip():
+        sources.append(("answer", answer_path))
+    errors: list[str] = []
+    for label, path in sources:
+        try:
+            payload = extract_json_object(path.read_text())
+        except Exception as exc:
+            errors.append(f"{label} {path}: {exc}")
+            continue
+        json_output_path.write_text(json.dumps(payload, indent=2) + "\n")
+        return payload
+    detail = "; ".join(errors) if errors else "no non-empty JSON output was written"
+    raise ValueError(f"Codex did not produce valid JSON for {json_output_path}: {detail}")
+
+
+def run_codex_patch(agent: str, prompt: str, output_dir: Path, answer_path: Path, timeout: int = 180) -> dict[str, Any]:
     if not Path(CODEX_PATH).exists():
         raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
     prompt_path = output_dir / f"codex_{agent}_prompt.txt"
@@ -716,9 +735,7 @@ def run_codex_patch(agent: str, prompt: str, output_dir: Path, answer_path: Path
     codex_answer_path = output_dir / f"codex_{agent}_answer.txt"
     print(f"codex_done agent={agent} answer_path={codex_answer_path}", flush=True)
     print(f"trace_file agent={agent} role=answer path={codex_answer_path}", flush=True)
-    if not answer_path.exists():
-        payload = extract_json_object(codex_answer_path.read_text())
-        answer_path.write_text(json.dumps(payload, indent=2) + "\n")
+    return load_codex_json_artifact(answer_path, codex_answer_path)
 
 
 def run_codex_json_agent(agent: str, prompt: str, output_dir: Path, json_output_path: Path, timeout: int = 180) -> dict[str, Any]:
@@ -747,10 +764,7 @@ def run_codex_json_agent(agent: str, prompt: str, output_dir: Path, json_output_
         raise RuntimeError(f"Codex agent {agent} failed with return code {process.returncode}:\n{process.stdout}")
     print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
     print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
-    payload_text = json_output_path.read_text() if json_output_path.exists() and json_output_path.read_text().strip() else answer_path.read_text()
-    payload = extract_json_object(payload_text)
-    json_output_path.write_text(json.dumps(payload, indent=2) + "\n")
-    return payload
+    return load_codex_json_artifact(json_output_path, answer_path)
 
 
 def load_audio(path: Path, seconds: float | None = None) -> tuple[np.ndarray, int]:
@@ -858,8 +872,7 @@ def command_run(args: argparse.Namespace) -> int:
             write_json(proposal_path, proposal)
         else:
             prompt = codex_patch_prompt(arrangement_path, current_session_path, recommendation_path, previous_report_path, proposal_path)
-            run_codex_patch(f"producer_step_{step:02d}", prompt, args.output_dir, proposal_path, args.timeout)
-            raw_proposal = json.loads(proposal_path.read_text())
+            raw_proposal = run_codex_patch(f"producer_step_{step:02d}", prompt, args.output_dir, proposal_path, args.timeout)
             proposal, lock_report = enforce_arrangement_lock(arrangement, raw_proposal)
             write_json(proposal_path, proposal)
             write_json(args.output_dir / f"arrangement_lock_step_{step:02d}.json", lock_report)
@@ -874,7 +887,7 @@ def command_run(args: argparse.Namespace) -> int:
             best_report = report
             best_session = proposal
             best_render_path = render_path
-        session = proposal
+        session = best_session if best_session is not None else proposal
         current_session_path = write_json(args.output_dir / "patch_session_current.json", session)
         previous_report_path = report_path
         history_item = {
