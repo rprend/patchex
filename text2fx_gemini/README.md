@@ -203,3 +203,32 @@ python text2fx_gemini/play_patch.py \
   --space 0.25 \
   --output text2fx_gemini/reference_run/note_52_warm.wav
 ```
+
+## MIDI-Locked Patch Finding
+
+Use this path when the arrangement is known from MIDI and the agent should only
+search synth, effects, modulation, and mix settings.
+
+```bash
+python text2fx_gemini/midi_locked_patch.py import-midi \
+  --midi ~/Downloads/french-79-between-the-buttons-20240211083935-nonstop2k.com.mid \
+  --output text2fx_gemini/midi_locked_run/arrangement.json
+
+python text2fx_gemini/midi_locked_patch.py neutral-session \
+  --arrangement text2fx_gemini/midi_locked_run/arrangement.json \
+  --output text2fx_gemini/midi_locked_run/patch_session.json \
+  --seconds 5
+
+python text2fx_gemini/midi_locked_patch.py score-session \
+  --arrangement text2fx_gemini/midi_locked_run/arrangement.json \
+  --session text2fx_gemini/midi_locked_run/patch_session.json \
+  --reference reference_5s.wav \
+  --output text2fx_gemini/midi_locked_run/patch_report.json \
+  --render-output text2fx_gemini/midi_locked_run/patch_render.wav \
+  --seconds 5
+```
+
+The report includes global full-mix similarity, per-track active-window scores,
+solo-track isolation proxy scores, patch-control diagnostics, and an arrangement
+preservation penalty. Any note, timing, or velocity change makes the preservation
+penalty nonzero.
