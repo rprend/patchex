@@ -1177,16 +1177,17 @@ function App() {
 
   const audioUrl = currentFile ? `/media/references/${encodeURIComponent(currentFile)}` : "";
   const runActive = status === "Running" || status === "Extracting";
-  const hasRunView = runActive || traces.length > 0 || artifacts.length > 0 || report;
   const routeRunId = currentRouteRunId();
-  return h("main", { className: routeRunId || hasRunView ? "react-shell run-detail-shell" : "react-shell" },
-    routeRunId || hasRunView ? h("div", { className: "run-topbar" },
+  const hasLoadedRun = runActive || traces.length > 0 || artifacts.length > 0 || report;
+  const showRunDetail = Boolean(routeRunId);
+  return h("main", { className: showRunDetail ? "react-shell run-detail-shell" : "react-shell" },
+    showRunDetail ? h("div", { className: "run-topbar" },
       h("a", { className: "back-link", href: "/v1" },
         h(ArrowLeft, { size: 16, strokeWidth: 2 }),
         h("span", null, "Back")
       )
     ) : null,
-    routeRunId || hasRunView ? null : h(SourceSelector, {
+    showRunDetail ? null : h(SourceSelector, {
       files,
       currentFile,
       onSelect: handleSourceEvent,
@@ -1202,11 +1203,11 @@ function App() {
       disabled: runActive || !currentFile,
       running: runActive,
     }),
-    hasRunView ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts }) : null,
-    hasRunView ? h(Comparison, { artifacts }) : null,
-    hasRunView ? h(Scoreboard, { report }) : null,
-    hasRunView ? h(Artifacts, { artifacts, onReport: setReport }) : null,
-    routeRunId || hasRunView ? null : h(RunHistory, { runs, onLoad: loadPastRun, onRefresh: loadRuns })
+    showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts }) : null,
+    showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
+    showRunDetail && hasLoadedRun ? h(Scoreboard, { report }) : null,
+    showRunDetail && hasLoadedRun ? h(Artifacts, { artifacts, onReport: setReport }) : null,
+    showRunDetail ? null : h(RunHistory, { runs, onLoad: loadPastRun, onRefresh: loadRuns })
   );
 }
 
