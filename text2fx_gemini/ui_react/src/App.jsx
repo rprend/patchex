@@ -532,46 +532,17 @@ function AgentActivity({ selected }) {
     const timer = setInterval(() => setElapsed(Math.max(1, Math.floor((Date.now() - started) / 1000))), 1000);
     return () => clearInterval(timer);
   }, [active, selected.id]);
-  const latestTrace = traces.at(-1);
   const latestNote = selected.notes?.at(-1);
-  const logEntries = [
-    ...(selected.notes || []).map((note, index) => ({ type: "log", key: `note-${index}-${note}`, title: note, detail: "" })),
-    ...traces.map((trace) => ({
-      type: "file",
-      key: traceKey(trace),
-      title: `${activityKind(trace)} written`,
-      detail: trace.name || trace.path?.split("/").pop() || "artifact",
-      trace,
-    })),
+  const rawLines = [
+    ...(selected.notes || []).map((note) => note),
+    ...traces.map((trace) => `trace_file agent=${trace.agent} role=${trace.role} path=${trace.path || trace.name || ""}`),
   ];
   return h("div", { className: "agent-activity" },
     h("div", { className: "codex-status-line" }, active ? `Working for ${elapsed || 1}s` : selected.status === "completed" ? "Finished" : "Waiting"),
     h("div", { className: "codex-message" },
       h("p", null, latestNote || (active ? `${selected.label} is running. Waiting for new log output.` : `${selected.label} run log.`))
     ),
-    latestTrace ? h("button", {
-      type: "button",
-      className: "codex-tool-line",
-      onClick: () => selected.onOpen?.(latestTrace, selected),
-    },
-      h("span", { className: "tool-glyph", "aria-hidden": true }, "◇"),
-      h("span", null, `${activityKind(latestTrace)} written: ${latestTrace.name || latestTrace.path?.split("/").pop() || ""}`)
-    ) : null,
-    h("div", { className: "activity-events" },
-      logEntries.length ? logEntries.map((entry) => {
-        const clickable = entry.type === "file" && entry.trace;
-        return h(clickable ? "button" : "div", {
-          type: clickable ? "button" : undefined,
-          className: clickable ? "activity-event clickable" : "activity-event",
-          key: entry.key,
-          onClick: clickable ? () => selected.onOpen?.(entry.trace, selected) : undefined,
-        },
-          h("span", null, entry.type === "file" ? "file event" : "run log"),
-          h("strong", null, entry.title),
-          entry.detail ? h("em", null, entry.detail) : null
-        );
-      }) : h("div", { className: "activity-empty" }, active ? "No log events yet." : "No logs for this agent yet.")
-    ),
+    h("pre", { className: "raw-agent-log" }, rawLines.length ? rawLines.join("\n") : active ? "waiting for agent logs..." : "no logs for this agent"),
     active ? h("div", { className: "thinking-shimmer" }, "Thinking") : null
   );
 }

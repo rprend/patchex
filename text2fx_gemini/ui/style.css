@@ -1557,99 +1557,14 @@ textarea {
   line-height: 1.6;
 }
 
-.codex-tool-line {
-  display: flex;
-  align-items: center;
-  gap: .55rem;
-  min-width: 0;
-  width: 100%;
-  padding: .55rem 0 .8rem;
-  border: 0;
-  border-bottom: 1px solid var(--line-soft);
-  background: transparent;
-  color: #a3a3a3;
-  text-align: left;
-  cursor: pointer;
-}
-
-.codex-tool-line:hover {
-  color: var(--accent);
-}
-
-.codex-tool-line span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tool-glyph {
-  flex: 0 0 auto;
-  font-size: 1rem;
-}
-
-.activity-notes {
-  display: grid;
-  gap: .45rem;
-  padding: .8rem 0;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.activity-notes p {
-  color: var(--soft);
-  font-size: .86rem;
-}
-
-.activity-events {
-  display: grid;
-  padding-top: .6rem;
-}
-
-.activity-event {
-  display: grid;
-  gap: .18rem;
-  width: 100%;
-  padding: .7rem 0;
-  border: 0;
-  border-bottom: 1px solid var(--line-soft);
-  background: transparent;
+.raw-agent-log {
+  margin: 0;
+  padding: .9rem 0;
+  border-top: 1px solid var(--line-soft);
   color: var(--text);
-  text-align: left;
-}
-
-.activity-event.clickable {
-  cursor: pointer;
-}
-
-.activity-event.clickable:hover {
-  color: var(--accent);
-}
-
-.activity-event span {
-  color: var(--muted);
-  font-size: .74rem;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.activity-event strong {
-  min-width: 0;
+  font: .9rem/1.55 "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: .9rem;
-}
-
-.activity-event em {
-  min-width: 0;
-  color: var(--muted);
-  font-size: .82rem;
-  font-style: normal;
-  overflow-wrap: anywhere;
-}
-
-.activity-empty {
-  padding: 1rem 0;
-  color: var(--muted);
 }
 
 .thinking-shimmer {
