@@ -20,7 +20,9 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(48, 55, 141, .08), transparent 24rem),
+    linear-gradient(180deg, #f7f7f3 0%, #f2f4f7 100%);
   color: var(--text);
   font: 16px/1.55 "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -177,6 +179,12 @@ button {
   align-items: center;
   justify-content: center;
   gap: .5rem;
+  border-radius: 10px;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+
+[data-slot="button"]:hover {
+  transform: translateY(-1px);
 }
 
 [data-slot="select-trigger"] {
@@ -185,12 +193,17 @@ button {
   justify-content: space-between;
   min-width: min(100%, 28rem);
   height: auto;
-  border: 1px solid var(--line);
-  background: white;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 12px;
+  background: rgba(255,255,255,.08);
   color: var(--text);
   font: inherit;
   padding: .65rem .75rem;
   text-align: left;
+}
+
+.hero-panel [data-slot="select-trigger"] {
+  color: #fff;
 }
 
 [data-slot="select-content"] {
@@ -199,6 +212,7 @@ button {
   min-width: 18rem;
   overflow: auto;
   border: 1px solid var(--line);
+  border-radius: 12px;
   background: white;
   color: var(--text);
   box-shadow: 0 14px 30px rgba(0, 0, 0, .08);
@@ -217,6 +231,8 @@ button {
 
 [data-slot="card"] {
   background: white;
+  border: 1px solid var(--line);
+  border-radius: 14px;
 }
 
 [data-slot="card-header"],
@@ -229,6 +245,7 @@ button {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
+  border-radius: 999px;
   padding: .12rem .45rem;
   color: var(--muted);
   font-size: .72rem;
@@ -240,6 +257,7 @@ button {
   border: 0;
   background: transparent;
   color: inherit;
+  border-radius: 10px;
 }
 
 [data-slot="accordion-content"] {
@@ -611,7 +629,10 @@ textarea {
 }
 
 .artifact-group {
-  border-top: 1px solid var(--line);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
 }
 
 .artifact-group [data-slot="accordion-trigger"] {
@@ -619,7 +640,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: .75rem 0;
+  padding: .85rem 1rem;
   cursor: pointer;
   text-align: left;
 }
@@ -637,7 +658,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   border-top: 1px solid var(--line-soft);
-  border-left: 1px solid var(--line-soft);
+  border-left: 0;
 }
 
 .artifact-list a {
@@ -719,17 +740,18 @@ textarea {
 .scoreboard {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  border-top: 1px solid var(--line);
-  border-left: 1px solid var(--line);
+  gap: .8rem;
+  border: 0;
   margin-top: 1rem;
 }
 
 .score-card {
   min-height: 8rem;
   padding: .9rem;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   background: white;
+  box-shadow: 0 8px 24px rgba(38, 38, 38, .045);
 }
 
 .score-card [data-slot="card-description"] {
@@ -769,8 +791,8 @@ textarea {
 .run-history {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  border-top: 1px solid var(--line);
-  border-left: 1px solid var(--line);
+  gap: .8rem;
+  border: 0;
   margin-top: 1rem;
 }
 
@@ -778,9 +800,8 @@ textarea {
 .empty-history {
   min-height: 12rem;
   padding: 1rem;
-  border: 0;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   background: white;
   text-align: left;
 }
@@ -857,12 +878,18 @@ textarea {
 .react-shell {
   width: min(100% - 2rem, 78rem);
   margin: 0 auto;
-  padding: 1.2rem 0 4rem;
+  padding: 1.5rem 0 4rem;
 }
 
 .hero-panel {
-  padding: 1.25rem 0 1.5rem;
-  border-bottom: 1px solid var(--line);
+  margin-top: 1rem;
+  padding: 1.25rem;
+  border: 1px solid #24262f;
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.08), rgba(255,255,255,0) 38%),
+    #111219;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .16);
 }
 
 .hero-main {
@@ -888,6 +915,7 @@ textarea {
   margin: 0;
   font-size: clamp(2.4rem, 5vw, 4.6rem);
   line-height: .95;
+  color: #fff;
 }
 
 .source-toolbar {
@@ -903,31 +931,34 @@ textarea {
 }
 
 .select-field span {
-  color: var(--muted);
+  color: #a9adbb;
   font-size: .78rem;
   font-weight: 650;
 }
 
 .quiet-link {
   padding: .65rem .75rem;
-  color: var(--soft);
+  color: #c9ccda;
   text-decoration: none;
 }
 
 .quiet-link:hover {
-  color: var(--accent);
+  color: #fff;
 }
 
 .source-wave-frame {
   position: relative;
-  border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
-  background: white;
+  overflow: hidden;
+  border: 1px solid #2b2e38;
+  border-radius: 16px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 48px),
+    #0c0d12;
 }
 
 .source-wave {
   min-height: 172px;
-  padding: .5rem 0;
+  padding: .5rem .75rem;
 }
 
 .wave-play {
@@ -937,8 +968,10 @@ textarea {
   bottom: 1rem;
   min-width: 4.2rem;
   padding: .5rem .7rem;
-  background: rgba(255, 255, 255, .92);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, .05);
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255, 255, 255, .94);
+  color: #111219;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
 }
 
 .clip-controls {
@@ -947,9 +980,12 @@ textarea {
 }
 
 .section-block {
-  margin-top: 1.8rem;
-  padding-top: 1.2rem;
-  border-top: 1px solid var(--line);
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .72);
+  box-shadow: 0 12px 38px rgba(38, 38, 38, .055);
 }
 
 .section-title h2 {
@@ -966,6 +1002,11 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: .55rem;
+  min-width: 16rem;
+  border-color: #2f368b;
+  border-radius: 999px;
+  background: #30378d;
+  box-shadow: 0 10px 28px rgba(48, 55, 141, .22);
 }
 
 .button-spinner {
@@ -1001,6 +1042,7 @@ textarea {
 .iteration-group {
   position: relative;
   padding-left: 1.7rem;
+  border-radius: 12px;
 }
 
 .iteration-rail {
@@ -1025,9 +1067,10 @@ textarea {
 
 .iteration-summary {
   width: 100%;
-  padding: .8rem 0;
+  padding: .85rem .8rem;
   border: 0;
-  background: transparent;
+  border-radius: 12px;
+  background: #fff;
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -1065,12 +1108,14 @@ textarea {
   display: grid;
   gap: .7rem;
   margin-bottom: .8rem;
-  padding-left: 1rem;
+  padding: .75rem 0 .25rem 1rem;
 }
 
 .agent-card {
-  padding: .75rem 0 .75rem 1rem;
-  border-left: 1px solid var(--line-soft);
+  padding: .65rem .75rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: #fff;
 }
 
 .agent-card-head {
@@ -1114,11 +1159,13 @@ textarea {
 
 .agent-transcript {
   max-height: 28rem;
-  margin: .65rem 0 0 1.25rem;
-  padding: .85rem 0;
+  margin: .65rem 0 0;
+  padding: .85rem;
   overflow: auto;
-  border-top: 1px solid var(--line-soft);
-  color: var(--soft);
+  border: 1px solid #24262f;
+  border-radius: 12px;
+  background: #111219;
+  color: #d8dbea;
   font: .78rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;
 }
