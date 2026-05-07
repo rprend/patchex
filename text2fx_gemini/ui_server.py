@@ -10,6 +10,7 @@ import subprocess
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -402,10 +403,57 @@ def parse_trace_event(line: str) -> dict | None:
     return payload
 
 
-def enqueue_compacted(event_queue: queue.Queue[dict], compacted: str) -> None:
+def agent_from_log_line(line: str) -> tuple[str | None, int | None]:
+    agent = None
+    step = None
+    agent_match = re.search(r"\bagent=([^ ]+)", line)
+    if agent_match:
+        agent = agent_match.group(1)
+    stage_match = re.search(r"\bagent_stage ([a-z_]+)(?: step=(\d+))?", line)
+    if stage_match:
+        agent = stage_match.group(1)
+        if stage_match.group(2) is not None:
+            step = int(stage_match.group(2))
+    step_match = re.search(r"\bstep=(\d+)", line)
+    if step_match:
+        step = int(step_match.group(1))
+    if agent == "producer" and step is not None:
+        agent = f"producer_step_{step:02d}"
+    if agent == "residual_critic" and step is not None:
+        agent = f"residual_critic_step_{step:02d}"
+    if agent == "loss" and step is not None:
+        agent = f"loss_step_{step:02d}"
+    return agent, step
+
+
+def append_run_event(out_dir: Path, event: dict) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"ts": datetime.now(timezone.utc).isoformat(), **event}
+    with (out_dir / "events.jsonl").open("a") as fh:
+        fh.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def append_agent_log(out_dir: Path, agent: str | None, line: str) -> None:
+    if not agent:
+        return
+    logs_dir = out_dir / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", agent)
+    with (logs_dir / f"{safe}.log").open("a") as fh:
+        fh.write(line.rstrip() + "\n")
+
+
+def enqueue_compacted(event_queue: queue.Queue[dict], compacted: str, out_dir: Path | None = None) -> None:
     trace_event = parse_trace_event(compacted)
     if trace_event is not None:
+        if out_dir is not None:
+            append_run_event(out_dir, {k: v for k, v in trace_event.items() if k != "type"} | {"type": "file_written"})
+            append_agent_log(out_dir, str(trace_event.get("agent") or ""), compacted)
         event_queue.put(trace_event)
+    elif out_dir is not None:
+        agent, step = agent_from_log_line(compacted)
+        append_run_event(out_dir, {"type": "log", "agent": agent, "step": step, "line": compacted})
+        append_agent_log(out_dir, agent, compacted)
     event_queue.put({"type": "log", "line": compacted})
 
 
@@ -473,7 +521,7 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
                 recent_raw_lines = recent_raw_lines[-40:]
                 compacted = compact_log_line(line, filter_state)
                 if compacted is not None:
-                    enqueue_compacted(event_queue, compacted)
+                    enqueue_compacted(event_queue, compacted, out_dir)
         returncode = process.wait()
         if filter_state.get("suppressed_codex"):
             pass
@@ -518,6 +566,17 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
         "cmd": cmd,
         "returncode": None,
     }
+    (out_dir / "logs").mkdir(exist_ok=True)
+    append_run_event(
+        out_dir,
+        {
+            "type": "run_created",
+            "run_id": run_id,
+            "status": "running",
+            "reference": str(reference_path),
+            "cmd": cmd,
+        },
+    )
 
     def worker() -> None:
         env = os.environ.copy()
@@ -535,6 +594,7 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
             env=env,
         )
         reconstruction_jobs[run_id]["pid"] = process.pid
+        append_run_event(out_dir, {"type": "process_start", "run_id": run_id, "pid": process.pid})
         assert process.stdout is not None
         with raw_log_path.open("w") as raw_log:
             for line in process.stdout:
@@ -544,12 +604,13 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
                 recent_raw_lines = recent_raw_lines[-40:]
                 compacted = compact_log_line(line, filter_state)
                 if compacted is not None:
-                    enqueue_compacted(event_queue, compacted)
+                    enqueue_compacted(event_queue, compacted, out_dir)
         returncode = process.wait()
         if filter_state.get("suppressed_codex"):
             pass
         reconstruction_jobs[run_id]["returncode"] = returncode
         reconstruction_jobs[run_id]["status"] = "completed" if returncode == 0 else "failed"
+        append_run_event(out_dir, {"type": "process_done", "run_id": run_id, "status": reconstruction_jobs[run_id]["status"], "returncode": returncode})
         if returncode != 0:
             event_queue.put({"type": "log", "line": "last raw subprocess lines before failure:"})
             for raw_line in recent_raw_lines:

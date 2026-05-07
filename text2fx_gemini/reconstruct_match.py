@@ -8,6 +8,8 @@ import os
 import tempfile
 import subprocess
 import time
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1086,6 +1088,46 @@ def trace_file(agent: str, role: str, path: Path) -> Path:
     return path
 
 
+def shell_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def write_replay_command(output_dir: Path, argv: list[str]) -> Path:
+    path = output_dir / "replay_command.sh"
+    command = " ".join(shell_quote(str(part)) for part in argv)
+    path.write_text("#!/usr/bin/env bash\nset -euo pipefail\n" + command + "\n")
+    path.chmod(0o755)
+    return path
+
+
+def write_run_manifest(output_dir: Path, payload: dict[str, Any]) -> Path:
+    return write_json(output_dir / "run_manifest.json", payload)
+
+
+def write_run_summary(output_dir: Path, status: str, history: list[dict[str, Any]] | None = None, best_scores: dict[str, Any] | None = None, note: str = "") -> Path:
+    history = history or []
+    lines = [
+        "# Reconstruction Run",
+        "",
+        f"- Status: {status}",
+        f"- Updated: {datetime.now(timezone.utc).isoformat()}",
+    ]
+    if best_scores:
+        lines.append(f"- Best final score: {float(best_scores.get('final', 0.0)):.4f}")
+    if note:
+        lines.extend(["", note])
+    if history:
+        lines.extend(["", "## Iterations"])
+        for item in history:
+            score = float((item.get("scores") or {}).get("final") or 0.0)
+            best = float((item.get("best_scores") or {}).get("final") or 0.0)
+            lines.append(f"- Step {item.get('step')}: winner={item.get('winner')} accepted={item.get('accepted')} score={score:.4f} best={best:.4f}")
+    lines.extend(["", "## Debug Files", "- events.jsonl", "- raw_subprocess.log", "- logs/*.log", "- run_manifest.json", "- replay_command.sh"])
+    path = output_dir / "run_summary.md"
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
 def write_chunked_session(root: Path, session: dict[str, Any]) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     tracks_dir = root / "tracks"
@@ -1419,6 +1461,26 @@ def main() -> None:
 
     setup()
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "status": "running",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "reference": str(args.reference) if args.reference else None,
+        "output_dir": str(args.output_dir),
+        "argv": sys.argv,
+        "steps": args.steps,
+        "local_trials": args.local_trials,
+        "max_layers": args.max_layers,
+        "sample_rate": args.sample_rate,
+        "seconds": args.seconds,
+        "artifacts": {
+            "events": "events.jsonl",
+            "raw_subprocess_log": "raw_subprocess.log",
+            "agent_logs": "logs/*.log",
+        },
+    }
+    write_run_manifest(args.output_dir, manifest)
+    write_replay_command(args.output_dir, [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
+    write_run_summary(args.output_dir, "running", note="Run initialized.")
     if args.render_session_dir:
         session = read_chunked_session(args.render_session_dir)
         audio = render_session(session)
@@ -1434,6 +1496,8 @@ def main() -> None:
     reference_audio = reference_audio[:, : int(args.seconds * args.sample_rate)]
     reference_clip = args.output_dir / "source_clip.wav"
     sf.write(reference_clip, reference_audio.T, args.sample_rate)
+    manifest["source_clip"] = str(reference_clip)
+    write_run_manifest(args.output_dir, manifest)
 
     beat_grid = estimate_beat_grid(reference_audio, args.sample_rate, subdivision=4)
     trace_file("analyzer", "beat_grid", write_json(args.output_dir / "beat_grid.json", beat_grid))
@@ -1582,6 +1646,7 @@ def main() -> None:
         history_item["residual_critic"] = recommendation
         history.append(history_item)
         history_path = write_json(args.output_dir / "history.json", history)
+        write_run_summary(args.output_dir, "running", history, score_to_json(best_score))
         trace_file(f"producer_step_{step:02d}", "accepted_session", write_json(args.output_dir / f"session_step_{step:02d}_accepted.json", best_session))
         print(f"step_complete index={step} winner={label} accepted={str(accepted).lower()} best_score={best_score.final:.4f}", flush=True)
         if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1 and step + 1 >= min_builder_steps and best_score.final >= 0.78 and temporal_scores_ok(best_score) and structural_scores_ok(best_score, diagnostics):
@@ -1611,6 +1676,13 @@ def main() -> None:
         "distilled_playable_patch_path": str(playable_path),
     }
     report_path.write_text(json.dumps(report, indent=2) + "\n")
+    manifest["status"] = "completed"
+    manifest["completed_at"] = datetime.now(timezone.utc).isoformat()
+    manifest["final_path"] = str(final_path)
+    manifest["report_path"] = str(report_path)
+    manifest["best_scores"] = score_to_json(best_score)
+    write_run_manifest(args.output_dir, manifest)
+    write_run_summary(args.output_dir, "completed", history, score_to_json(best_score))
     print(f"wrote {final_path}", flush=True)
     print(f"wrote {session_path}", flush=True)
     print(f"wrote {session_alias_path}", flush=True)
