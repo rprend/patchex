@@ -1194,7 +1194,6 @@ function App() {
           ...current,
           [step]: { ...(current[step] || {}), score },
         }));
-        addAgentNote(`loss_${step}`, `Score ${score}.`);
         return;
       }
     }
