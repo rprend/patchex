@@ -774,6 +774,7 @@ function App() {
   const [clipStart, setClipStart] = useState(0);
   const [currentClip, setCurrentClip] = useState(null);
   const [status, setStatus] = useState("Idle");
+  const [starting, setStarting] = useState(false);
   const [playLabel, setPlayLabel] = useState("Play selection");
   const [runNotes, setRunNotes] = useState([]);
   const [traces, setTraces] = useState([]);
@@ -1057,6 +1058,7 @@ function App() {
     if (!currentFile) return;
     try {
       resetRunView();
+      setStarting(true);
       setStatus("Extracting");
       const start = clipStart;
       addRunNote(`Extracting ${currentFile} from ${start.toFixed(2)}s to ${(start + CLIP_SECONDS).toFixed(2)}s.`);
@@ -1088,14 +1090,17 @@ function App() {
           localStorage.setItem("v1ActiveRunId", data.run_id);
           pushRunRoute(data.run_id);
           attachEvents(data.run_id);
+          loadRuns().catch((error) => addRunNote(error.stack || String(error)));
+          setStarting(false);
         }
       };
       clipEvents.onerror = () => addRunNote("Clip event stream disconnected.");
     } catch (error) {
       setStatus("Failed");
       addRunNote(error.stack || String(error));
+      setStarting(false);
     }
-  }, [addRunNote, attachEvents, clipStart, currentFile, resetRunView]);
+  }, [addRunNote, attachEvents, clipStart, currentFile, loadRuns, resetRunView]);
 
   const loadPastRun = useCallback(async (run, options = {}) => {
     resetRunView();
@@ -1200,8 +1205,8 @@ function App() {
       playLabel,
       onRefresh: loadFiles,
       onStart: startRun,
-      disabled: runActive || !currentFile,
-      running: runActive,
+      disabled: starting || !currentFile,
+      running: starting,
     }),
     showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
