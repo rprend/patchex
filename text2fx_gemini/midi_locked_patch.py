@@ -1380,6 +1380,57 @@ def load_audio(path: Path, seconds: float | None = None) -> tuple[np.ndarray, in
     return data, int(sr)
 
 
+def first_energy_onset_seconds(audio: np.ndarray, sr: int) -> float | None:
+    samples = mono(audio).astype(np.float64)
+    if samples.size < 1024:
+        return None
+    frame = 1024
+    hop = 64
+    rms: list[float] = []
+    times: list[float] = []
+    for start in range(0, samples.size - frame + 1, hop):
+        segment = samples[start:start + frame]
+        rms.append(float(np.sqrt(np.mean(segment * segment))))
+        times.append((start + frame / 2) / sr)
+    if not rms:
+        return None
+    values = np.asarray(rms)
+    peak = float(np.max(values))
+    if peak <= 1e-9:
+        return None
+    threshold = peak * 0.05
+    hits = np.flatnonzero(values >= threshold)
+    return float(times[int(hits[0])]) if hits.size else None
+
+
+def shift_audio(audio: np.ndarray, sr: int, seconds: float) -> np.ndarray:
+    sample_shift = int(round(abs(seconds) * sr))
+    if sample_shift <= 0:
+        return audio
+    if seconds > 0:
+        shifted = audio[:, sample_shift:]
+        pad = np.zeros((audio.shape[0], sample_shift), dtype=audio.dtype)
+        return np.concatenate([shifted, pad], axis=1)[:, : audio.shape[1]]
+    pad = np.zeros((audio.shape[0], sample_shift), dtype=audio.dtype)
+    return np.concatenate([pad, audio], axis=1)[:, : audio.shape[1]]
+
+
+def align_reference_onset(reference_audio: np.ndarray, candidate_audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict[str, Any]]:
+    reference_onset = first_energy_onset_seconds(reference_audio, sr)
+    candidate_onset = first_energy_onset_seconds(candidate_audio, sr)
+    delta = None if reference_onset is None or candidate_onset is None else reference_onset - candidate_onset
+    report: dict[str, Any] = {
+        "reference_onset": reference_onset,
+        "candidate_onset": candidate_onset,
+        "applied_shift_seconds": 0.0,
+    }
+    if delta is None or abs(delta) < 0.025:
+        return reference_audio, report
+    aligned = shift_audio(reference_audio, sr, delta)
+    report["applied_shift_seconds"] = float(delta)
+    return aligned, report
+
+
 def write_json(path: Path, payload: Any) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n")
@@ -1455,11 +1506,15 @@ def command_run(args: argparse.Namespace) -> int:
     write_json(current_session_path, session)
     print(f"trace_file agent=session role=current path={current_session_path}", flush=True)
     reference_audio, sr = load_audio(args.reference, args.seconds)
+    initial_render = render_session(session)
+    reference_audio, alignment_report = align_reference_onset(reference_audio, initial_render, sr)
+    alignment_path = write_json(args.output_dir / "source_alignment.json", alignment_report)
+    print(f"trace_file agent=analyzer role=source_alignment path={alignment_path}", flush=True)
     source_clip_path = args.output_dir / "source_clip.wav"
     sf.write(source_clip_path, reference_audio.T, sr)
     print(f"trace_file agent=analyzer role=source_clip path={source_clip_path}", flush=True)
     current_render_path = args.output_dir / "current_render_step_initial.wav"
-    sf.write(current_render_path, render_session(session).T, sr)
+    sf.write(current_render_path, initial_render.T, sr)
     print(f"trace_file agent=loss role=winner_render path={current_render_path}", flush=True)
     current_loss_report = score_midi_locked(arrangement, session, reference_audio, sr)
     current_loss_report_path = write_json(args.output_dir / "loss_report_step_initial.json", current_loss_report)
