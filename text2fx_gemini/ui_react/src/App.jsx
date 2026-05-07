@@ -539,9 +539,7 @@ function AgentActivity({ selected }) {
   ];
   return h("div", { className: "agent-activity" },
     h("div", { className: "codex-status-line" }, active ? `Working for ${elapsed || 1}s` : selected.status === "completed" ? "Finished" : "Waiting"),
-    h("div", { className: "codex-message" },
-      h("p", null, latestNote || (active ? `${selected.label} is running. Waiting for new log output.` : `${selected.label} run log.`))
-    ),
+    latestNote ? h("div", { className: "codex-message" }, h("p", null, latestNote)) : null,
     h("pre", { className: "raw-agent-log" }, rawLines.length ? rawLines.join("\n") : active ? "waiting for agent logs..." : "no logs for this agent"),
     active ? h("div", { className: "thinking-shimmer" }, "Thinking") : null
   );

@@ -1487,8 +1487,6 @@ textarea {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   align-content: start;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
   background: white;
   padding: 1rem;
   overflow: hidden;
@@ -1499,8 +1497,7 @@ textarea {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  padding-bottom: .8rem;
-  border-bottom: 1px solid var(--line-soft);
+  padding-bottom: .6rem;
 }
 
 .sidebar-head span {
@@ -1543,8 +1540,7 @@ textarea {
   color: var(--muted);
   font-size: 1.05rem;
   line-height: 1.2;
-  padding: .15rem 0 .8rem;
-  border-bottom: 1px solid var(--line-soft);
+  padding: .15rem 0 .75rem;
 }
 
 .codex-message {
@@ -1559,8 +1555,7 @@ textarea {
 
 .raw-agent-log {
   margin: 0;
-  padding: .9rem 0;
-  border-top: 1px solid var(--line-soft);
+  padding: .4rem 0 .9rem;
   color: var(--text);
   font: .9rem/1.55 "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   white-space: pre-wrap;
