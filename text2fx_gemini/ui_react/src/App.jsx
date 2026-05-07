@@ -507,11 +507,102 @@ function TextArtifactViewer({ trace }) {
   return h(AgentTranscript, { traces: trace ? [trace] : [] });
 }
 
-function SidebarDetail({ selected, detail, sourceArtifact }) {
+function noteNumber(note) {
+  if (typeof note === "number") return note;
+  const text = String(note || "").trim().toUpperCase();
+  const match = text.match(/^([A-G])([#B]?)(-?\d+)$/);
+  if (!match) return 60;
+  const offsets = { C: 0, "C#": 1, DB: 1, D: 2, "D#": 3, EB: 3, E: 4, F: 5, "F#": 6, GB: 6, G: 7, "G#": 8, AB: 8, A: 9, "A#": 10, BB: 10, B: 11 };
+  return (Number(match[3]) + 1) * 12 + (offsets[`${match[1]}${match[2]}`] ?? offsets[match[1]] ?? 0);
+}
+
+function noteLabel(note) {
+  const midi = noteNumber(note);
+  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  return `${names[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+function MidiTimeline({ session }) {
+  const layers = Array.isArray(session?.layers) ? session.layers : [];
+  const notes = layers.flatMap((layer, layerIndex) =>
+    (Array.isArray(layer.notes) ? layer.notes : []).map((note) => ({
+      ...note,
+      layerId: layer.id || `layer_${layerIndex + 1}`,
+      layerRole: layer.role || "Layer",
+      midi: noteNumber(note.note),
+      label: noteLabel(note.note),
+      start: Number(note.start || 0),
+      duration: Number(note.duration || 0.01),
+      velocity: Number(note.velocity || 0.7),
+    }))
+  );
+  const duration = Math.max(Number(session?.duration || 5), ...notes.map((note) => note.start + note.duration), 1);
+  const minMidi = notes.length ? Math.min(...notes.map((note) => note.midi)) : 48;
+  const maxMidi = notes.length ? Math.max(...notes.map((note) => note.midi)) : 72;
+  const pitchSpan = Math.max(1, maxMidi - minMidi);
+  const laneColors = ["#323a85", "#4f8a6b", "#a45d3f", "#6f5aa8", "#9a7b24", "#2d7f8f"];
+
+  return h("section", { className: "midi-viewer" },
+    h("div", { className: "midi-viewer-head" },
+      h("strong", null, "MIDI"),
+      h("span", null, `${notes.length} notes`)
+    ),
+    notes.length ? h("div", { className: "midi-roll", style: { "--midi-rows": String(Math.min(18, pitchSpan + 1)) } },
+      h("div", { className: "midi-grid", "aria-hidden": "true" },
+        [0, 1, 2, 3, 4, 5].map((tick) => h("i", { key: tick, style: { left: `${(tick / 5) * 100}%` } }))
+      ),
+      notes.map((note, index) => h("div", {
+        className: "midi-note",
+        key: `${note.layerId}-${index}-${note.start}`,
+        title: `${note.layerId} ${note.label} ${note.start.toFixed(2)}s`,
+        style: {
+          left: `${Math.max(0, Math.min(100, (note.start / duration) * 100))}%`,
+          width: `${Math.max(1.2, Math.min(100, (note.duration / duration) * 100))}%`,
+          top: `${Math.max(0, Math.min(92, ((maxMidi - note.midi) / pitchSpan) * 88 + 4))}%`,
+          background: laneColors[index % laneColors.length],
+          opacity: Math.max(0.45, Math.min(1, note.velocity)),
+        },
+      }, h("span", null, note.label)))
+    ) : h("div", { className: "midi-empty" }, "No note events in this session."),
+    layers.length ? h("div", { className: "midi-layers" },
+      layers.map((layer) => h("span", { key: layer.id || layer.role }, layer.id || layer.role || "layer"))
+    ) : null
+  );
+}
+
+function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = [] }) {
+  const [session, setSession] = useState(null);
+  useEffect(() => {
+    if (!trace?.url) return undefined;
+    let cancelled = false;
+    fetch(trace.url)
+      .then((res) => res.json())
+      .then((json) => { if (!cancelled) setSession(json); })
+      .catch((error) => { if (!cancelled) setSession({ error: error.stack || String(error) }); });
+    return () => { cancelled = true; };
+  }, [trace?.url]);
+
+  const outputAudio = (selected.traces || []).find((item) => item.name?.endsWith(".wav") || item.role?.includes("render")) ||
+    allTraces.find((item) => item.step === selected.step && (
+      item.role?.includes("winner_render") ||
+      item.role?.includes("producer_render") ||
+      item.name?.match(/^producer_reconstruction_step_.*\.wav$/)
+    ));
+  return h("div", { className: "session-artifact-viewer" },
+    h("div", { className: "sidebar-audio-compare" },
+      sourceArtifact ? h(WaveformPlayer, { url: sourceArtifact.url, label: "Target source", compact: true }) : null,
+      outputAudio ? h(WaveformPlayer, { url: outputAudio.url, label: "Producer audio", compact: true, color: "#657cc2" }) : null
+    ),
+    session?.error ? h("pre", { className: "sidebar-pre" }, session.error) : session ? h(MidiTimeline, { session }) : h("div", { className: "sidebar-loading" }, "Loading session...")
+  );
+}
+
+function SidebarDetail({ selected, detail, sourceArtifact, allTraces = [] }) {
   const trace = detail?.trace;
   const name = trace?.name || trace?.path?.split("/").pop() || "";
   const isAudio = name.endsWith(".wav");
   const isAccuracy = trace?.role?.includes("audio_diff") || name.includes("audio_diff") || name.includes("accuracy");
+  const isSession = trace?.role?.includes("session") || name.includes("session_step_") || name === "session.json";
   return h("aside", { className: "workflow-sidebar" },
     h("div", { className: "sidebar-head" },
       h("div", null,
@@ -524,7 +615,7 @@ function SidebarDetail({ selected, detail, sourceArtifact }) {
     isAudio ? h("div", { className: "sidebar-audio-compare" },
       sourceArtifact ? h(WaveformPlayer, { url: sourceArtifact.url, label: "Target source", compact: true }) : null,
       h(WaveformPlayer, { url: trace.url, label: detail?.label || "Output audio", compact: true, color: "#657cc2" })
-    ) : isAccuracy ? h(AccuracyViewer, { trace }) : detail ? h(TextArtifactViewer, { trace }) : h(AgentActivity, { selected })
+    ) : isAccuracy ? h(AccuracyViewer, { trace }) : isSession ? h(SessionArtifactViewer, { trace, selected, sourceArtifact, allTraces }) : detail ? h(TextArtifactViewer, { trace }) : h(AgentActivity, { selected })
   );
 }
 
@@ -699,7 +790,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
           h(Controls, { showInteractive: false })
         )
       ),
-      h(SidebarDetail, { selected, detail: selectedDetail, sourceArtifact: artifacts?.find((artifact) => artifact.name === "source_clip.wav") })
+      h(SidebarDetail, { selected, detail: selectedDetail, sourceArtifact: artifacts?.find((artifact) => artifact.name === "source_clip.wav"), allTraces: traces })
     )
   );
 }
