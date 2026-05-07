@@ -162,6 +162,18 @@ function parseStep(line) {
   return done ? Number(done[1]) : null;
 }
 
+function parseLogMetric(line, name) {
+  const value = line.match(new RegExp(`\\b${name}=([-+]?\\d*\\.?\\d+(?:e[-+]?\\d+)?)`, "i"))?.[1];
+  return value === undefined ? null : Number(value);
+}
+
+function displayScoreFromLog(line) {
+  const score = parseLogMetric(line, "score") ?? parseLogMetric(line, "best_score");
+  if (score !== null) return Number(score).toFixed(3);
+  const loss = parseLogMetric(line, "loss");
+  return loss === null ? null : Number(1 - loss).toFixed(3);
+}
+
 function cleanLogLine(line) {
   if (!line) return null;
   if (line.includes("/site-packages/") || line.includes("FutureWarning")) return null;
@@ -1132,7 +1144,7 @@ function App() {
     }
     if (line.startsWith("winner_summary") || line.startsWith("producer_winner")) {
       const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
-      const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
+      const score = displayScoreFromLog(line) || "n/a";
       const idx = Number(line.match(/\bstep=(\d+)/)?.[1] || 0);
       setWinners((current) => ({ ...current, [idx]: { winner, score } }));
       addAgentNote(`loss_${idx}`, `Winner: ${friendlyWinner(winner)} (${score}).`);
@@ -1159,11 +1171,11 @@ function App() {
     if (line.startsWith("step_complete")) {
       const idx = parseStep(line);
       if (idx !== null) {
-        const bestScore = line.match(/\bbest_score=([0-9.]+)/)?.[1];
+        const bestScore = displayScoreFromLog(line);
         if (bestScore) {
           setWinners((current) => ({
             ...current,
-            [idx]: { ...(current[idx] || {}), score: Number(bestScore).toFixed(3) },
+            [idx]: { ...(current[idx] || {}), score: bestScore },
           }));
         }
         setStatuses((current) => ({
@@ -1175,17 +1187,16 @@ function App() {
       }
       return;
     }
-    if (step !== null && line.includes("score=")) {
-      const score = line.match(/\bscore=([0-9.]+)/)?.[1];
+    if (step !== null) {
+      const score = displayScoreFromLog(line);
       if (score) {
-        const formattedScore = Number(score).toFixed(3);
         setWinners((current) => ({
           ...current,
-          [step]: { ...(current[step] || {}), score: formattedScore },
+          [step]: { ...(current[step] || {}), score },
         }));
-        addAgentNote(`loss_${step}`, `Score ${formattedScore}.`);
+        addAgentNote(`loss_${step}`, `Score ${score}.`);
+        return;
       }
-      return;
     }
     addRunNote(line);
   }, [addAgentNote, addRunNote]);
