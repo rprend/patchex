@@ -1,4 +1,4 @@
-const { useCallback, useEffect, useMemo, useRef, useState } = React;
+const { useCallback, useEffect, useRef, useState } = React;
 const h = React.createElement;
 
 const CLIP_SECONDS = 5;
@@ -107,6 +107,14 @@ function roleName(role, agent) {
   return ROLE_LABELS[role] || String(role || "File").replaceAll("_", " ");
 }
 
+function friendlyWinner(name) {
+  if (!name) return "unknown";
+  const inner = String(name).match(/^codex_inner_(\d+)/);
+  if (inner) return `Producer trial ${Number(inner[1]) + 1}`;
+  if (name === "codex") return "Producer proposal";
+  return String(name).replaceAll("_", " ");
+}
+
 function traceKey(trace) {
   return `${trace.agent}:${trace.step ?? "root"}:${trace.role}:${trace.url || trace.path}`;
 }
@@ -176,7 +184,7 @@ function WaveformPlayer({ url, label, compact = false, color = "#323a85" }) {
   );
 }
 
-function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, clipRange, onPlayClip, playLabel, onRefresh, disabled }) {
+function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, clipRange, onPlayClip, playLabel, onRefresh, onStart, disabled }) {
   const waveRef = useRef(null);
   const wave = useRef(null);
   const regions = useRef(null);
@@ -216,8 +224,7 @@ function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, c
   return h("section", { className: "hero-panel" },
     h("div", { className: "hero-main" },
       h("div", { className: "top-line" },
-        h("h1", null, "Reconstruct Audio"),
-        h("span", { className: disabled ? "run-pill active" : "run-pill" }, disabled ? "Running" : "Ready")
+        h("h1", null, "Patchex")
       ),
       h("div", { className: "source-toolbar" },
         h("label", { className: "select-field" },
@@ -229,11 +236,13 @@ function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, c
         h("button", { type: "button", onClick: onRefresh }, "Refresh"),
         h("a", { href: "/", className: "quiet-link" }, "V0")
       ),
-      h("div", { className: "source-wave", ref: waveRef }),
-      h("audio", { className: "source-native-player", controls: true, src: audioUrl }),
+      h("div", { className: "source-wave-frame" },
+        h("button", { type: "button", className: "wave-play", onClick: onPlayClip }, playLabel === "Pause" ? "Pause" : "Play"),
+        h("div", { className: "source-wave", ref: waveRef })
+      ),
       h("div", { className: "clip-controls" },
         h("strong", null, clipRange),
-        h("button", { type: "button", onClick: onPlayClip }, playLabel)
+        h("button", { type: "button", className: "primary inline-primary start-inline", onClick: onStart, disabled }, disabled ? "Running" : "Start reconstruction")
       )
     )
   );
@@ -322,7 +331,7 @@ function IterationGroup({ step, traces, statuses, notes, winners }) {
   return h("details", { className: "iteration-group", open: true },
     h("summary", null,
       h("span", null, `Iteration ${step + 1}`),
-      h("strong", null, winner ? `Winner: ${winner.winner} · ${winner.score}` : "Produce, calculate accuracy, critique")
+      h("strong", null, winner ? `Winner: ${friendlyWinner(winner.winner)} · ${winner.score}` : "Produce, calculate accuracy, critique")
     ),
     h("div", { className: "iteration-body" },
       h(AgentCard, { agent: "producer", traces: producer, status: statuses[`producer_${step}`], notes: notes[`producer_${step}`] || [] }),
@@ -337,8 +346,8 @@ function Timeline({ traces, statuses, notes, winners, runNotes }) {
   const steps = Array.from(new Set(traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined))).sort((a, b) => a - b);
   return h("section", { className: "section-block timeline-section" },
     h("div", { className: "section-title" },
-      h("h2", null, "Run Trace"),
-      h("p", null, "Each iteration shows the Producer files, scored audio, and the Critic brief for the next pass.")
+      h("h2", null, "Trace"),
+      h("p", null, "Analyzer plans the target once. Each iteration then shows the Producer change, the scored audio, and the Critic brief that drives the next pass.")
     ),
     runNotes.length ? h("div", { className: "activity-strip" }, runNotes.slice(-5).map((note, index) => h("span", { key: `${note}-${index}` }, note))) : null,
     analyzerTraces.length ? h(AgentCard, { agent: "analyzer", traces: analyzerTraces, status: statuses.analyzer, notes: notes.analyzer || [] }) : null,
@@ -353,6 +362,26 @@ function Timeline({ traces, statuses, notes, winners, runNotes }) {
       }))
     )
   );
+}
+
+function artifactGroup(name) {
+  if (name === "final_reconstruction.wav" || name === "source_clip.wav" || name === "distilled_playable_patch.json") return "Essentials";
+  if (name === "reconstruction_report.json" || name.startsWith("audio_diff_") || name.startsWith("producer_audio_diff_") || name.includes("accuracy")) return "Accuracy reports";
+  if (name.startsWith("session") || name === "manifest.json" || name === "master.json" || name === "routing.json" || name === "timeline.json") return "Session state";
+  if (name.startsWith("codex_") || name.startsWith("recommendation") || name === "layer_analysis.json" || name === "source_profile.json" || name === "beat_grid.json" || name === "pattern_constraints.json") return "Agent files";
+  if (name.endsWith(".wav")) return "Audio renders";
+  return "Other";
+}
+
+function groupArtifacts(artifacts) {
+  const order = ["Essentials", "Accuracy reports", "Session state", "Agent files", "Audio renders", "Other"];
+  const groups = new Map(order.map((name) => [name, []]));
+  artifacts.forEach((artifact) => {
+    const group = artifactGroup(artifact.name);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(artifact);
+  });
+  return order.map((name) => [name, groups.get(name) || []]).filter(([, items]) => items.length);
 }
 
 function Artifacts({ artifacts, onReport }) {
@@ -371,12 +400,17 @@ function Artifacts({ artifacts, onReport }) {
   return h("section", { className: "section-block" },
     h("div", { className: "section-title" },
       h("h2", null, "Files"),
-      h("p", null, "Rendered audio, reports, prompts, and session state.")
+      h("p", null, "Grouped outputs from the run.")
     ),
-    h("div", { className: "artifacts" },
-      artifacts.map((artifact) => h("div", { className: "artifact", key: artifact.url },
-        h("a", { href: artifact.url, target: "_blank" }, artifact.name),
-        artifact.name.endsWith(".wav") ? h("audio", { controls: true, src: artifact.url }) : null
+    h("div", { className: "artifact-groups" },
+      groupArtifacts(artifacts).map(([group, items]) => h("details", { className: "artifact-group", key: group, open: group === "Essentials" },
+        h("summary", null, h("span", null, group), h("strong", null, String(items.length))),
+        h("div", { className: "artifact-list" },
+          items.map((artifact) => h("a", { className: artifact.name.endsWith(".wav") ? "audio-artifact-link" : "", href: artifact.url, target: "_blank", key: artifact.url },
+            h("span", null, artifact.name),
+            artifact.name.endsWith(".wav") ? h("em", null, "audio") : null
+          ))
+        )
       ))
     )
   );
@@ -429,7 +463,7 @@ function App() {
   const [currentFile, setCurrentFile] = useState("");
   const [clipStart, setClipStart] = useState(0);
   const [currentClip, setCurrentClip] = useState(null);
-  const [status, setStatus] = useState("Ready");
+  const [status, setStatus] = useState("Idle");
   const [playLabel, setPlayLabel] = useState("Play selection");
   const [runNotes, setRunNotes] = useState([]);
   const [traces, setTraces] = useState([]);
@@ -569,7 +603,7 @@ function App() {
       const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
       const idx = Number(line.match(/\bstep=(\d+)/)?.[1] || 0);
       setWinners((current) => ({ ...current, [idx]: { winner, score } }));
-      addAgentNote(`loss_${idx}`, `Winner: ${winner} (${score}).`);
+      addAgentNote(`loss_${idx}`, `Winner: ${friendlyWinner(winner)} (${score}).`);
       setStatuses((current) => ({ ...current, [`loss_${idx}`]: "completed" }));
       return;
     }
@@ -793,15 +827,9 @@ function App() {
       onPlayClip: playSelectedClip,
       playLabel,
       onRefresh: loadFiles,
-      disabled: status === "Running" || status === "Extracting",
+      onStart: startRun,
+      disabled: status === "Running" || status === "Extracting" || !currentFile,
     }),
-    h("section", { className: "start-row" },
-      h("div", null,
-        h("h2", null, "Producer loop"),
-        h("p", null, "Analyzer runs once, then each iteration produces a session, calculates accuracy, and writes the next Critic brief.")
-      ),
-      h("button", { type: "button", className: "primary inline-primary", onClick: startRun, disabled: status === "Running" || status === "Extracting" || !currentFile }, status === "Running" ? "Running" : "Start reconstruction")
-    ),
     h(Timeline, { traces, statuses, notes, winners, runNotes }),
     h(Comparison, { artifacts }),
     h(Scoreboard, { report }),
