@@ -865,6 +865,32 @@ textarea {
   padding-top: .75rem;
 }
 
+.run-topbar {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+  margin-bottom: .5rem;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .45rem .65rem;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--soft);
+  text-decoration: none;
+  font-size: .9rem;
+  font-weight: 650;
+}
+
+.back-link:hover {
+  border-color: var(--blue-4);
+  background: #f7f9ff;
+  color: var(--accent);
+}
+
 .hero-panel {
   padding: 1.25rem 0 1.5rem;
   border-bottom: 1px solid var(--line);
@@ -1339,6 +1365,10 @@ textarea {
   color: #fff;
   font-size: .9rem;
   font-weight: 800;
+}
+
+.workflow-node-icon svg {
+  display: block;
 }
 
 .workflow-node-title {

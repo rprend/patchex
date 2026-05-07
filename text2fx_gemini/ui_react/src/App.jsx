@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { Activity, ArrowLeft, Brain, MessageSquareText, SlidersHorizontal } from 'lucide-react';
 import { Terminal } from './components/ui/terminal.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
@@ -368,18 +369,14 @@ function FlowAgentNode({ data, selected }) {
   return h("button", { type: "button", className: classes.join(" ") },
     h(Handle, { className: "workflow-handle workflow-handle-left", type: "target", position: Position.Left }),
     h("span", { className: "workflow-node-head" },
-      h("span", { className: "workflow-node-icon" }, data.icon || data.label.slice(0, 1)),
+      h("span", { className: "workflow-node-icon" }, data.icon ? h(data.icon, { size: 18, strokeWidth: 2.2 }) : data.label.slice(0, 1)),
       h("span", { className: "workflow-node-title" }, data.label),
       data.status === "running" ? h("span", { className: "node-spinner", "aria-label": "In progress" }) : null
     ),
-    h("span", { className: "workflow-node-row" },
-      h("span", null, "Role"),
-      h("strong", null, data.detail || "agent")
-    ),
-    h("span", { className: "workflow-node-row" },
-      h("span", null, "Files"),
-      h("strong", null, String(data.traces?.length || 0))
-    ),
+    (data.rows || []).map((row) => h("span", { className: "workflow-node-row", key: row.label },
+      h("span", null, row.label),
+      h("strong", null, row.value)
+    )),
     h(Handle, { className: "workflow-handle workflow-handle-right", type: "source", position: Position.Right })
   );
 }
@@ -413,7 +410,36 @@ function WorkflowCanvas({ traces, statuses, notes, winners }) {
 
   const makeAgentNode = (id, label, base, step, x, y, parentId = undefined, detail = "") => {
     const statusKey = step === null ? base : `${base}_${step}`;
-    const icon = base === "analyzer" ? "A" : base === "producer" ? "P" : base === "loss" ? "%" : "C";
+    const icon = base === "analyzer" ? Brain : base === "producer" ? SlidersHorizontal : base === "loss" ? Activity : MessageSquareText;
+    const nodeTraces = traceSet(traces, base, step);
+    const hasRole = (role) => nodeTraces.some((trace) => trace.role === role || trace.role?.includes(role));
+    const latestNote = (notes[statusKey] || []).at(-1);
+    let rows = [
+      { label: "Output", value: hasRole("answer") ? "ready" : "pending" },
+      { label: "Files", value: String(nodeTraces.length || 0) },
+    ];
+    if (base === "analyzer") {
+      rows = [
+        { label: "Output", value: hasRole("layer_analysis") ? "layer plan" : "pending" },
+        { label: "Input", value: "source clip" },
+      ];
+    } else if (base === "producer") {
+      rows = [
+        { label: "Writes", value: hasRole("accepted_session") ? "session update" : hasRole("session_proposal") ? "proposal" : "pending" },
+        { label: "Guided by", value: hasRole("prompt") ? "critic brief" : "analysis" },
+      ];
+    } else if (base === "loss") {
+      const winner = step !== null && step !== undefined ? winners[step] : null;
+      rows = [
+        { label: "Score", value: winner?.score || "pending" },
+        { label: "Winner", value: winner ? friendlyWinner(winner.winner) : "pending" },
+      ];
+    } else if (base === "residual_critic") {
+      rows = [
+        { label: "Writes", value: hasRole("recommendation") ? "next brief" : "pending" },
+        { label: "Focus", value: latestNote || "residuals" },
+      ];
+    }
     return {
       id,
       type: "agent",
@@ -428,10 +454,11 @@ function WorkflowCanvas({ traces, statuses, notes, winners }) {
         label,
         detail,
         icon,
+        rows,
         base,
         step,
         status: statuses[statusKey] || (traceSet(traces, base, step).length ? "running" : "waiting"),
-        traces: traceSet(traces, base, step),
+        traces: nodeTraces,
         notes: notes[statusKey] || [],
       },
     };
@@ -489,7 +516,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners }) {
           edges,
           nodeTypes,
           fitView: true,
-          fitViewOptions: { padding: 0.38, maxZoom: 0.72, includeHiddenNodes: false },
+          fitViewOptions: { padding: 0.26, maxZoom: 0.86, includeHiddenNodes: false },
           minZoom: 0.18,
           maxZoom: 1.25,
           defaultEdgeOptions: { markerEnd: arrowMarker, style: { stroke: "#323a85", strokeWidth: 2 } },
@@ -1003,6 +1030,12 @@ function App() {
   const hasRunView = runActive || traces.length > 0 || artifacts.length > 0 || report;
   const routeRunId = currentRouteRunId();
   return h("main", { className: routeRunId || hasRunView ? "react-shell run-detail-shell" : "react-shell" },
+    routeRunId || hasRunView ? h("div", { className: "run-topbar" },
+      h("a", { className: "back-link", href: "/v1" },
+        h(ArrowLeft, { size: 16, strokeWidth: 2 }),
+        h("span", null, "Back")
+      )
+    ) : null,
     routeRunId || hasRunView ? null : h(SourceSelector, {
       files,
       currentFile,
