@@ -401,6 +401,10 @@ function AgentTranscript({ traces }) {
 function FlowAgentNode({ data, selected }) {
   const classes = ["workflow-node", `status-${data.status || "waiting"}`];
   if (selected) classes.push("selected");
+  const openRow = (row, event) => {
+    event.stopPropagation();
+    data.onOpen?.(row.trace, data);
+  };
   return h("div", { className: classes.join(" ") },
     h(Handle, { className: "workflow-handle workflow-handle-left", type: "target", position: Position.Left }),
     h("span", { className: "workflow-node-head" },
@@ -410,11 +414,13 @@ function FlowAgentNode({ data, selected }) {
     ),
     (data.rows || []).map((row) => h(row.trace ? "button" : "span", {
       type: row.trace ? "button" : undefined,
-      className: row.trace ? "workflow-node-row clickable" : "workflow-node-row",
+      className: row.trace ? "workflow-node-row clickable nodrag nopan" : "workflow-node-row",
       key: `${row.label}-${row.value}`,
-      onClick: row.trace ? (event) => {
-        event.stopPropagation();
-        data.onOpen?.(row.trace, data);
+      onClick: row.trace ? (event) => openRow(row, event) : undefined,
+      onPointerDown: row.trace ? (event) => event.stopPropagation() : undefined,
+      onMouseDown: row.trace ? (event) => event.stopPropagation() : undefined,
+      onKeyDown: row.trace ? (event) => {
+        if (event.key === "Enter" || event.key === " ") openRow(row, event);
       } : undefined,
     },
       h("span", null, row.label),
@@ -1153,6 +1159,13 @@ function App() {
     if (line.startsWith("step_complete")) {
       const idx = parseStep(line);
       if (idx !== null) {
+        const bestScore = line.match(/\bbest_score=([0-9.]+)/)?.[1];
+        if (bestScore) {
+          setWinners((current) => ({
+            ...current,
+            [idx]: { ...(current[idx] || {}), score: Number(bestScore).toFixed(3) },
+          }));
+        }
         setStatuses((current) => ({
           ...current,
           [`producer_${idx}`]: "completed",
@@ -1164,7 +1177,14 @@ function App() {
     }
     if (step !== null && line.includes("score=")) {
       const score = line.match(/\bscore=([0-9.]+)/)?.[1];
-      if (score) addAgentNote(`loss_${step}`, `Score ${Number(score).toFixed(3)}.`);
+      if (score) {
+        const formattedScore = Number(score).toFixed(3);
+        setWinners((current) => ({
+          ...current,
+          [step]: { ...(current[step] || {}), score: formattedScore },
+        }));
+        addAgentNote(`loss_${step}`, `Score ${formattedScore}.`);
+      }
       return;
     }
     addRunNote(line);
@@ -1213,6 +1233,9 @@ function App() {
         : artifact.name.match(/^producer_reconstruction_step_/) ? "producer_render"
         : artifact.name === "final_reconstruction.wav" ? "render"
         : artifact.name.endsWith(".wav") ? "render"
+        : artifact.name.match(/^session_step_\d+_accepted\.json$/) ? "accepted_session"
+        : artifact.name.match(/^session_step_\d+_producer_winner\.json$/) ? "candidate_session"
+        : artifact.name.match(/^session_step_\d+_codex_proposal\.json$/) ? "session_proposal"
         : artifact.name.startsWith("session") ? "session"
         : artifact.name.startsWith("recommendation") ? "recommendation"
         : "file";
@@ -1223,6 +1246,7 @@ function App() {
       const stepMatch = artifact.name.match(/step_(\d+)/);
       const step = stepMatch ? Number(stepMatch[1]) : null;
       if (role === "producer_render" && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
+      if (["accepted_session", "candidate_session", "session_proposal"].includes(role) && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
       if (role === "audio_diff" && step !== null) agent = `loss_step_${String(step).padStart(2, "0")}`;
       if (role === "harness_improvement" && step !== null) agent = `harness_improver_step_${String(step).padStart(2, "0")}`;
       if (role === "recommendation" && step !== null) agent = `residual_critic_step_${String(step).padStart(2, "0")}`;
