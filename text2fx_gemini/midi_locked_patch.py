@@ -510,6 +510,116 @@ def enforce_arrangement_lock(arrangement: dict[str, Any], session: dict[str, Any
     return locked, {"before": before, "after": after, "repaired_tracks": sorted(set(repaired)), "dropped_extra_tracks": dropped}
 
 
+BLOCKED_PATCH_PATH_PARTS = {"notes", "id", "role", "arrangement_locked", "source_midi_track_index", "gm_program"}
+ALLOWED_PATCH_ROOTS = {"layers", "returns", "master", "production_notes"}
+
+
+def parse_patch_path(path: str) -> list[str]:
+    parts = [part for part in str(path).strip().split(".") if part]
+    if not parts:
+        raise ValueError("Patch operation path is empty.")
+    if parts[0] not in ALLOWED_PATCH_ROOTS:
+        raise ValueError(f"Patch operation root is not editable: {parts[0]}")
+    if any(part in BLOCKED_PATCH_PATH_PARTS for part in parts):
+        raise ValueError(f"Patch operation may not edit arrangement-owned path: {path}")
+    return parts
+
+
+def resolve_patch_parent(session: dict[str, Any], parts: list[str]) -> tuple[Any, str]:
+    current: Any = session
+    index = 0
+    while index < len(parts) - 1:
+        part = parts[index]
+        if part == "layers":
+            if index + 1 >= len(parts) - 1:
+                raise ValueError("Layer patch path must include a field after the layer id.")
+            layer_id = parts[index + 1]
+            if not isinstance(current.get("layers"), list):
+                raise ValueError("Session layers must be a list.")
+            current = next((layer for layer in current["layers"] if str(layer.get("id")) == layer_id), None)
+            if current is None:
+                raise ValueError(f"Unknown layer id in patch operation path: {layer_id}")
+            index += 2
+            continue
+        if part == "returns":
+            if index + 1 >= len(parts) - 1:
+                raise ValueError("Return patch path must include a field after the return id.")
+            return_id = parts[index + 1]
+            if not isinstance(current.get("returns"), list):
+                raise ValueError("Session returns must be a list.")
+            current = next((ret for ret in current["returns"] if str(ret.get("id")) == return_id), None)
+            if current is None:
+                raise ValueError(f"Unknown return id in patch operation path: {return_id}")
+            index += 2
+            continue
+        if isinstance(current, dict):
+            next_part = parts[index + 1]
+            if part not in current or current[part] is None:
+                current[part] = [] if next_part.isdigit() else {}
+            current = current[part]
+            index += 1
+            continue
+        if isinstance(current, list) and part.isdigit():
+            current = current[int(part)]
+            index += 1
+            continue
+        raise ValueError(f"Cannot resolve patch operation path: {'.'.join(parts)}")
+    return current, parts[-1]
+
+
+def apply_patch_operations(session: dict[str, Any], operations_payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    updated = deepcopy(session)
+    operations = operations_payload.get("operations", operations_payload.get("changes", []))
+    if not isinstance(operations, list) or not operations:
+        raise ValueError("Producer must return a non-empty operations list.")
+    notes = updated.setdefault("production_notes", {})
+    if operations_payload.get("hypothesis"):
+        notes["hypothesis"] = str(operations_payload["hypothesis"])
+    if operations_payload.get("critic_brief_used"):
+        notes["critic_brief_used"] = str(operations_payload["critic_brief_used"])
+    notes.setdefault("change_log", [])
+    notes.setdefault("loss_trials", [])
+    if isinstance(operations_payload.get("loss_trials"), list):
+        notes["loss_trials"].extend(operations_payload["loss_trials"])
+    applied = []
+    for operation in operations:
+        if not isinstance(operation, dict):
+            raise ValueError("Each patch operation must be an object.")
+        op = str(operation.get("op", "set")).lower()
+        path = str(operation.get("path", ""))
+        parts = parse_patch_path(path)
+        parent, key = resolve_patch_parent(updated, parts)
+        value = deepcopy(operation.get("value"))
+        if op == "set":
+            if isinstance(parent, dict):
+                parent[key] = value
+            elif isinstance(parent, list) and key.isdigit():
+                parent[int(key)] = value
+            else:
+                raise ValueError(f"Cannot set patch operation path: {path}")
+        elif op == "append":
+            target = parent.get(key) if isinstance(parent, dict) else parent[int(key)]
+            if not isinstance(target, list):
+                raise ValueError(f"Append target is not a list: {path}")
+            target.append(value)
+        elif op == "extend":
+            target = parent.get(key) if isinstance(parent, dict) else parent[int(key)]
+            if not isinstance(target, list) or not isinstance(value, list):
+                raise ValueError(f"Extend target/value must be lists: {path}")
+            target.extend(value)
+        else:
+            raise ValueError(f"Unsupported patch operation: {op}")
+        entry = {
+            "track_id": str(operation.get("track_id") or (parts[1] if parts[0] == "layers" and len(parts) > 1 else parts[0])),
+            "parameter_path": path,
+            "change": str(operation.get("change") or f"{op} {path}"),
+            "reason": str(operation.get("reason") or operations_payload.get("hypothesis") or ""),
+        }
+        notes["change_log"].append(entry)
+        applied.append(entry)
+    return updated, {"applied": applied, "operation_count": len(applied)}
+
+
 def active_windows(track: dict[str, Any], duration: float, pad: float = 0.04) -> list[tuple[float, float]]:
     windows = []
     for note in track.get("notes", []):
@@ -659,11 +769,11 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     }
 
 
-def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, critic_brief_path: Path, loss_report_path: Path, output_path: Path) -> str:
+def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, critic_brief_path: Path, loss_report_path: Path, operations_output_path: Path, session_output_path: Path) -> str:
     return f"""
 You are the Producer agent for an audio reconstruction loop.
 
-Your goal is to produce the fixed composition so the rendered audio sounds exactly like the target source. The Critic has listened to the target and current render, studied the loss report, and written a production briefing. Start from that Critic briefing, form a production hypothesis, make concrete patch/mix changes, run loss checks, and write the next complete patch session JSON.
+Your goal is to produce the fixed composition so the rendered audio sounds exactly like the target source. The Critic has listened to the target and current render, studied the loss report, and written a production briefing. Start from that Critic briefing, form a production hypothesis, make concrete patch/mix changes through the patch operation interface, run loss checks, and write patch operations for the harness to apply.
 
 Read these files:
 - Composition JSON: {arrangement_path}
@@ -671,7 +781,7 @@ Read these files:
 - Critic briefing markdown: {critic_brief_path}
 - Current loss report JSON: {loss_report_path}
 
-Task: Write a complete patch session JSON to {output_path}.
+Task: Write patch operation JSON to {operations_output_path}. The harness will apply those operations to {current_session_path} and write the resulting patch session to {session_output_path}.
 
 Definitions:
 - Composition is the fixed musical performance: track ids, roles, note events, velocities, timing, active ranges, tempo, and meter.
@@ -688,9 +798,11 @@ Workflow:
 6. Run loss checks on the full clip and, when relevant, on the specific time windows or beats where the Critic says the mismatch is worst.
 7. Record every meaningful edit in `production_notes.change_log`.
 8. Record every loss command you ran and the score/loss result in `production_notes.loss_trials`.
-9. Write the final complete patch session JSON to {output_path}.
+9. Write the final patch operation JSON to {operations_output_path}. Do not write the patch session directly.
 
 Scoring commands you can run while iterating:
+- Apply a candidate operation file to create a candidate session:
+  `python3 text2fx_gemini/midi_locked_patch.py apply-patch-ops --session {current_session_path} --operations <candidate_ops.json> --output <candidate_session.json>`
 - Full clip:
   `python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement {arrangement_path} --session <candidate_session.json> --reference {loss_report_path.parent / "source_clip.wav"} --output <candidate_loss.json> --render-output <candidate_render.wav> --seconds 5`
 - Specific time window inside the selected 5-second clip:
@@ -700,10 +812,19 @@ Use targeted windows for exact beats/times called out by the Critic, weak active
 
 Output contract:
 - Return only JSON. Do not include prose outside the JSON.
-- Preserve the current patch session shape and include all existing top-level fields.
-- Include `schema: "patchex.patch_session.v1"`.
-- Include `production_notes` with `hypothesis`, `critic_brief_used`, `change_log`, and `loss_trials`.
-- `change_log` entries should include `track_id`, `parameter_path`, `change`, and `reason`.
+- Do not return a full patch session. Return an operation payload with this shape:
+  {{
+    "schema": "patchex.patch_ops.v1",
+    "hypothesis": "production hypothesis",
+    "critic_brief_used": "{critic_brief_path}",
+    "operations": [
+      {{"op": "set", "path": "layers.<track_id>.synth.waveform", "value": "saw", "track_id": "<track_id>", "change": "change source toward saw", "reason": "why this follows from the Critic/loss"}}
+    ],
+    "loss_trials": []
+  }}
+- Supported operation types: `set`, `append`, and `extend`.
+- Operation paths use layer ids, not numeric layer indexes: `layers.<track_id>.synth.waveform`, `layers.<track_id>.amp_envelope.attack`, `layers.<track_id>.filter.cutoff_points`, `layers.<track_id>.effects.reverb_mix`, `returns.space.decay`, `master.gain_db`, or `production_notes.hypothesis`.
+- Each operation should include `track_id`, `path`, `value`, `change`, and `reason`.
 - `loss_trials` entries should include the command, score/loss numbers if available, the time window if applicable, and a short note.
 
 Hard boundary:
@@ -799,7 +920,7 @@ Decision rules:
 - Follow the Critic briefing unless the loss report clearly contradicts it.
 - Prefer high-impact production moves over tiny random parameter changes.
 - Make changes that are coherent as a production hypothesis, not isolated parameter noise.
-- If you try multiple candidates, write the best one to {output_path} and record the rejected trials in `production_notes.loss_trials`.
+- If you try multiple candidates, write the operations for the best one to {operations_output_path} and record the rejected trials in `loss_trials`.
 - If a targeted window improves but full-clip loss worsens, choose the version that best supports the stated production goal and explain that tradeoff in `production_notes`.
 """
 
@@ -1130,6 +1251,17 @@ def command_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_apply_patch_ops(args: argparse.Namespace) -> int:
+    session = json.loads(args.session.read_text())
+    operations = json.loads(args.operations.read_text())
+    updated, report = apply_patch_operations(session, operations)
+    write_json(args.output, updated)
+    if args.report:
+        write_json(args.report, report)
+    print(f"wrote {args.output}")
+    return 0
+
+
 def command_run(args: argparse.Namespace) -> int:
     runtime()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -1183,13 +1315,17 @@ def command_run(args: argparse.Namespace) -> int:
         print(f"trace_file agent=residual_critic_step_{step:02d} role=recommendation path={critic_brief_path}", flush=True)
         print(f"agent_stage producer step={step}", flush=True)
         proposal_path = args.output_dir / f"patch_session_step_{step:02d}.json"
+        operations_path = args.output_dir / f"patch_ops_step_{step:02d}.json"
         if step == 0 and args.neutral_only:
             proposal = session
             proposal, lock_report = enforce_arrangement_lock(arrangement, proposal)
             write_json(proposal_path, proposal)
+            write_json(operations_path, {"schema": "patchex.patch_ops.v1", "hypothesis": "neutral-session smoke run", "operations": [], "loss_trials": []})
         else:
-            prompt = codex_patch_prompt(arrangement_path, current_session_path, critic_brief_path, current_loss_report_path, proposal_path)
-            raw_proposal = run_codex_patch(f"producer_step_{step:02d}", prompt, args.output_dir, proposal_path, args.timeout)
+            prompt = codex_patch_prompt(arrangement_path, current_session_path, critic_brief_path, current_loss_report_path, operations_path, proposal_path)
+            raw_operations = run_codex_patch(f"producer_step_{step:02d}", prompt, args.output_dir, operations_path, args.timeout)
+            raw_proposal, operations_report = apply_patch_operations(session, raw_operations)
+            write_json(args.output_dir / f"patch_ops_applied_step_{step:02d}.json", operations_report)
             proposal, lock_report = enforce_arrangement_lock(arrangement, raw_proposal)
             write_json(proposal_path, proposal)
             write_json(args.output_dir / f"arrangement_lock_step_{step:02d}.json", lock_report)
@@ -1216,6 +1352,7 @@ def command_run(args: argparse.Namespace) -> int:
             "audio_path": str(render_path),
             "audio_diff_path": str(report_path),
             "proposal_session_path": str(proposal_path),
+            "patch_ops_path": str(operations_path),
             "scores": report["scores"],
             "best_scores": (best_report or report)["scores"],
             "layers": [{"id": layer.get("id"), "role": layer.get("role")} for layer in proposal.get("layers", [])],
@@ -1289,6 +1426,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_score.add_argument("--window-start", type=float)
     p_score.add_argument("--window-duration", type=float)
     p_score.set_defaults(func=command_score)
+
+    p_apply_ops = sub.add_parser("apply-patch-ops")
+    p_apply_ops.add_argument("--session", required=True, type=Path)
+    p_apply_ops.add_argument("--operations", required=True, type=Path)
+    p_apply_ops.add_argument("--output", required=True, type=Path)
+    p_apply_ops.add_argument("--report", type=Path)
+    p_apply_ops.set_defaults(func=command_apply_patch_ops)
 
     p_run = sub.add_parser("run")
     p_run.add_argument("--midi", required=True, type=Path)

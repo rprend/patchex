@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "patchex.patch_ops.v1",
+  "title": "Patchex Patch Operations",
+  "type": "object",
+  "required": ["schema", "hypothesis", "operations"],
+  "properties": {
+    "schema": { "const": "patchex.patch_ops.v1" },
+    "hypothesis": { "type": "string" },
+    "critic_brief_used": { "type": "string" },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["op", "path", "value", "change", "reason"],
+        "properties": {
+          "op": { "enum": ["set", "append", "extend"] },
+          "path": { "type": "string" },
+          "value": {},
+          "track_id": { "type": "string" },
+          "change": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "loss_trials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string" },
+          "window_start": { "type": "number" },
+          "window_duration": { "type": "number" },
+          "score": { "type": "number" },
+          "loss": { "type": "number" },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}

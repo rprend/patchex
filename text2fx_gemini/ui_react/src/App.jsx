@@ -1101,6 +1101,8 @@ function App() {
         name === "patch_session_current.json" ||
         name.startsWith("patch_report_step_") ||
         name.startsWith("patch_render_step_") ||
+        name.startsWith("patch_ops_step_") ||
+        name.startsWith("patch_ops_applied_step_") ||
         name.startsWith("critic_brief_step_") ||
         name.startsWith("harness_improver_step_") ||
         name.match(/^producer_reconstruction_step_\d+_.+\.wav$/) ||
@@ -1121,6 +1123,8 @@ function App() {
         : artifact.name.startsWith("producer_audio_diff") ? "producer_audio_diff"
         : artifact.name.startsWith("patch_report_step_") ? "audio_diff"
         : artifact.name.startsWith("patch_render_step_") ? "winner_render"
+        : artifact.name.startsWith("patch_ops_step_") ? "session"
+        : artifact.name.startsWith("patch_ops_applied_step_") ? "session"
         : artifact.name.startsWith("critic_brief_step_") ? "recommendation"
         : artifact.name === "arrangement.json" || artifact.name === "full_arrangement.json" ? "layer_analysis"
         : artifact.name.startsWith("harness_improver_step_") ? "harness_improvement"
