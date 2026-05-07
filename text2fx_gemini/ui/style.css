@@ -20,9 +20,7 @@
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(48, 55, 141, .08), transparent 24rem),
-    linear-gradient(180deg, #f7f7f3 0%, #f2f4f7 100%);
+  background: var(--bg);
   color: var(--text);
   font: 16px/1.55 "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -179,12 +177,6 @@ button {
   align-items: center;
   justify-content: center;
   gap: .5rem;
-  border-radius: 10px;
-  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
-}
-
-[data-slot="button"]:hover {
-  transform: translateY(-1px);
 }
 
 [data-slot="select-trigger"] {
@@ -193,17 +185,12 @@ button {
   justify-content: space-between;
   min-width: min(100%, 28rem);
   height: auto;
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 12px;
-  background: rgba(255,255,255,.08);
+  border: 1px solid var(--line);
+  background: white;
   color: var(--text);
   font: inherit;
   padding: .65rem .75rem;
   text-align: left;
-}
-
-.hero-panel [data-slot="select-trigger"] {
-  color: #fff;
 }
 
 [data-slot="select-content"] {
@@ -212,7 +199,6 @@ button {
   min-width: 18rem;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
   background: white;
   color: var(--text);
   box-shadow: 0 14px 30px rgba(0, 0, 0, .08);
@@ -231,8 +217,6 @@ button {
 
 [data-slot="card"] {
   background: white;
-  border: 1px solid var(--line);
-  border-radius: 14px;
 }
 
 [data-slot="card-header"],
@@ -245,7 +229,6 @@ button {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
-  border-radius: 999px;
   padding: .12rem .45rem;
   color: var(--muted);
   font-size: .72rem;
@@ -257,7 +240,6 @@ button {
   border: 0;
   background: transparent;
   color: inherit;
-  border-radius: 10px;
 }
 
 [data-slot="accordion-content"] {
@@ -629,10 +611,7 @@ textarea {
 }
 
 .artifact-group {
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: white;
+  border-top: 1px solid var(--line);
 }
 
 .artifact-group [data-slot="accordion-trigger"] {
@@ -640,7 +619,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: .85rem 1rem;
+  padding: .75rem 0;
   cursor: pointer;
   text-align: left;
 }
@@ -658,7 +637,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   border-top: 1px solid var(--line-soft);
-  border-left: 0;
+  border-left: 1px solid var(--line-soft);
 }
 
 .artifact-list a {
@@ -740,18 +719,17 @@ textarea {
 .scoreboard {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  gap: .8rem;
-  border: 0;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
   margin-top: 1rem;
 }
 
 .score-card {
   min-height: 8rem;
   padding: .9rem;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: white;
-  box-shadow: 0 8px 24px rgba(38, 38, 38, .045);
 }
 
 .score-card [data-slot="card-description"] {
@@ -791,8 +769,8 @@ textarea {
 .run-history {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: .8rem;
-  border: 0;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
   margin-top: 1rem;
 }
 
@@ -800,8 +778,9 @@ textarea {
 .empty-history {
   min-height: 12rem;
   padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: white;
   text-align: left;
 }
@@ -878,18 +857,12 @@ textarea {
 .react-shell {
   width: min(100% - 2rem, 78rem);
   margin: 0 auto;
-  padding: 1.5rem 0 4rem;
+  padding: 1.2rem 0 4rem;
 }
 
 .hero-panel {
-  margin-top: 1rem;
-  padding: 1.25rem;
-  border: 1px solid #24262f;
-  border-radius: 22px;
-  background:
-    linear-gradient(135deg, rgba(255,255,255,.08), rgba(255,255,255,0) 38%),
-    #111219;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, .16);
+  padding: 1.25rem 0 1.5rem;
+  border-bottom: 1px solid var(--line);
 }
 
 .hero-main {
@@ -915,7 +888,6 @@ textarea {
   margin: 0;
   font-size: clamp(2.4rem, 5vw, 4.6rem);
   line-height: .95;
-  color: #fff;
 }
 
 .source-toolbar {
@@ -931,34 +903,31 @@ textarea {
 }
 
 .select-field span {
-  color: #a9adbb;
+  color: var(--muted);
   font-size: .78rem;
   font-weight: 650;
 }
 
 .quiet-link {
   padding: .65rem .75rem;
-  color: #c9ccda;
+  color: var(--soft);
   text-decoration: none;
 }
 
 .quiet-link:hover {
-  color: #fff;
+  color: var(--accent);
 }
 
 .source-wave-frame {
   position: relative;
-  overflow: hidden;
-  border: 1px solid #2b2e38;
-  border-radius: 16px;
-  background:
-    repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 48px),
-    #0c0d12;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  background: white;
 }
 
 .source-wave {
   min-height: 172px;
-  padding: .5rem .75rem;
+  padding: .5rem 0;
 }
 
 .wave-play {
@@ -968,10 +937,8 @@ textarea {
   bottom: 1rem;
   min-width: 4.2rem;
   padding: .5rem .7rem;
-  border-color: rgba(255,255,255,.22);
-  background: rgba(255, 255, 255, .94);
-  color: #111219;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .05);
 }
 
 .clip-controls {
@@ -980,12 +947,9 @@ textarea {
 }
 
 .section-block {
-  margin-top: 1.5rem;
-  padding: 1.25rem;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, .72);
-  box-shadow: 0 12px 38px rgba(38, 38, 38, .055);
+  margin-top: 1.8rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
 }
 
 .section-title h2 {
@@ -1002,11 +966,6 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: .55rem;
-  min-width: 16rem;
-  border-color: #2f368b;
-  border-radius: 999px;
-  background: #30378d;
-  box-shadow: 0 10px 28px rgba(48, 55, 141, .22);
 }
 
 .button-spinner {
@@ -1041,19 +1000,19 @@ textarea {
 
 .iteration-group {
   position: relative;
-  padding-left: 1.7rem;
-  border-radius: 12px;
+  padding-left: 1.25rem;
 }
 
 .iteration-rail {
   position: absolute;
-  top: .4rem;
-  bottom: .4rem;
-  left: -.35rem;
-  width: .7rem;
+  top: .8rem;
+  bottom: .8rem;
+  left: 0;
+  width: 3px;
   min-width: 0;
   padding: 0;
   border: 0;
+  border-radius: 999px;
   background: var(--line);
   cursor: pointer;
   transition: background .15s ease, width .15s ease;
@@ -1061,16 +1020,16 @@ textarea {
 
 .iteration-rail:hover,
 .iteration-rail:focus-visible {
+  width: 4px;
   background: var(--accent);
   outline: none;
 }
 
 .iteration-summary {
   width: 100%;
-  padding: .85rem .8rem;
+  padding: .7rem 0 .7rem .75rem;
   border: 0;
-  border-radius: 12px;
-  background: #fff;
+  background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -1106,22 +1065,20 @@ textarea {
 
 .iteration-body {
   display: grid;
-  gap: .7rem;
+  gap: .45rem;
   margin-bottom: .8rem;
-  padding: .75rem 0 .25rem 1rem;
+  padding-left: .75rem;
 }
 
 .agent-card {
-  padding: .65rem .75rem;
-  border: 1px solid var(--line-soft);
-  border-radius: 12px;
-  background: #fff;
+  padding: .55rem 0 .55rem 0;
+  border-left: 0;
 }
 
 .agent-card-head {
   width: 100%;
   margin-bottom: .25rem;
-  padding: 0;
+  padding: .35rem 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1159,13 +1116,11 @@ textarea {
 
 .agent-transcript {
   max-height: 28rem;
-  margin: .65rem 0 0;
-  padding: .85rem;
+  margin: .65rem 0 0 1.25rem;
+  padding: .85rem 0;
   overflow: auto;
-  border: 1px solid #24262f;
-  border-radius: 12px;
-  background: #111219;
-  color: #d8dbea;
+  border-top: 1px solid var(--line-soft);
+  color: var(--soft);
   font: .78rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;
 }
