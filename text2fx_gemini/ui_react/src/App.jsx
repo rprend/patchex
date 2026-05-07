@@ -390,7 +390,7 @@ function traceSet(traces, base, step = null) {
   });
 }
 
-function WorkflowCanvas({ traces, statuses, notes, winners, runNotes }) {
+function WorkflowCanvas({ traces, statuses, notes, winners }) {
   const steps = Array.from(new Set(traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined))).sort((a, b) => a - b);
   const [selectedId, setSelectedId] = useState("analyzer");
 
@@ -463,12 +463,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, runNotes }) {
   const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.id === "analyzer");
   const selected = selectedNode?.data || { label: "Select a block", traces: [] };
 
-  return h("section", { className: "section-block workflow-section" },
-    h("div", { className: "section-title" },
-      h("h2", null, "Run Canvas"),
-      h("p", null, "Click any block to inspect the exact prompt and output files for that agent.")
-    ),
-    runNotes.length ? h("div", { className: "activity-strip" }, runNotes.slice(-4).map((note, index) => h("span", { key: `${note}-${index}` }, note))) : null,
+  return h("section", { className: "workflow-section" },
     h("div", { className: "workflow-layout" },
       h("div", { className: "workflow-canvas" },
         h(ReactFlow, {
@@ -987,8 +982,9 @@ function App() {
   const audioUrl = currentFile ? `/media/references/${encodeURIComponent(currentFile)}` : "";
   const runActive = status === "Running" || status === "Extracting";
   const hasRunView = runActive || traces.length > 0 || artifacts.length > 0 || report;
-  return h("main", { className: "react-shell" },
-    h(SourceSelector, {
+  const routeRunId = currentRouteRunId();
+  return h("main", { className: routeRunId || hasRunView ? "react-shell run-detail-shell" : "react-shell" },
+    routeRunId || hasRunView ? null : h(SourceSelector, {
       files,
       currentFile,
       onSelect: handleSourceEvent,
@@ -1004,11 +1000,11 @@ function App() {
       disabled: runActive || !currentFile,
       running: runActive,
     }),
-    hasRunView ? h(WorkflowCanvas, { traces, statuses, notes, winners, runNotes }) : null,
+    hasRunView ? h(WorkflowCanvas, { traces, statuses, notes, winners }) : null,
     hasRunView ? h(Comparison, { artifacts }) : null,
     hasRunView ? h(Scoreboard, { report }) : null,
     hasRunView ? h(Artifacts, { artifacts, onReport: setReport }) : null,
-    h(RunHistory, { runs, onLoad: loadPastRun, onRefresh: loadRuns })
+    routeRunId || hasRunView ? null : h(RunHistory, { runs, onLoad: loadPastRun, onRefresh: loadRuns })
   );
 }
 

@@ -860,6 +860,11 @@ textarea {
   padding: 1.2rem 0 4rem;
 }
 
+.run-detail-shell {
+  width: min(100% - 1.5rem, 118rem);
+  padding-top: .75rem;
+}
+
 .hero-panel {
   padding: 1.25rem 0 1.5rem;
   border-bottom: 1px solid var(--line);
@@ -1236,18 +1241,17 @@ textarea {
 }
 
 .workflow-section {
-  min-height: 42rem;
+  min-height: 46rem;
 }
 
 .workflow-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(20rem, 31rem);
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 34rem);
   gap: 1rem;
-  margin-top: 1rem;
 }
 
 .workflow-canvas {
-  height: 42rem;
+  height: 46rem;
   min-width: 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -1363,7 +1367,7 @@ textarea {
 
 .workflow-sidebar {
   min-width: 0;
-  height: 42rem;
+  height: 46rem;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   align-content: start;
