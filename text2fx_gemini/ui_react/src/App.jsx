@@ -397,7 +397,26 @@ function IterationFrameNode({ data }) {
   return h("div", { className: "iteration-frame-node" });
 }
 
-const nodeTypes = { agent: FlowAgentNode, iterationFrame: IterationFrameNode };
+function AccuracyNode({ data, selected }) {
+  const classes = ["accuracy-node", `status-${data.status || "waiting"}`];
+  if (selected) classes.push("selected");
+  return h("button", {
+    type: "button",
+    className: classes.join(" "),
+    title: "Calculate accuracy",
+    onClick: (event) => {
+      event.stopPropagation();
+      data.onOpen?.();
+    },
+  },
+    h(Handle, { className: "workflow-handle workflow-handle-left", type: "target", position: Position.Left }),
+    h(Activity, { size: 14, strokeWidth: 2.4 }),
+    h("span", null, data.score || "..."),
+    h(Handle, { className: "workflow-handle workflow-handle-right", type: "source", position: Position.Right })
+  );
+}
+
+const nodeTypes = { agent: FlowAgentNode, iterationFrame: IterationFrameNode, accuracy: AccuracyNode };
 
 function traceSet(traces, base, step = null) {
   return traces.filter((trace) => {
@@ -613,28 +632,46 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
     makeAgentNode("analyzer", "Analyzer", "analyzer", null, 24, 26, undefined, "one-time source analysis"),
   ];
   const edges = [];
+  const makeAccuracyNode = (step, x, y, parentId) => {
+    const winner = winners[step];
+    const accuracyTrace = traceSet(traces, "loss", step).find((trace) => trace.role?.includes("winner_audio_diff") || trace.role?.includes("audio_diff"));
+    return {
+      id: `accuracy-${step}`,
+      type: "accuracy",
+      position: { x, y },
+      parentId,
+      extent: parentId ? "parent" : undefined,
+      draggable: false,
+      data: {
+        score: winner?.score,
+        status: statuses[`loss_${step}`] || (accuracyTrace ? "completed" : "waiting"),
+        onOpen: accuracyTrace ? () => {
+          setSelectedId(`producer-${step}`);
+          setSelectedDetail({ trace: accuracyTrace, label: `Accuracy: ${roleName(accuracyTrace.role, accuracyTrace.agent)}` });
+        } : undefined,
+      },
+    };
+  };
   steps.forEach((step, index) => {
     const frameId = `iteration-${step}`;
     const y = 180 + index * 290;
-    const winner = winners[step];
     nodes.push({
       id: frameId,
       type: "iterationFrame",
       position: { x: 8, y: y + 22 },
       draggable: false,
       selectable: false,
-      style: { width: 1220, height: 196 },
+      style: { width: 880, height: 196 },
       data: {},
     });
-    nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 36, 34, frameId, "writes session files"));
-    nodes.push(makeAgentNode(`loss-${step}`, "Calculate Accuracy", "loss", step, 336, 34, frameId, "renders and scores"));
-    nodes.push(makeAgentNode(`harness-${step}`, "Harness Improver", "harness_improver", step, 636, 34, frameId, "improves loss, graph, and prompts"));
-    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 936, 34, frameId, "writes next brief"));
-    edges.push(makeEdge(`p-l-${step}`, `producer-${step}`, `loss-${step}`, statuses[`loss_${step}`] === "running"));
-    edges.push(makeEdge(`l-h-${step}`, `loss-${step}`, `harness-${step}`, statuses[`harness_improver_${step}`] === "running"));
-    edges.push(makeEdge(`h-c-${step}`, `harness-${step}`, `critic-${step}`, statuses[`residual_critic_${step}`] === "running"));
-    if (index === 0) edges.push(makeEdge("a-p-0", "analyzer", `producer-${step}`));
-    if (index > 0) edges.push(makeEdge(`c-p-${step}`, `critic-${steps[index - 1]}`, `producer-${step}`));
+    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 36, 34, frameId, "writes Producer brief"));
+    nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 336, 34, frameId, "writes session files"));
+    nodes.push(makeAccuracyNode(step, 636, 78, frameId));
+    edges.push(makeEdge(`c-p-${step}`, `critic-${step}`, `producer-${step}`, statuses[`producer_${step}`] === "running"));
+    edges.push(makeEdge(`p-a-${step}`, `producer-${step}`, `accuracy-${step}`, statuses[`loss_${step}`] === "running"));
+    if (index === 0) edges.push(makeEdge("a-c-0", "analyzer", `critic-${step}`));
+    const nextStep = steps[index + 1];
+    if (nextStep !== undefined) edges.push(makeEdge(`a-c-${step}-${nextStep}`, `accuracy-${step}`, `critic-${nextStep}`, statuses[`residual_critic_${nextStep}`] === "running"));
   });
 
   const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.id === "analyzer");
@@ -975,7 +1012,6 @@ function App() {
           ...current,
           [`producer_${idx}`]: "completed",
           [`loss_${idx}`]: "completed",
-          [`harness_improver_${idx}`]: "completed",
           [`residual_critic_${idx}`]: "completed",
         }));
       }
@@ -1030,6 +1066,7 @@ function App() {
       if (role === "producer_render" && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
       if (role === "audio_diff" && step !== null) agent = `loss_step_${String(step).padStart(2, "0")}`;
       if (role === "harness_improvement" && step !== null) agent = `harness_improver_step_${String(step).padStart(2, "0")}`;
+      if (role === "recommendation" && step !== null) agent = `residual_critic_step_${String(step).padStart(2, "0")}`;
       addTrace({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name, step });
     });
     (loadedReport?.history || []).forEach((item) => {
@@ -1037,7 +1074,7 @@ function App() {
       const step = Number(item.step);
       const score = Number(item.scores?.final || item.scores || 0);
       setWinners((current) => ({ ...current, [step]: { winner: item.winner, score: score.toFixed(3) } }));
-      setStatuses((current) => ({ ...current, [`producer_${step}`]: "completed", [`loss_${step}`]: "completed", [`harness_improver_${step}`]: "completed", [`residual_critic_${step}`]: "completed" }));
+      setStatuses((current) => ({ ...current, [`producer_${step}`]: "completed", [`loss_${step}`]: "completed", [`residual_critic_${step}`]: "completed" }));
       const audioName = item.audio_path?.split("/").pop();
       const diffName = item.audio_diff_path?.split("/").pop();
       const audioArtifact = artifactList.find((artifact) => artifact.name === audioName);

@@ -894,7 +894,6 @@ def codex_producer_prompt(
     analyzer_path: Path,
     current_session_path: Path,
     recommendation_path: Path,
-    history_path: Path,
     step: int,
     max_layers: int,
 ) -> str:
@@ -904,16 +903,12 @@ You are the Producer agent in an autonomous audio reconstruction pipeline.
 Read these files before answering:
 - Analyzer layer plan: {analyzer_path}
 - Current best reconstruction session JSON: {current_session_path}
-- Previous Critic recommendation JSON, especially producer_prompt and success_metrics: {recommendation_path}
-- Score/history JSON: {history_path}
+- Critic recommendation JSON: {recommendation_path}
 - Target source audio: {analyzer_path.parent / "source_clip.wav"}
-- Latest accepted/current reconstruction audio if present: read the latest audio_path in {history_path}
 - Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
 - Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
-- Canonical DAW session folder: {analyzer_path.parent / "session_chunks" / "current"}
-- Current chunked session manifest: {analyzer_path.parent / "session_chunks" / "current" / "manifest.json"}
 
-Task: Work like a DAW producer reconstructing the target clip. Listen/reason over the target source audio, the current reconstruction audio, and the latest loss file. The canonical state is the DAW session folder with tracks, instruments, modulators, effects, routing, timeline, and master files. Update your reasoning from those files, then write the requested compiled session JSON artifact so the renderer can score it.
+Task: Write the next complete reconstruction session JSON. Use the current session as the starting point and make the smallest useful DAW change that follows the Critic recommendation.
 
 Renderer capabilities:
 - Up to {max_layers} synth layers.
@@ -931,34 +926,35 @@ Rules:
 - Write a complete session JSON file, not prose and not a patch fragment.
 - Preserve useful existing layers and stable layer ids.
 - Add/remove tracks, set Vital synth parameters, add LFO/modulation, add sidechain-like gate/gain movement, add compression/EQ/reverb/chorus/phaser/delay, or change MIDI/patterns as needed.
-- Think in DAW state terms: tracks/* are audio/MIDI tracks, instruments/* are Vital synth settings, modulators/* are LFOs/automation routed to parameters, effects/* are insert/return effects, routing.json controls sends/order, timeline.json captures notes and automation.
-- Prefer a small number of meaningful DAW decisions, then let the loss decide. Do not blindly add layers when a synth parameter, LFO, effect, sidechain, or MIDI/pattern change is the better DAW move.
 - Use synth/noise-like approximation only; do not reference external samples.
-- The previous Critic's producer_prompt and success_metrics are binding. Follow the intent, but choose the actual session edits yourself.
+- The Critic's producer_prompt and success_metrics are binding. Follow the intent, but choose the actual session edits yourself.
 - If the Critic or pattern constraints say MIDI/pattern/onsets are weak, update the notes list concretely. Do not describe an arpeggio without writing the note events.
 - If the source motion is cyclic/modulated, use continuous modulation/LFO-style settings or dense smooth automation. Do not fake an LFO with one isolated chop or note hit.
-- Optimize actual reconstruction metrics: exact 50ms envelope/band match, beat-grid envelope/band match, modulation periodicity/rate/depth, directional movement, transient classification, multi-resolution spectral, mel spectrogram, pitch chroma, spectral motion, stereo width, and timbre features. The final score is gated by time-series and modulation accuracy, so a good chord with wrong movement should still fail.
 
 The session JSON must use this shape:
 {session_shape()}
 """
 
 
-def codex_residual_critic_prompt(analyzer_path: Path, session_path: Path, history_item_path: Path, audio_diff_path: Path) -> str:
+def codex_residual_critic_prompt(analyzer_path: Path, session_path: Path, audio_diff_path: Path | None) -> str:
+    diff_line = f"- Latest audio similarity/diff JSON: {audio_diff_path}" if audio_diff_path is not None else "- No reconstruction has been scored yet."
+    diff_guidance = (
+        "Use the diff JSON to identify the biggest measurable mismatch: exact time ranges, band/envelope errors, modulation rate/depth errors, onset errors, pitch, stereo, or timbre."
+        if audio_diff_path is not None
+        else "Use the analyzer plan and source measurements to recommend the first reconstruction move."
+    )
     return f"""
 You are the Critic agent in an audio reconstruction pipeline.
 
 Read these files before answering:
 - Analyzer layer plan: {analyzer_path}
 - Current best reconstruction session JSON: {session_path}
-- Latest builder history item JSON: {history_item_path}
-- Latest audio similarity/diff JSON: {audio_diff_path}
+- Target source audio: {analyzer_path.parent / "source_clip.wav"}
+{diff_line}
 - Source pattern constraints JSON: {analyzer_path.parent / "pattern_constraints.json"}
 - Deterministic beat grid JSON: {analyzer_path.parent / "beat_grid.json"}
 
-Task: Update the requested recommendation artifact for the next Producer run. You are not writing a rigid action list. Write a clear Producer prompt that explains what is wrong perceptually and metrically, what kind of DAW decisions to consider, and what success would look like on the next loss file.
-
-Important: Latest audio similarity/diff JSON contains diagnostics.fixed_50ms.weak_windows, diagnostics.beat_grid_scores.slices, diagnostics.beat_grid_scores.weak_slices, and diagnostics.modulation_analysis. Use those records to name exact time ranges, modulation rate/depth mismatches, and whether the source needs cyclic LFO-style motion or discrete MIDI attacks. Recommendations should say things like "increase mid energy at 2.85-3.10s" or "source has 3.2Hz cyclic filter movement; candidate has one chop" when supported by the diff.
+Task: Write the next Producer brief. {diff_guidance}
 
 The recommendation JSON must use this shape:
 {{
@@ -1548,33 +1544,38 @@ def main() -> None:
     history_path = write_json(args.output_dir / "history.json", history)
     best_session = session
     best_score = AudioScore(**{field: 0.0 for field in AudioScore.__dataclass_fields__})
-    recommendation = {
-        "missing": ["empty session"],
-        "producer_prompt": "Start from the empty session and make the first DAW-style reconstruction decision. Add the dominant audible synth track, set its Vital instrument parameters, MIDI/held notes or pattern, core modulation, and essential effects so the first render captures the target's main body.",
-        "success_metrics": {
-            "primary": ["mel_spectrogram", "envelope", "band_envelope_by_time", "spectral_motion"],
-            "targets": ["render should have audible sustained body across the full 5 seconds", "first pass should identify whether motion is cyclic LFO/modulation or discrete note events"],
-            "failure_modes": ["silent or near-empty render", "one-shot chop used to imitate cyclic modulation"],
-        },
-        "recommendations": ["add the dominant audible synth track first"],
-        "must_fix": ["empty session"],
-        "do_not": ["do not fake cyclic modulation with a single isolated chop"],
-        "success_criteria": ["audible full-duration reconstruction body and clear first hypothesis for pitch, timbre, envelope, and modulation"],
-        "priority": "layer",
-        "target_files": [],
-        "target_slices": [],
-        "stop_layer_building": False,
-    }
-    recommendation_path = trace_file("residual_critic", "recommendation_initial", write_json(args.output_dir / "recommendation_initial.json", recommendation))
+    previous_diff_path: Path | None = None
     rng = np.random.default_rng(20260506)
     min_builder_steps = min(args.steps, 5)
 
     for step in range(args.steps):
+        print(f"agent_stage residual_critic step={step}", flush=True)
+        critic = run_codex_json(
+            args.output_dir,
+            f"residual_critic_step_{step:02d}",
+            codex_residual_critic_prompt(analyzer_path, current_session_path, previous_diff_path),
+            json_output_path=args.output_dir / f"recommendation_step_{step:02d}.json",
+        )
+        recommendation = {
+            "missing": critic.get("missing", ["empty session"] if previous_diff_path is None else []),
+            "producer_prompt": critic.get("producer_prompt", "Make the smallest DAW-style session change that should improve the current reconstruction."),
+            "success_metrics": critic.get("success_metrics", {"primary": [], "targets": [], "failure_modes": []}),
+            "recommendations": critic.get("recommendations", []),
+            "must_fix": critic.get("must_fix", critic.get("missing", [])[:4]),
+            "do_not": critic.get("do_not", []),
+            "success_criteria": critic.get("success_criteria", []),
+            "priority": critic.get("priority", "layer"),
+            "target_files": critic.get("target_files", []),
+            "target_slices": critic.get("target_slices", []),
+            "stop_layer_building": bool(critic.get("stop_layer_building", False)),
+        }
+        recommendation_path = trace_file(f"residual_critic_step_{step:02d}", "recommendation", write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation))
+
         print(f"agent_stage producer step={step}", flush=True)
         proposed = run_codex_json(
             args.output_dir,
             f"producer_step_{step:02d}",
-            codex_producer_prompt(analyzer_path, current_session_path, recommendation_path, history_path, step, args.max_layers),
+            codex_producer_prompt(analyzer_path, current_session_path, recommendation_path, step, args.max_layers),
             args.seconds,
             args.sample_rate,
             json_output_path=args.output_dir / f"session_step_{step:02d}_codex_proposal.json",
@@ -1627,45 +1628,25 @@ def main() -> None:
             "best_scores": score_to_json(best_score),
             "layers": [{"id": layer["id"], "role": layer["role"]} for layer in best_session.get("layers", [])],
             "deterministic_residual": deterministic_residual,
+            "recommendation_path": str(recommendation_path),
+            "residual_critic": recommendation,
         }
         history_item_path = trace_file(f"loss_step_{step:02d}", "history_item", write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item))
-        print(f"agent_stage residual_critic step={step}", flush=True)
-        critic = run_codex_json(
-            args.output_dir,
-            f"residual_critic_step_{step:02d}",
-            codex_residual_critic_prompt(analyzer_path, current_session_path, history_item_path, diff_path),
-            json_output_path=args.output_dir / f"recommendation_step_{step:02d}.json",
-        )
-        recommendation = {
-            "missing": critic.get("missing", deterministic_residual["missing"]),
-            "producer_prompt": critic.get("producer_prompt", "Compare the target audio to the current reconstruction, then make the smallest DAW-style session change that should improve the weakest loss components."),
-            "success_metrics": critic.get("success_metrics", {"primary": [], "targets": [], "failure_modes": []}),
-            "recommendations": critic.get("recommendations", deterministic_residual["recommendations"]),
-            "must_fix": critic.get("must_fix", deterministic_residual["missing"][:4]),
-            "do_not": critic.get("do_not", []),
-            "success_criteria": critic.get("success_criteria", []),
-            "priority": critic.get("priority", "layer"),
-            "target_files": critic.get("target_files", []),
-            "target_slices": critic.get("target_slices", []),
-            "stop_layer_building": bool(critic.get("stop_layer_building", False)),
-            "diagnostics": deterministic_residual.get("diagnostics", {}),
-        }
         temporal_ok = temporal_scores_ok(best_score)
         structural_ok = structural_scores_ok(best_score, diagnostics)
         forced_continue = step + 1 < min_builder_steps or best_score.final < 0.78 or not temporal_ok or not structural_ok
         if forced_continue and recommendation["stop_layer_building"]:
             recommendation["stop_layer_building"] = False
-            recommendation.setdefault("do_not", []).append("do not stop yet; the orchestrator requires more Producer passes, a higher final score, and passing temporal scores")
-            recommendation.setdefault("recommendations", []).append("continue the Producer/Critic loop and address the weakest temporal and spectral metrics")
-            recommendation.setdefault("success_criteria", []).append("before stopping, final >= 0.78, temporal scores pass, and structural gate passes: enough onsets, onset timing, f0 contour, timbre features")
-        recommendation_path = trace_file(f"residual_critic_step_{step:02d}", "recommendation", write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation))
-        history_item["recommendation_path"] = str(recommendation_path)
-        history_item["residual_critic"] = recommendation
+            recommendation_path = trace_file(f"residual_critic_step_{step:02d}", "recommendation", write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation))
+            history_item["recommendation_path"] = str(recommendation_path)
+            history_item["residual_critic"] = recommendation
+            history_item_path = trace_file(f"loss_step_{step:02d}", "history_item", write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item))
         history.append(history_item)
         history_path = write_json(args.output_dir / "history.json", history)
         write_run_summary(args.output_dir, "running", history, score_to_json(best_score))
         trace_file(f"producer_step_{step:02d}", "accepted_session", write_json(args.output_dir / f"session_step_{step:02d}_accepted.json", best_session))
         print(f"step_complete index={step} winner={label} accepted={str(accepted).lower()} best_score={best_score.final:.4f}", flush=True)
+        previous_diff_path = Path(diff_path)
         if recommendation.get("stop_layer_building") and len(best_session.get("layers", [])) >= 1 and step + 1 >= min_builder_steps and best_score.final >= 0.78 and temporal_scores_ok(best_score) and structural_scores_ok(best_score, diagnostics):
             print(f"layer_building_stopped step={step} reason=residual_critic", flush=True)
             break

@@ -1450,6 +1450,45 @@ textarea {
   white-space: nowrap;
 }
 
+.accuracy-node {
+  width: 4.75rem;
+  height: 3.25rem;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  gap: .1rem;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--accent);
+  font: inherit;
+  font-size: .74rem;
+  font-weight: 750;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(24, 24, 24, .06);
+}
+
+.accuracy-node.status-completed {
+  border-color: #4f8a6b;
+  color: #31624a;
+}
+
+.accuracy-node.status-running {
+  border-color: var(--accent);
+  background: #f7f9ff;
+}
+
+.accuracy-node.status-waiting {
+  border-color: #d4d4d4;
+  color: var(--soft);
+}
+
+.accuracy-node:hover,
+.accuracy-node.selected {
+  border-color: var(--accent);
+  background: #f7f9ff;
+}
+
 .node-spinner {
   position: absolute;
   top: .75rem;
