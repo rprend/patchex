@@ -184,7 +184,7 @@ function WaveformPlayer({ url, label, compact = false, color = "#323a85" }) {
   );
 }
 
-function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, clipRange, onPlayClip, playLabel, onRefresh, onStart, disabled }) {
+function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, onPlayClip, playLabel, onRefresh, onStart, disabled, running }) {
   const waveRef = useRef(null);
   const wave = useRef(null);
   const regions = useRef(null);
@@ -241,8 +241,10 @@ function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, c
         h("div", { className: "source-wave", ref: waveRef })
       ),
       h("div", { className: "clip-controls" },
-        h("strong", null, clipRange),
-        h("button", { type: "button", className: "primary inline-primary start-inline", onClick: onStart, disabled }, disabled ? "Running" : "Start reconstruction")
+        h("button", { type: "button", className: running ? "primary inline-primary start-inline is-running" : "primary inline-primary start-inline", onClick: onStart, disabled },
+          running ? h("span", { className: "button-spinner", "aria-hidden": "true" }) : null,
+          h("span", null, "Start reconstruction")
+        )
       )
     )
   );
@@ -863,7 +865,7 @@ function App() {
   }, []);
 
   const audioUrl = currentFile ? `/media/references/${encodeURIComponent(currentFile)}` : "";
-  const clipRange = `${clipStart.toFixed(2)}s - ${(clipStart + CLIP_SECONDS).toFixed(2)}s`;
+  const runActive = status === "Running" || status === "Extracting";
   return h("main", { className: "react-shell" },
     h(SourceSelector, {
       files,
@@ -874,12 +876,12 @@ function App() {
         sourceTools.current.regions = regions;
       },
       audioUrl,
-      clipRange,
       onPlayClip: playSelectedClip,
       playLabel,
       onRefresh: loadFiles,
       onStart: startRun,
-      disabled: status === "Running" || status === "Extracting" || !currentFile,
+      disabled: runActive || !currentFile,
+      running: runActive,
     }),
     h(Timeline, { traces, statuses, notes, winners, runNotes }),
     h(Comparison, { artifacts }),
