@@ -946,6 +946,22 @@ textarea {
 
 .agent-card-head {
   margin-bottom: .25rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.agent-card-head::-webkit-details-marker {
+  display: none;
+}
+
+.agent-card-head::before {
+  content: ">";
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.agent-card[open] > .agent-card-head::before {
+  content: "v";
 }
 
 .agent-card-head strong {
@@ -967,6 +983,17 @@ textarea {
 
 .agent-card.running .agent-state {
   color: var(--accent);
+}
+
+.agent-transcript {
+  max-height: 28rem;
+  margin: .65rem 0 0 1.25rem;
+  padding: .85rem 0;
+  overflow: auto;
+  border-top: 1px solid var(--line-soft);
+  color: var(--soft);
+  font: .78rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap;
 }
 
 .react-trace-file {

@@ -269,6 +269,57 @@ function Scoreboard({ report }) {
   );
 }
 
+function traceOrder(trace) {
+  const role = trace.role || "";
+  if (role === "prompt") return 0;
+  if (role === "answer") return 1;
+  if (role === "parsed_answer" || role === "layer_analysis") return 2;
+  if (role.includes("recommendation")) return 3;
+  if (role.includes("audio_diff") || role.includes("accuracy")) return 4;
+  if (role.includes("render") || role.endsWith("audio")) return 5;
+  return 6;
+}
+
+function transcriptLabel(trace) {
+  const name = trace.name || trace.path?.split("/").pop() || "artifact";
+  return `${roleName(trace.role, trace.agent)} (${name})`;
+}
+
+function AgentTranscript({ traces }) {
+  const [items, setItems] = useState([]);
+  const tracesKey = traces.map(traceKey).join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    const sorted = [...traces].sort((a, b) => traceOrder(a) - traceOrder(b) || transcriptLabel(a).localeCompare(transcriptLabel(b)));
+    Promise.all(sorted.map(async (trace) => {
+      const name = trace.name || trace.path?.split("/").pop() || "artifact";
+      if (name.endsWith(".wav")) {
+        return { trace, text: `[audio] ${name}\n${trace.url || trace.path || ""}` };
+      }
+      if (!trace.url) return { trace, text: trace.path || "" };
+      try {
+        const res = await fetch(trace.url);
+        if (!res.ok) throw new Error(`Could not load ${trace.url}`);
+        const text = await res.text();
+        return { trace, text: text.length > 24000 ? `${text.slice(0, 24000)}\n... [truncated; open artifact for full file]` : text };
+      } catch (error) {
+        return { trace, text: error.stack || String(error) };
+      }
+    })).then((loaded) => {
+      if (!cancelled) setItems(loaded);
+    });
+    return () => { cancelled = true; };
+  }, [tracesKey]);
+
+  if (!traces.length) return h("pre", { className: "agent-transcript" }, "waiting for files...");
+  if (!items.length) return h("pre", { className: "agent-transcript" }, "loading...");
+
+  return h("pre", { className: "agent-transcript" },
+    items.map(({ text }) => text || "").join("\n")
+  );
+}
+
 function TraceFile({ trace }) {
   const [content, setContent] = useState(trace.text || "");
   const [loading, setLoading] = useState(false);
@@ -311,15 +362,15 @@ function TraceFile({ trace }) {
 function AgentCard({ agent, traces, status, notes }) {
   const completed = status === "completed";
   const title = agentName(agent);
-  return h("section", { className: `agent-card ${completed ? "completed" : "running"}` },
-    h("div", { className: "agent-card-head" },
+  return h("details", { className: `agent-card ${completed ? "completed" : "running"}`, open: false },
+    h("summary", { className: "agent-card-head" },
       h("div", null,
         h("strong", null, title),
         notes?.length ? h("p", null, notes[notes.length - 1]) : null
       ),
       h("span", { className: "agent-state" }, completed ? "Done" : "Working")
     ),
-    traces.map((trace) => h(TraceFile, { key: traceKey(trace), trace }))
+    h(AgentTranscript, { traces })
   );
 }
 
