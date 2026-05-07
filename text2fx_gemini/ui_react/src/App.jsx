@@ -3,6 +3,11 @@ import { createRoot } from 'react-dom/client';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import { ChevronRight } from 'lucide-react';
 import { Terminal } from './components/ui/terminal.jsx';
+import { Button } from './components/ui/button.jsx';
+import { Badge } from './components/ui/badge.jsx';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card.jsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select.jsx';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './components/ui/accordion.jsx';
 
 const h = React.createElement;
 
@@ -232,21 +237,26 @@ function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, o
         h("h1", null, "Patchex")
       ),
       h("div", { className: "source-toolbar" },
-        h("label", { className: "select-field" },
+        h("div", { className: "select-field" },
           h("span", null, "Source"),
-          h("select", { value: currentFile || "", onChange: (event) => onSelect(event.target.value, { newFile: true }) },
-            files.map((file) => h("option", { key: file.name, value: file.name }, file.name))
+          h(Select, { value: currentFile || "", onValueChange: (value) => onSelect(value, { newFile: true }) },
+            h(SelectTrigger, { className: "source-select-trigger", "aria-label": "Source audio file" },
+              h(SelectValue, { placeholder: "Choose source" })
+            ),
+            h(SelectContent, { className: "source-select-content" },
+              files.map((file) => h(SelectItem, { key: file.name, value: file.name }, file.name))
+            )
           )
         ),
-        h("button", { type: "button", onClick: onRefresh }, "Refresh"),
+        h(Button, { type: "button", variant: "outline", onClick: onRefresh }, "Refresh"),
         h("a", { href: "/", className: "quiet-link" }, "V0")
       ),
       h("div", { className: "source-wave-frame" },
-        h("button", { type: "button", className: "wave-play", onClick: onPlayClip }, playLabel === "Pause" ? "Pause" : "Play"),
+        h(Button, { type: "button", variant: "outline", className: "wave-play", onClick: onPlayClip }, playLabel === "Pause" ? "Pause" : "Play"),
         h("div", { className: "source-wave", ref: waveRef })
       ),
       h("div", { className: "clip-controls" },
-        h("button", { type: "button", className: running ? "primary inline-primary start-inline is-running" : "primary inline-primary start-inline", onClick: onStart, disabled },
+        h(Button, { type: "button", className: running ? "primary inline-primary start-inline is-running" : "primary inline-primary start-inline", onClick: onStart, disabled },
           running ? h("span", { className: "button-spinner", "aria-hidden": "true" }) : null,
           h("span", null, "Start reconstruction")
         )
@@ -266,10 +276,14 @@ function Scoreboard({ report }) {
     h("div", { className: "scoreboard react-scoreboard" },
       SCORE_FIELDS.map((name) => {
         const value = Number(scores[name] || 0);
-        return h("div", { className: "score-card", key: name },
-          h("span", null, name.replaceAll("_", " ")),
-          h("strong", null, value.toFixed(3)),
-          h("div", { className: "score-bar" }, h("i", { style: { width: `${Math.max(0, Math.min(100, value * 100))}%` } }))
+        return h(Card, { className: "score-card", key: name },
+          h(CardHeader, { className: "score-card-header" },
+            h(CardDescription, null, name.replaceAll("_", " ")),
+            h(CardTitle, null, value.toFixed(3))
+          ),
+          h(CardContent, null,
+            h("div", { className: "score-bar" }, h("i", { style: { width: `${Math.max(0, Math.min(100, value * 100))}%` } }))
+          )
         );
       })
     )
@@ -479,16 +493,23 @@ function Artifacts({ artifacts, onReport }) {
       h("h2", null, "Files"),
       h("p", null, "Grouped outputs from the run.")
     ),
-    h("div", { className: "artifact-groups" },
-      groupArtifacts(artifacts).map(([group, items]) => h("details", { className: "artifact-group", key: group, open: group === "Essentials" },
-        h("summary", null, h("span", null, group), h("strong", null, String(items.length))),
-        h("div", { className: "artifact-list" },
-          items.map((artifact) => h("a", { className: artifact.name.endsWith(".wav") ? "audio-artifact-link" : "", href: artifact.url, target: "_blank", key: artifact.url },
-            h("span", null, artifact.name),
-            artifact.name.endsWith(".wav") ? h("em", null, "audio") : null
-          ))
+    h(Accordion, { className: "artifact-groups", type: "multiple", defaultValue: ["Essentials"] },
+      groupArtifacts(artifacts).map(([group, items]) =>
+        h(AccordionItem, { className: "artifact-group", key: group, value: group },
+          h(AccordionTrigger, null,
+            h("span", null, group),
+            h(Badge, { variant: "outline" }, String(items.length))
+          ),
+          h(AccordionContent, null,
+            h("div", { className: "artifact-list" },
+              items.map((artifact) => h("a", { className: artifact.name.endsWith(".wav") ? "audio-artifact-link" : "", href: artifact.url, target: "_blank", key: artifact.url },
+                h("span", null, artifact.name),
+                artifact.name.endsWith(".wav") ? h(Badge, { variant: "secondary" }, "audio") : null
+              ))
+            )
+          )
         )
-      ))
+      )
     )
   );
 }
@@ -519,15 +540,21 @@ function RunHistory({ runs, onLoad, onRefresh }) {
   return h("section", { className: "section-block" },
     h("div", { className: "section-title with-action" },
       h("div", null, h("h2", null, "Past Runs"), h("p", null, "Open a previous reconstruction and inspect its trace.")),
-      h("button", { type: "button", onClick: onRefresh }, "Refresh")
+      h(Button, { type: "button", variant: "outline", onClick: onRefresh }, "Refresh")
     ),
     h("div", { className: "run-history react-run-history" },
       runs.length
-        ? runs.map((run) => h("button", { key: run.id, className: "run-card", type: "button", onClick: () => onLoad(run) },
-          h("span", { className: "run-time" }, formatRunDate(run.id)),
-          h("strong", null, Number.isFinite(run.final_score) ? run.final_score.toFixed(3) : "n/a"),
-          h("span", null, run.overall_mix || "Reconstruction run"),
-          h("em", null, `${run.stage_count || 0} stages`)
+        ? runs.map((run) => h(Card, { key: run.id, className: "run-card", role: "button", tabIndex: 0, onClick: () => onLoad(run), onKeyDown: (event) => {
+          if (event.key === "Enter" || event.key === " ") onLoad(run);
+        } },
+          h(CardHeader, null,
+            h(CardDescription, { className: "run-time" }, formatRunDate(run.id)),
+            h(CardTitle, null, Number.isFinite(run.final_score) ? run.final_score.toFixed(3) : "n/a")
+          ),
+          h(CardContent, null,
+            h("span", null, run.overall_mix || "Reconstruction run"),
+            h("em", null, `${run.stage_count || 0} stages`)
+          )
         ))
         : h("div", { className: "empty-history" }, "No V1 runs yet.")
     )

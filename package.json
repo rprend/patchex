@@ -14,11 +14,11 @@
     "framer-motion": "latest",
     "lucide-react": "latest",
     "motion": "latest",
+    "radix-ui": "^1.4.3",
     "react": "latest",
     "react-dom": "latest",
     "tailwind-merge": "latest",
     "typescript": "latest",
     "vite": "latest"
-  },
-  "devDependencies": {}
+  }
 }

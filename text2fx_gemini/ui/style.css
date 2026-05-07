@@ -172,6 +172,80 @@ button {
   font-weight: 500;
 }
 
+[data-slot="button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+}
+
+[data-slot="select-trigger"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: min(100%, 28rem);
+  height: auto;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--text);
+  font: inherit;
+  padding: .65rem .75rem;
+  text-align: left;
+}
+
+[data-slot="select-content"] {
+  z-index: 50;
+  max-height: 22rem;
+  min-width: 18rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--text);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .08);
+}
+
+[data-slot="select-item"] {
+  padding: .55rem .75rem;
+  cursor: pointer;
+}
+
+[data-slot="select-item"]:hover,
+[data-slot="select-item"][data-highlighted] {
+  background: #f4f6ff;
+  outline: none;
+}
+
+[data-slot="card"] {
+  background: white;
+}
+
+[data-slot="card-header"],
+[data-slot="card-content"] {
+  padding: 0;
+}
+
+[data-slot="badge"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  padding: .12rem .45rem;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 650;
+}
+
+[data-slot="accordion-trigger"] {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+[data-slot="accordion-content"] {
+  overflow: hidden;
+}
+
 button:hover,
 select:hover {
   background: #f4f6ff;
@@ -540,23 +614,23 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
-.artifact-group summary {
+.artifact-group [data-slot="accordion-trigger"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: .75rem 0;
   cursor: pointer;
+  text-align: left;
 }
 
-.artifact-group summary span {
+.artifact-group [data-slot="accordion-trigger"] span {
   color: var(--text);
   font-weight: 700;
 }
 
-.artifact-group summary strong {
-  color: var(--muted);
-  font-size: .85rem;
+.artifact-group [data-slot="accordion-trigger"] svg {
+  display: none;
 }
 
 .artifact-list {
@@ -658,7 +732,7 @@ textarea {
   background: white;
 }
 
-.score-card span {
+.score-card [data-slot="card-description"] {
   display: block;
   color: var(--muted);
   font-size: .76rem;
@@ -667,7 +741,7 @@ textarea {
   text-transform: uppercase;
 }
 
-.score-card strong {
+.score-card [data-slot="card-title"] {
   display: block;
   margin: .45rem 0 .7rem;
   font-family: "Newsreader", ui-serif, Georgia, serif;
@@ -715,6 +789,7 @@ textarea {
   display: grid;
   align-content: start;
   gap: .55rem;
+  cursor: pointer;
 }
 
 .run-card:hover {
@@ -731,6 +806,11 @@ textarea {
 
 .run-card span {
   color: var(--soft);
+}
+
+.run-card [data-slot="card-content"] {
+  display: grid;
+  gap: .55rem;
 }
 
 .run-card em {
