@@ -567,7 +567,12 @@ function AgentActivity({ selected }) {
 }
 
 function WorkflowCanvas({ traces, statuses, notes, winners, artifacts }) {
-  const steps = Array.from(new Set(traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined))).sort((a, b) => a - b);
+  const traceSteps = traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined);
+  const statusSteps = Object.keys(statuses)
+    .map((key) => key.match(/_(\d+)$/)?.[1])
+    .filter((step) => step !== undefined)
+    .map((step) => Number(step));
+  const steps = Array.from(new Set([...traceSteps, ...statusSteps])).sort((a, b) => a - b);
   const [selectedId, setSelectedId] = useState("critic-0");
   const [selectedDetail, setSelectedDetail] = useState(null);
 
@@ -1130,6 +1135,8 @@ function App() {
           });
           activeRun.current = data.run_id;
           localStorage.setItem("v1ActiveRunId", data.run_id);
+          setStatuses({ residual_critic_0: "running" });
+          addAgentNote("residual_critic_0", "Started.");
           pushRunRoute(data.run_id);
           attachEvents(data.run_id);
           loadRuns().catch((error) => addRunNote(error.stack || String(error)));
@@ -1142,7 +1149,7 @@ function App() {
       addRunNote(error.stack || String(error));
       setStarting(false);
     }
-  }, [addRunNote, attachEvents, clipStart, currentFile, loadRuns, resetRunView]);
+  }, [addAgentNote, addRunNote, attachEvents, clipStart, currentFile, loadRuns, resetRunView]);
 
   const loadPastRun = useCallback(async (run, options = {}) => {
     resetRunView();
