@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "schema": "patchex.arrangement.v1",
   "source_midi": "text2fx_gemini/songs/between_the_buttons/source.mid",
   "midi_format": 1,
   "source_track_count": 10,

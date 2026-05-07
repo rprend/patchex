@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "patchex.arrangement.v1",
+  "title": "Patchex MIDI Arrangement",
+  "type": "object",
+  "required": ["schema", "version", "tempo", "meter", "duration", "tracks", "ownership"],
+  "properties": {
+    "schema": { "const": "patchex.arrangement.v1" },
+    "version": { "type": "integer", "const": 1 },
+    "source_midi": { "type": "string" },
+    "midi_format": { "type": "integer" },
+    "source_track_count": { "type": "integer" },
+    "ticks_per_beat": { "type": "integer" },
+    "tempo": { "type": "number" },
+    "meter": { "type": "string" },
+    "duration": { "type": "number" },
+    "clip_start": { "type": "number" },
+    "tempo_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tick", "bpm", "microseconds_per_quarter"],
+        "properties": {
+          "tick": { "type": "integer" },
+          "bpm": { "type": "number" },
+          "microseconds_per_quarter": { "type": "integer" }
+        }
+      }
+    },
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "role", "notes", "time_range", "note_count"],
+        "properties": {
+          "id": { "type": "string" },
+          "source_track_index": { "type": "integer" },
+          "source_name": { "type": "string" },
+          "role": { "type": "string" },
+          "channel": { "type": ["integer", "null"] },
+          "gm_program": { "type": ["integer", "null"] },
+          "gm_program_name": { "type": ["string", "null"] },
+          "note_count": { "type": "integer" },
+          "pitch_range": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+          "time_range": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["note", "start", "duration", "velocity"],
+              "properties": {
+                "note": { "type": "integer" },
+                "start": { "type": "number" },
+                "duration": { "type": "number" },
+                "velocity": { "type": "number" },
+                "start_tick": { "type": "integer" },
+                "duration_ticks": { "type": "integer" },
+                "channel": { "type": "integer" },
+                "source_start": { "type": "number" },
+                "source_duration": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ownership": {
+      "type": "object",
+      "required": ["arrangement_workflow", "patch_workflow", "patch_workflow_may_change_notes"],
+      "properties": {
+        "arrangement_workflow": { "type": "array", "items": { "type": "string" } },
+        "patch_workflow": { "type": "array", "items": { "type": "string" } },
+        "patch_workflow_may_change_notes": { "type": "boolean", "const": false }
+      }
+    }
+  }
+}

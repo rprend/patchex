@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "patchex.patch_session.v1",
+  "title": "Patchex Patch Session",
+  "type": "object",
+  "required": ["schema", "version", "sample_rate", "duration", "layers", "returns", "master"],
+  "properties": {
+    "schema": { "const": "patchex.patch_session.v1" },
+    "arrangement_schema": { "const": "patchex.arrangement.v1" },
+    "version": { "type": "integer" },
+    "sample_rate": { "type": "integer" },
+    "duration": { "type": "number" },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "role", "notes", "synth", "amp_envelope", "filter", "modulation", "effects"],
+        "properties": {
+          "id": { "type": "string" },
+          "role": { "type": "string" },
+          "arrangement_locked": { "type": "boolean" },
+          "gain_db": { "type": "number" },
+          "pan": { "type": "number" },
+          "width": { "type": "number" },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["note", "start", "duration", "velocity"],
+              "properties": {
+                "note": { "type": "integer" },
+                "start": { "type": "number" },
+                "duration": { "type": "number" },
+                "velocity": { "type": "number" }
+              }
+            }
+          },
+          "synth": { "type": "object" },
+          "amp_envelope": { "type": "object" },
+          "filter": { "type": "object" },
+          "modulation": { "type": "object" },
+          "gain_points": { "type": "array" },
+          "effects": { "type": "object" }
+        }
+      }
+    },
+    "returns": { "type": "array" },
+    "master": { "type": "object" }
+  }
+}

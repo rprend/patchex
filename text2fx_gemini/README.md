@@ -239,8 +239,13 @@ The first canonical song workspace is:
 text2fx_gemini/songs/between_the_buttons/
 ```
 
-It contains `source.mp3`, `source.mid`, and full-song `arrangement.json`.
-When the V1 UI reconstructs a five-second clip from "French 79 Between the
-Buttons" and that song MIDI exists, the backend automatically uses the
-MIDI-locked patch workflow and slices the MIDI to the selected five-second
-audio region before the Producer starts.
+It contains `song.json`, `source.mp3`, `source.mid`, and full-song
+`arrangement.json`. The UI song picker reads `text2fx_gemini/songs/*/song.json`
+instead of listing loose WAV clips. When a song has MIDI, the backend uses the
+MIDI-locked Critic/Producer patch workflow and slices the MIDI to the selected
+five-second audio region before the Producer starts.
+
+The composition and patch contracts are documented as JSON schemas:
+
+- `text2fx_gemini/schemas/arrangement.v1.schema.json`
+- `text2fx_gemini/schemas/patch_session.v1.schema.json`

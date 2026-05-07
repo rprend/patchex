@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "between_the_buttons",
+  "title": "Between the Buttons",
+  "artist": "French 79",
+  "audio": "source.mp3",
+  "midi": "source.mid",
+  "arrangement": "arrangement.json",
+  "composition_schema": "patchex.arrangement.v1",
+  "default_clip_seconds": 5.0,
+  "role_map": {
+    "programs": {
+      "4": "electric_piano_1",
+      "33": "fingered_bass",
+      "38": "synth_bass_1",
+      "49": "strings",
+      "80": "square_wave",
+      "81": "saw_wave",
+      "86": "fifth_saw_wave"
+    },
+    "track_names": {
+      "5th": "fifth_saw_wave",
+      "e.piano": "electric_piano_1",
+      "fingered": "fingered_bass",
+      "saw wave": "saw_wave",
+      "square": "square_wave",
+      "standard": "drums",
+      "synth bass": "synth_bass_1",
+      "track 7": "strings"
+    }
+  },
+  "workflow": "midi_locked_patch"
+}

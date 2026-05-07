@@ -71,6 +71,16 @@ ROLE_BY_NAME = {
 }
 
 
+def load_role_map(path: Path | None) -> dict[str, dict[Any, str]]:
+    if path is None:
+        return {"programs": ROLE_BY_PROGRAM, "track_names": ROLE_BY_NAME}
+    payload = json.loads(path.read_text())
+    role_map = payload.get("role_map", payload)
+    programs = {int(key): str(value) for key, value in role_map.get("programs", {}).items()}
+    names = {str(key).lower(): str(value) for key, value in role_map.get("track_names", {}).items()}
+    return {"programs": programs or ROLE_BY_PROGRAM, "track_names": names or ROLE_BY_NAME}
+
+
 @dataclass
 class MidiNote:
     channel: int
@@ -121,19 +131,22 @@ def slug(value: str) -> str:
     return value.strip("_") or "track"
 
 
-def role_for_track(name: str, program: int | None, channel: int | None) -> str:
+def role_for_track(name: str, program: int | None, channel: int | None, role_map: dict[str, dict[Any, str]] | None = None) -> str:
+    role_map = role_map or {"programs": ROLE_BY_PROGRAM, "track_names": ROLE_BY_NAME}
     if channel == 9:
         return "drums"
-    if program in ROLE_BY_PROGRAM:
-        return ROLE_BY_PROGRAM[int(program)]
+    program_roles = role_map.get("programs", {})
+    if program in program_roles:
+        return program_roles[int(program)]
     lowered = name.lower()
-    for token, role in ROLE_BY_NAME.items():
+    for token, role in role_map.get("track_names", {}).items():
         if token in lowered:
             return role
     return slug(name) if name else f"channel_{channel if channel is not None else 'unknown'}"
 
 
-def parse_midi(path: Path) -> dict[str, Any]:
+def parse_midi(path: Path, role_map_path: Path | None = None) -> dict[str, Any]:
+    role_map = load_role_map(role_map_path)
     data = path.read_bytes()
     index = 0
     if data[index : index + 4] != b"MThd":
@@ -229,7 +242,7 @@ def parse_midi(path: Path) -> dict[str, Any]:
             continue
         primary_program = track["programs"][0]["program"] if track["programs"] else None
         primary_channel = notes[0].channel if notes else (track["channels"][0] if track["channels"] else None)
-        role = role_for_track(track["name"], primary_program, primary_channel)
+        role = role_for_track(track["name"], primary_program, primary_channel, role_map)
         track_id = role
         suffix = 2
         while track_id in used_ids:
@@ -272,6 +285,7 @@ def parse_midi(path: Path) -> dict[str, Any]:
     first_tempo = tempo_map[0][1]
     return {
         "version": 1,
+        "schema": "patchex.arrangement.v1",
         "source_midi": str(path),
         "midi_format": midi_format,
         "source_track_count": track_count,
@@ -365,6 +379,8 @@ def default_layer_for_track(track: dict[str, Any], sample_rate: int, duration: f
 def neutral_session(arrangement: dict[str, Any], sample_rate: int = 44100, seconds: float | None = None) -> dict[str, Any]:
     duration = float(seconds if seconds is not None else arrangement.get("duration", 0.0))
     session = deepcopy(DEFAULT_SESSION)
+    session["schema"] = "patchex.patch_session.v1"
+    session["arrangement_schema"] = arrangement.get("schema", "patchex.arrangement.v1")
     session["sample_rate"] = sample_rate
     session["duration"] = duration
     session["layers"] = [default_layer_for_track(track, sample_rate, duration) for track in arrangement.get("tracks", [])]
@@ -438,6 +454,31 @@ def arrangement_preservation(arrangement: dict[str, Any], session: dict[str, Any
     total = max(1, len(arrangement.get("tracks", [])))
     penalty = min(1.0, (len(changed) + len(missing) + 0.5 * len(extra)) / total)
     return {"penalty": float(penalty), "changed_tracks": changed, "missing_tracks": missing, "extra_tracks": extra}
+
+
+def enforce_arrangement_lock(arrangement: dict[str, Any], session: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    locked = deepcopy(session)
+    source_tracks = {str(track["id"]): track for track in arrangement.get("tracks", [])}
+    layers = []
+    repaired: list[str] = []
+    for track_id, track in source_tracks.items():
+        existing = next((layer for layer in locked.get("layers", []) if str(layer.get("id")) == track_id), None)
+        if existing is None:
+            existing = default_layer_for_track(track, int(locked.get("sample_rate", 44100)), float(locked.get("duration", arrangement.get("duration", 5.0))))
+            repaired.append(track_id)
+        expected_notes = [{"note": n["note"], "start": n["start"], "duration": n["duration"], "velocity": n["velocity"]} for n in track.get("notes", [])]
+        if canonical_notes(existing.get("notes", [])) != canonical_notes(expected_notes):
+            repaired.append(track_id)
+        existing["id"] = track_id
+        existing["role"] = track.get("role", existing.get("role", track_id))
+        existing["notes"] = expected_notes
+        existing["arrangement_locked"] = True
+        layers.append(existing)
+    dropped = [str(layer.get("id")) for layer in locked.get("layers", []) if str(layer.get("id")) not in source_tracks]
+    locked["layers"] = layers
+    before = arrangement_preservation(arrangement, session)
+    after = arrangement_preservation(arrangement, locked)
+    return locked, {"before": before, "after": after, "repaired_tracks": sorted(set(repaired)), "dropped_extra_tracks": dropped}
 
 
 def active_windows(track: dict[str, Any], duration: float, pad: float = 0.04) -> list[tuple[float, float]]:
@@ -589,7 +630,7 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     }
 
 
-def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, previous_report_path: Path | None, output_path: Path) -> str:
+def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, recommendation_path: Path, previous_report_path: Path | None, output_path: Path) -> str:
     previous_line = f"- Previous MIDI-locked patch report: {previous_report_path}" if previous_report_path else "- No previous patch report exists."
     return f"""
 You are the Patch Producer in a MIDI-locked patch finding workflow.
@@ -597,6 +638,7 @@ You are the Patch Producer in a MIDI-locked patch finding workflow.
 Read these files:
 - Authoritative arrangement JSON: {arrangement_path}
 - Current patch session JSON: {current_session_path}
+- Critic recommendation JSON: {recommendation_path}
 {previous_line}
 
 Task: Write a complete patch session JSON to {output_path}.
@@ -617,13 +659,52 @@ Return only JSON matching the current session shape. Do not include prose.
 """
 
 
-def run_codex_patch(prompt: str, output_dir: Path, answer_path: Path, timeout: int = 180) -> None:
+def codex_critic_prompt(arrangement_path: Path, current_session_path: Path, previous_report_path: Path | None, output_path: Path) -> str:
+    previous_line = f"- Latest MIDI-locked patch report JSON: {previous_report_path}" if previous_report_path else "- No patch has been scored yet."
+    return f"""
+You are the Critic agent in a MIDI-locked patch finding workflow.
+
+Read these files:
+- Authoritative arrangement JSON: {arrangement_path}
+- Current patch session JSON: {current_session_path}
+{previous_line}
+
+Task: Write the next Producer brief to {output_path}.
+
+Important:
+- MIDI lock is the default workflow contract, not a degraded mode.
+- Do not recommend changing notes, timing, velocities, layer ids, or roles.
+- Use the latest report's global_mix, track_active_window, patch_control, weakest_tracks, per-track active-window scores, isolation proxy scores, and patch-control diagnostics.
+- Name the specific track ids and parameter families that should change next.
+
+Return only JSON with this shape:
+{{
+  "workflow": "midi_locked_patch",
+  "missing": ["specific measurable mismatches"],
+  "producer_prompt": "specific brief for the Producer focused on patch, effects, modulation, and mix changes",
+  "success_metrics": {{
+    "primary": ["metric names to improve"],
+    "targets": ["concrete directional targets"],
+    "failure_modes": ["what would prove the Producer made the wrong type of patch change"]
+  }},
+  "recommendations": ["specific patch/mix moves"],
+  "must_fix": ["track_id: parameter family and why"],
+  "do_not": ["specific mistakes to avoid"],
+  "priority": "oscillator|envelope|filter|modulation|effects|mix|stereo",
+  "target_tracks": ["track ids that should change"]
+}}
+"""
+
+
+def run_codex_patch(agent: str, prompt: str, output_dir: Path, answer_path: Path, timeout: int = 180) -> None:
     if not Path(CODEX_PATH).exists():
         raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
-    prompt_path = output_dir / "codex_midi_locked_patch_prompt.txt"
+    prompt_path = output_dir / f"codex_{agent}_prompt.txt"
     prompt_path.write_text(prompt)
+    print(f"codex_start agent={agent}", flush=True)
+    print(f"trace_file agent={agent} role=prompt path={prompt_path}", flush=True)
     process = subprocess.run(
-        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(output_dir / "codex_midi_locked_patch_answer.txt"), "-C", str(Path.cwd()), "-"],
+        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(output_dir / f"codex_{agent}_answer.txt"), "-C", str(Path.cwd()), "-"],
         input=prompt,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -632,9 +713,44 @@ def run_codex_patch(prompt: str, output_dir: Path, answer_path: Path, timeout: i
     )
     if process.returncode != 0:
         raise RuntimeError(f"Codex patch producer failed with return code {process.returncode}:\n{process.stdout}")
+    codex_answer_path = output_dir / f"codex_{agent}_answer.txt"
+    print(f"codex_done agent={agent} answer_path={codex_answer_path}", flush=True)
+    print(f"trace_file agent={agent} role=answer path={codex_answer_path}", flush=True)
     if not answer_path.exists():
-        payload = extract_json_object((output_dir / "codex_midi_locked_patch_answer.txt").read_text())
+        payload = extract_json_object(codex_answer_path.read_text())
         answer_path.write_text(json.dumps(payload, indent=2) + "\n")
+
+
+def run_codex_json_agent(agent: str, prompt: str, output_dir: Path, json_output_path: Path, timeout: int = 180) -> dict[str, Any]:
+    if not Path(CODEX_PATH).exists():
+        raise FileNotFoundError(f"Codex command not found: {CODEX_PATH}")
+    prompt_path = output_dir / f"codex_{agent}_prompt.txt"
+    answer_path = output_dir / f"codex_{agent}_answer.txt"
+    prompt = (
+        f"{prompt.rstrip()}\n\n"
+        "File-driven orchestration requirement:\n"
+        f"- Write the JSON artifact at: {json_output_path}\n"
+        "- The orchestrator will read that JSON file after this run.\n"
+    )
+    prompt_path.write_text(prompt)
+    print(f"codex_start agent={agent}", flush=True)
+    print(f"trace_file agent={agent} role=prompt path={prompt_path}", flush=True)
+    process = subprocess.run(
+        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(answer_path), "-C", str(Path.cwd()), "-"],
+        input=prompt,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=timeout,
+    )
+    if process.returncode != 0:
+        raise RuntimeError(f"Codex agent {agent} failed with return code {process.returncode}:\n{process.stdout}")
+    print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
+    print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
+    payload_text = json_output_path.read_text() if json_output_path.exists() and json_output_path.read_text().strip() else answer_path.read_text()
+    payload = extract_json_object(payload_text)
+    json_output_path.write_text(json.dumps(payload, indent=2) + "\n")
+    return payload
 
 
 def load_audio(path: Path, seconds: float | None = None) -> tuple[np.ndarray, int]:
@@ -653,7 +769,7 @@ def write_json(path: Path, payload: Any) -> Path:
 
 
 def command_import(args: argparse.Namespace) -> int:
-    arrangement = parse_midi(args.midi)
+    arrangement = parse_midi(args.midi, args.role_map)
     write_json(args.output, arrangement)
     print(f"wrote {args.output}")
     return 0
@@ -690,7 +806,7 @@ def command_run(args: argparse.Namespace) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     arrangement_path = args.output_dir / "arrangement.json"
     current_session_path = args.output_dir / "patch_session_current.json"
-    full_arrangement = parse_midi(args.midi)
+    full_arrangement = parse_midi(args.midi, args.role_map)
     full_arrangement_path = write_json(args.output_dir / "full_arrangement.json", full_arrangement)
     print(f"trace_file agent=analyzer role=full_arrangement path={full_arrangement_path}", flush=True)
     arrangement = slice_arrangement(full_arrangement, args.clip_start, args.seconds) if args.clip_start is not None else full_arrangement
@@ -709,26 +825,44 @@ def command_run(args: argparse.Namespace) -> int:
     best_session = session
     best_render_path: Path | None = None
     for step in range(args.steps):
+        lock_report: dict[str, Any] = {}
         print(f"agent_stage residual_critic step={step}", flush=True)
-        recommendation = {
-            "workflow": "midi_locked_patch",
-            "producer_prompt": "Improve synth, effects, modulation, and mix settings while preserving every MIDI note exactly.",
-            "must_fix": [] if best_report is None else [item["track_id"] for item in best_report.get("weakest_tracks", [])[:3]],
-            "do_not": ["Do not add, delete, retime, transpose, or change velocity of MIDI notes."],
-            "success_metrics": {"primary": ["global_mix", "track_active_window", "patch_control"], "failure_modes": ["arrangement_preservation below 1.0"]},
-        }
-        recommendation_path = write_json(args.output_dir / f"recommendation_step_{step:02d}.json", recommendation)
+        recommendation_path = args.output_dir / f"recommendation_step_{step:02d}.json"
+        if args.neutral_only:
+            recommendation = {
+                "workflow": "midi_locked_patch",
+                "missing": ["neutral-session smoke run"],
+                "producer_prompt": "Render the neutral MIDI-locked session without Codex patch changes.",
+                "success_metrics": {"primary": ["arrangement_preservation"], "targets": ["arrangement_preservation stays 1.0"], "failure_modes": ["notes changed"]},
+                "recommendations": [],
+                "must_fix": [],
+                "do_not": ["Do not alter MIDI notes."],
+                "priority": "mix",
+                "target_tracks": [],
+            }
+            write_json(recommendation_path, recommendation)
+        else:
+            recommendation = run_codex_json_agent(
+                f"residual_critic_step_{step:02d}",
+                codex_critic_prompt(arrangement_path, current_session_path, previous_report_path, recommendation_path),
+                args.output_dir,
+                recommendation_path,
+                args.timeout,
+            )
         print(f"trace_file agent=residual_critic_step_{step:02d} role=recommendation path={recommendation_path}", flush=True)
         print(f"agent_stage producer step={step}", flush=True)
         proposal_path = args.output_dir / f"patch_session_step_{step:02d}.json"
         if step == 0 and args.neutral_only:
             proposal = session
+            proposal, lock_report = enforce_arrangement_lock(arrangement, proposal)
             write_json(proposal_path, proposal)
         else:
-            prompt = codex_patch_prompt(arrangement_path, current_session_path, previous_report_path, proposal_path)
-            run_codex_patch(prompt, args.output_dir, proposal_path, args.timeout)
-            proposal = json.loads(proposal_path.read_text())
+            prompt = codex_patch_prompt(arrangement_path, current_session_path, recommendation_path, previous_report_path, proposal_path)
+            run_codex_patch(f"producer_step_{step:02d}", prompt, args.output_dir, proposal_path, args.timeout)
+            raw_proposal = json.loads(proposal_path.read_text())
+            proposal, lock_report = enforce_arrangement_lock(arrangement, raw_proposal)
             write_json(proposal_path, proposal)
+            write_json(args.output_dir / f"arrangement_lock_step_{step:02d}.json", lock_report)
         report = score_midi_locked(arrangement, proposal, reference_audio, sr)
         report_path = write_json(args.output_dir / f"patch_report_step_{step:02d}.json", report)
         print(f"trace_file agent=loss step={step} role=audio_diff path={report_path}", flush=True)
@@ -755,6 +889,8 @@ def command_run(args: argparse.Namespace) -> int:
             "best_scores": (best_report or report)["scores"],
             "layers": [{"id": layer.get("id"), "role": layer.get("role")} for layer in proposal.get("layers", [])],
             "arrangement_preservation": report["arrangement_preservation"],
+            "arrangement_lock_report": lock_report or {"before": report["arrangement_preservation"], "after": report["arrangement_preservation"]},
+            "residual_critic": recommendation,
         }
         history.append(history_item)
         write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item)
@@ -791,6 +927,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_import = sub.add_parser("import-midi")
     p_import.add_argument("--midi", required=True, type=Path)
     p_import.add_argument("--output", required=True, type=Path)
+    p_import.add_argument("--role-map", type=Path)
     p_import.set_defaults(func=command_import)
 
     p_neutral = sub.add_parser("neutral-session")
@@ -812,6 +949,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_run = sub.add_parser("run")
     p_run.add_argument("--midi", required=True, type=Path)
+    p_run.add_argument("--role-map", type=Path)
     p_run.add_argument("--reference", required=True, type=Path)
     p_run.add_argument("--output-dir", required=True, type=Path)
     p_run.add_argument("--sample-rate", type=int, default=44100)

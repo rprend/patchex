@@ -199,7 +199,7 @@ function WaveformPlayer({ url, label, compact = false, color = "#323a85" }) {
   );
 }
 
-function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, onPlayClip, playLabel, onRefresh, onStart, disabled, running }) {
+function SourceSelector({ songs, currentSongId, onSelect, onWaveReady, audioUrl, onPlayClip, playLabel, onRefresh, onStart, disabled, running }) {
   const waveRef = useRef(null);
   const wave = useRef(null);
   const regions = useRef(null);
@@ -222,12 +222,12 @@ function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, o
       plugins: [regions.current],
     });
     onWaveReady(wave.current, regions.current);
-    wave.current.on("ready", () => onSelect(currentFile, { ready: true }));
-    wave.current.on("interaction", () => onSelect(currentFile, { seek: wave.current.getCurrentTime() }));
-    regions.current.on("region-updated", (region) => onSelect(currentFile, { region }));
+    wave.current.on("ready", () => onSelect(currentSongId, { ready: true }));
+    wave.current.on("interaction", () => onSelect(currentSongId, { seek: wave.current.getCurrentTime() }));
+    regions.current.on("region-updated", (region) => onSelect(currentSongId, { region }));
     regions.current.on("region-clicked", (region, event) => {
       event.stopPropagation();
-      onSelect(currentFile, { playRegion: region });
+      onSelect(currentSongId, { playRegion: region });
     });
     return () => {
       wave.current?.destroy();
@@ -243,13 +243,13 @@ function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, o
       ),
       h("div", { className: "source-toolbar" },
         h("div", { className: "select-field" },
-          h("span", null, "Source"),
-          h(Select, { value: currentFile || "", onValueChange: (value) => onSelect(value, { newFile: true }) },
-            h(SelectTrigger, { className: "source-select-trigger", "aria-label": "Source audio file" },
-              h(SelectValue, { placeholder: "Choose source" })
+          h("span", null, "Song"),
+          h(Select, { value: currentSongId || "", onValueChange: (value) => onSelect(value, { newFile: true }) },
+            h(SelectTrigger, { className: "source-select-trigger", "aria-label": "Song" },
+              h(SelectValue, { placeholder: "Choose song" })
             ),
             h(SelectContent, { className: "source-select-content" },
-              files.map((file) => h(SelectItem, { key: file.name, value: file.name }, file.name))
+              songs.map((song) => h(SelectItem, { key: song.id, value: song.id }, song.label || song.title || song.id))
             )
           )
         ),
@@ -881,9 +881,9 @@ function RunHistory({ runs, onLoad, onRefresh }) {
 }
 
 function App() {
-  const [files, setFiles] = useState([]);
+  const [songs, setSongs] = useState([]);
   const [runs, setRuns] = useState([]);
-  const [currentFile, setCurrentFile] = useState("");
+  const [currentSongId, setCurrentSongId] = useState("");
   const [clipStart, setClipStart] = useState(0);
   const [currentClip, setCurrentClip] = useState(null);
   const [status, setStatus] = useState("Idle");
@@ -939,11 +939,11 @@ function App() {
     }
   }, [addAgentNote]);
 
-  const loadFiles = useCallback(async () => {
-    const data = await api("/api/references");
-    setFiles(data.files || []);
-    if ((data.files || []).length && !currentFile) setCurrentFile(data.files[0].name);
-  }, [currentFile]);
+  const loadSongs = useCallback(async () => {
+    const data = await api("/api/songs");
+    setSongs(data.songs || []);
+    if ((data.songs || []).length && !currentSongId) setCurrentSongId(data.songs[0].id);
+  }, [currentSongId]);
 
   const loadRuns = useCallback(async () => {
     const data = await api("/api/reconstruction-runs");
@@ -984,9 +984,9 @@ function App() {
     setClipStart(safeStart);
   }, []);
 
-  const handleSourceEvent = useCallback((file, action = {}) => {
+  const handleSourceEvent = useCallback((songId, action = {}) => {
     if (action.newFile) {
-      setCurrentFile(file);
+      setCurrentSongId(songId);
       resetRunView();
       return;
     }
@@ -1180,17 +1180,18 @@ function App() {
   }, [addRunNote, addTrace, loadRuns, renderTraceArtifacts, routeRunLog]);
 
   const startRun = useCallback(async () => {
-    if (!currentFile) return;
+    if (!currentSongId) return;
+    const song = songs.find((item) => item.id === currentSongId);
     try {
       resetRunView();
       setStarting(true);
       setStatus("Extracting");
       const start = clipStart;
-      addRunNote(`Extracting ${currentFile} from ${start.toFixed(2)}s to ${(start + CLIP_SECONDS).toFixed(2)}s.`);
+      addRunNote(`Extracting ${song?.label || currentSongId} from ${start.toFixed(2)}s to ${(start + CLIP_SECONDS).toFixed(2)}s.`);
       const extracted = await api("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference: currentFile, start, duration: CLIP_SECONDS }),
+        body: JSON.stringify({ song_id: currentSongId, start, duration: CLIP_SECONDS }),
       });
       const clipEvents = new EventSource(`/api/clips/${extracted.clip_id}/events`);
       clipEvents.onmessage = async (event) => {
@@ -1209,7 +1210,7 @@ function App() {
           const data = await api("/api/reconstruct", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ clip: payload.result.clip, clip_start: start, steps: 5, local_trials: 0, max_layers: 5 }),
+            body: JSON.stringify({ clip: payload.result.clip, song_id: currentSongId, clip_start: start, steps: 5, local_trials: 0, max_layers: 5 }),
           });
           activeRun.current = data.run_id;
           localStorage.setItem("v1ActiveRunId", data.run_id);
@@ -1227,7 +1228,7 @@ function App() {
       addRunNote(error.stack || String(error));
       setStarting(false);
     }
-  }, [addAgentNote, addRunNote, attachEvents, clipStart, currentFile, loadRuns, resetRunView]);
+  }, [addAgentNote, addRunNote, attachEvents, clipStart, currentSongId, loadRuns, resetRunView, songs]);
 
   const loadPastRun = useCallback(async (run, options = {}) => {
     resetRunView();
@@ -1275,7 +1276,7 @@ function App() {
   }, [addRunNote, loadRuns]);
 
   useEffect(() => {
-    loadFiles().catch((error) => addRunNote(error.stack || String(error)));
+    loadSongs().catch((error) => addRunNote(error.stack || String(error)));
     loadRuns()
       .then((loadedRuns) => {
         const routeId = currentRouteRunId();
@@ -1322,7 +1323,7 @@ function App() {
     return () => events?.close();
   }, []);
 
-  const audioUrl = currentFile ? `/media/references/${encodeURIComponent(currentFile)}` : "";
+  const audioUrl = currentSongId ? `/media/songs/${encodeURIComponent(currentSongId)}/audio` : "";
   const runActive = status === "Running" || status === "Extracting";
   const routeRunId = currentRouteRunId();
   const hasLoadedRun = runActive || traces.length > 0 || artifacts.length > 0 || report;
@@ -1337,8 +1338,8 @@ function App() {
       canKillRun ? h(Button, { type: "button", variant: "outline", className: "kill-run-button", onClick: killRun }, "Kill Run") : null
     ) : null,
     showRunDetail ? null : h(SourceSelector, {
-      files,
-      currentFile,
+      songs,
+      currentSongId,
       onSelect: handleSourceEvent,
       onWaveReady: (wave, regions) => {
         sourceTools.current.wave = wave;
@@ -1347,9 +1348,9 @@ function App() {
       audioUrl,
       onPlayClip: playSelectedClip,
       playLabel,
-      onRefresh: loadFiles,
+      onRefresh: loadSongs,
       onStart: startRun,
-      disabled: starting || !currentFile,
+      disabled: starting || !currentSongId,
       running: starting,
     }),
     showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts }) : null,

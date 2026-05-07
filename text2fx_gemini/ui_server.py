@@ -27,8 +27,6 @@ SONGS = ROOT / "songs"
 UI = ROOT / "ui"
 RUNS = ROOT / "ui_runs"
 FFMPEG = shutil.which("ffmpeg")
-BETWEEN_THE_BUTTONS_MP3 = REFERENCES / "French 79 Between the Buttons.mp3"
-BETWEEN_THE_BUTTONS_MIDI = SONGS / "between_the_buttons" / "source.mid"
 
 jobs: dict[str, dict] = {}
 analysis_jobs: dict[str, dict] = {}
@@ -101,6 +99,42 @@ def safe_reference_path(name: str) -> Path:
     return candidate
 
 
+def safe_song_dir(song_id: str) -> Path:
+    if not re.match(r"^[A-Za-z0-9_-]+$", song_id):
+        raise ValueError("Invalid song id.")
+    song_dir = (SONGS / song_id).resolve()
+    if SONGS.resolve() not in song_dir.parents and song_dir != SONGS.resolve():
+        raise ValueError("Song path escapes songs directory.")
+    if not song_dir.is_dir():
+        raise FileNotFoundError(song_dir)
+    return song_dir
+
+
+def load_song(song_id: str) -> dict:
+    song_dir = safe_song_dir(song_id)
+    manifest_path = song_dir / "song.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(manifest_path)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["id"] = str(manifest.get("id") or song_id)
+    manifest["_dir"] = str(song_dir)
+    manifest["_manifest"] = str(manifest_path)
+    return manifest
+
+
+def song_asset_path(song: dict, key: str) -> Path:
+    song_dir = Path(song["_dir"]).resolve()
+    rel = song.get(key)
+    if not rel:
+        raise ValueError(f"Song {song.get('id')} is missing {key}.")
+    path = (song_dir / str(rel)).resolve()
+    if song_dir not in path.parents and path != song_dir:
+        raise ValueError(f"Song asset {key} escapes song directory.")
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return path
+
+
 def media_type(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix == ".html":
@@ -127,6 +161,40 @@ def make_clip(source_name: str, start: float, duration: float) -> Path:
         raise ValueError("Clip duration must be 12 seconds or less.")
     source = safe_reference_path(source_name)
     out = REFERENCES / f"{source.stem}_clip_{start:.2f}_{duration:.2f}.wav"
+    subprocess.run(
+        [
+            FFMPEG,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            f"{start:.6f}",
+            "-t",
+            f"{duration:.6f}",
+            "-i",
+            str(source),
+            "-ac",
+            "2",
+            "-ar",
+            "44100",
+            str(out),
+        ],
+        check=True,
+    )
+    return out
+
+
+def make_song_clip(song_id: str, start: float, duration: float) -> Path:
+    if FFMPEG is None:
+        raise RuntimeError("ffmpeg is required for clip extraction.")
+    if duration <= 0:
+        raise ValueError("Clip duration must be positive.")
+    if duration > 12:
+        raise ValueError("Clip duration must be 12 seconds or less.")
+    song = load_song(song_id)
+    source = song_asset_path(song, "audio")
+    out = REFERENCES / f"{song_id}_clip_{start:.2f}_{duration:.2f}.wav"
     subprocess.run(
         [
             FFMPEG,
@@ -198,7 +266,7 @@ def start_clip_analysis(reference: str, start: float, duration: float, target_pa
     return analysis_id
 
 
-def start_clip_extract(reference: str, start: float, duration: float) -> str:
+def start_clip_extract(reference: str, start: float, duration: float, song_id: str = "") -> str:
     clip_id = time.strftime("%Y%m%d_%H%M%S_clip_") + uuid.uuid4().hex[:8]
     event_queue: queue.Queue[dict] = queue.Queue()
     clip_jobs[clip_id] = {
@@ -211,8 +279,9 @@ def start_clip_extract(reference: str, start: float, duration: float) -> str:
 
     def worker() -> None:
         try:
-            event_queue.put({"type": "log", "line": f"extracting exact clip: {reference} @ {start:.2f}s-{(start + duration):.2f}s"})
-            clip = make_clip(reference, start, duration)
+            label = song_id or reference
+            event_queue.put({"type": "log", "line": f"extracting exact clip: {label} @ {start:.2f}s-{(start + duration):.2f}s"})
+            clip = make_song_clip(song_id, start, duration) if song_id else make_clip(reference, start, duration)
             event_queue.put({"type": "log", "line": f"clip written: {clip.name}"})
             result = {"clip": clip.name, "url": f"/media/references/{clip.name}"}
             clip_jobs[clip_id]["result"] = result
@@ -541,19 +610,15 @@ def start_run(reference: str, prompt: str, instrument_type: str, candidates: int
     return run_id
 
 
-def song_midi_for_reference(reference: str) -> Path | None:
-    if "French 79 Between the Buttons" in reference and BETWEEN_THE_BUTTONS_MIDI.exists():
-        return BETWEEN_THE_BUTTONS_MIDI
-    return None
-
-
-def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, max_layers: int = 5, clip_start: float | None = None) -> str:
+def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, max_layers: int = 5, clip_start: float | None = None, song_id: str = "") -> str:
     reference_path = safe_reference_path(reference)
     run_id = time.strftime("%Y%m%d_%H%M%S_v1_") + uuid.uuid4().hex[:8]
     out_dir = RUNS / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     event_queue: queue.Queue[dict] = queue.Queue()
-    midi_path = song_midi_for_reference(reference)
+    song = load_song(song_id) if song_id else None
+    midi_path = song_asset_path(song, "midi") if song else None
+    role_map_path = Path(song["_manifest"]) if song else None
     if midi_path is not None:
         cmd = [
             str(WORKSPACE / ".venv/bin/python"),
@@ -561,6 +626,8 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
             "run",
             "--midi",
             str(midi_path),
+            "--role-map",
+            str(role_map_path),
             "--reference",
             str(reference_path),
             "--output-dir",
@@ -604,6 +671,7 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
             "status": "running",
             "reference": str(reference_path),
             "workflow": "midi_locked_patch" if midi_path is not None else "freeform_reconstruction",
+            "song_id": song_id,
             "midi": str(midi_path) if midi_path is not None else None,
             "clip_start": clip_start,
             "cmd": cmd,
@@ -721,6 +789,33 @@ class Handler(BaseHTTPRequestHandler):
                 ]
                 json_response(self, {"files": files})
                 return
+            if path == "/api/songs":
+                songs = []
+                for song_dir in sorted(SONGS.glob("*")):
+                    if not song_dir.is_dir() or not (song_dir / "song.json").exists():
+                        continue
+                    try:
+                        song = load_song(song_dir.name)
+                        audio = song_asset_path(song, "audio")
+                        midi = song_asset_path(song, "midi")
+                    except Exception:
+                        continue
+                    songs.append(
+                        {
+                            "id": song["id"],
+                            "title": song.get("title", song["id"]),
+                            "artist": song.get("artist", ""),
+                            "label": f"{song.get('artist', '').strip()} - {song.get('title', song['id']).strip()}".strip(" -"),
+                            "audio": song.get("audio"),
+                            "midi": song.get("midi"),
+                            "arrangement": song.get("arrangement"),
+                            "audio_size": audio.stat().st_size,
+                            "midi_size": midi.stat().st_size,
+                            "url": f"/media/songs/{quote(song['id'])}/audio",
+                        }
+                    )
+                json_response(self, {"songs": songs})
+                return
             if path == "/api/runs":
                 json_response(self, {"runs": list_runs()})
                 return
@@ -802,6 +897,12 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/media/references/"):
                 self.serve_file(safe_reference_path(unquote(path.removeprefix("/media/references/"))))
                 return
+            song_media_match = re.match(r"^/media/songs/([^/]+)/(audio|midi|arrangement)$", path)
+            if song_media_match:
+                song = load_song(unquote(song_media_match.group(1)))
+                key = song_media_match.group(2)
+                self.serve_file(song_asset_path(song, key))
+                return
             if path.startswith("/media/runs/"):
                 parts = path.removeprefix("/media/runs/").split("/", 1)
                 if len(parts) != 2:
@@ -839,9 +940,10 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/extract":
                 payload = read_json(self)
                 clip_id = start_clip_extract(
-                    reference=payload["reference"],
+                    reference=str(payload.get("reference", "")),
                     start=float(payload["start"]),
                     duration=float(payload.get("duration", 5)),
+                    song_id=str(payload.get("song_id", "")),
                 )
                 json_response(self, {"clip_id": clip_id})
                 return
@@ -866,6 +968,7 @@ class Handler(BaseHTTPRequestHandler):
                     local_trials=int(payload.get("local_trials", 0)),
                     max_layers=int(payload.get("max_layers", 5)),
                     clip_start=float(payload["clip_start"]) if payload.get("clip_start") is not None else None,
+                    song_id=str(payload.get("song_id", "")),
                 )
                 json_response(self, {"run_id": run_id})
                 return
@@ -1069,6 +1172,7 @@ def list_reconstruction_runs() -> list[dict]:
 
 def main() -> None:
     REFERENCES.mkdir(parents=True, exist_ok=True)
+    SONGS.mkdir(parents=True, exist_ok=True)
     RUNS.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", 8765), Handler)
     print("Text2FX UI running at http://127.0.0.1:8765")
