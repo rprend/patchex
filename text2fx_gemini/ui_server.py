@@ -652,7 +652,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Run media path escapes run directory.")
                 self.serve_file(target)
                 return
-            if path in {"/v1_reconstruct", "/v1_reconstruct.html"}:
+            if path in {"/v1", "/v1.html", "/v1_reconstruct", "/v1_reconstruct.html"}:
                 target = UI / "v1.html"
             else:
                 target = UI / ("index.html" if path == "/" else path.lstrip("/"))
