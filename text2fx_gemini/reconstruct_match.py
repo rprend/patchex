@@ -1339,7 +1339,7 @@ def score_candidate_with_inner_trials(
         print(f"trace_file agent=loss step={step} role=producer_render_{label} path={out_path}", flush=True)
         gate = structural_scores_ok(score, diagnostics)
         gated_final = score.final if gate else score.final * 0.82
-        results.append((gated_final, label, candidate_session, score, diagnostics, residual, out_path, diff_path))
+        results.append((score.final, label, candidate_session, score, diagnostics, residual, out_path, diff_path))
         print(
             f"step={step} candidate={label} phase=producer_trial score={score.final:.4f} gated={gated_final:.4f} structural_gate={str(gate).lower()} exact_env_50ms={score.exact_envelope_50ms:.4f} exact_band_50ms={score.exact_band_50ms:.4f} mod_period={score.modulation_periodicity:.4f} mod_rate={score.modulation_rate:.4f} mod_depth={score.modulation_depth:.4f} direction={score.directional_delta:.4f} transient_class={score.transient_classification:.4f} mel={score.mel_spectrogram:.4f} beat_mel={score.beat_grid_mel:.4f} beat_band={score.beat_grid_band:.4f} beat_env={score.beat_grid_envelope:.4f} envelope={score.envelope:.4f} segment_envelope={score.segment_envelope:.4f} late={score.late_energy_ratio:.4f} sustain={score.sustain_coverage:.4f} frontload={score.frontload_balance:.4f} band_time={score.band_envelope_by_time:.4f} chroma={score.pitch_chroma:.4f} f0={score.f0_contour:.4f} motion={score.spectral_motion:.4f} timbre={score.spectral_features:.4f} onset_count={score.onset_count:.4f} onset_timing={score.onset_timing:.4f} stereo={score.stereo_width:.4f}",
             flush=True,
@@ -1546,7 +1546,8 @@ def main() -> None:
         print(f"winner_summary step={step} codex_proposed=true winner={label} codex_won={str(label == 'codex').lower()} score={score.final:.4f}", flush=True)
         trace_file(f"loss_step_{step:02d}", "winner_render", out_path)
         trace_file(f"loss_step_{step:02d}", "winner_audio_diff", diff_path)
-        accepted = score.final >= best_score.final and structural_scores_ok(score, diagnostics)
+        structural_ok = structural_scores_ok(score, diagnostics)
+        accepted = score.final >= best_score.final
         if accepted:
             best_session = session
             best_score = score
@@ -1566,6 +1567,7 @@ def main() -> None:
             "chunk_manifest_path": str(chunk_manifest_path),
             "scores": score_to_json(score),
             "best_scores": score_to_json(best_score),
+            "structural_gate": structural_ok,
             "layers": [{"id": layer["id"], "role": layer["role"]} for layer in best_session.get("layers", [])],
             "deterministic_residual": deterministic_residual,
             "recommendation_path": str(recommendation_path),
