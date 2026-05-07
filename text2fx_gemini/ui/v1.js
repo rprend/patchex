@@ -1,538 +1,63 @@
-const fileSelect = document.getElementById("fileSelect");
-const audio = document.getElementById("audio");
-const waveformEl = document.getElementById("waveform");
-const clipRange = document.getElementById("clipRange");
-const playClipButton = document.getElementById("playClip");
-const refreshFiles = document.getElementById("refreshFiles");
-const startReconstruction = document.getElementById("startReconstruction");
-const clipLogEl = document.getElementById("clipLog");
-const runLogEl = document.getElementById("runLog");
-const stepLogsEl = document.getElementById("stepLogs");
-const artifactsEl = document.getElementById("artifacts");
-const statusEl = document.getElementById("serviceStatus");
-const scoreboardEl = document.getElementById("scoreboard");
-const refreshRuns = document.getElementById("refreshRuns");
-const runHistory = document.getElementById("runHistory");
-const comparisonPanel = document.getElementById("comparisonPanel");
-const sourceCompareWaveform = document.getElementById("sourceCompareWaveform");
-const finalCompareWaveform = document.getElementById("finalCompareWaveform");
-const sourceCompareAudio = document.getElementById("sourceCompareAudio");
-const finalCompareAudio = document.getElementById("finalCompareAudio");
+const { useCallback, useEffect, useMemo, useRef, useState } = React;
+const h = React.createElement;
 
-let currentFile = null;
-let currentClip = null;
-let wavesurfer = null;
-let regionsPlugin = null;
-let activeRegion = null;
-let sourceCompareWave = null;
-let finalCompareWave = null;
-let activeRunId = localStorage.getItem("v1ActiveRunId");
 const CLIP_SECONDS = 5;
-const AGENT_NAMES = {
+const SCORE_FIELDS = [
+  "final",
+  "exact_envelope_50ms",
+  "exact_band_50ms",
+  "beat_grid_mel",
+  "beat_grid_band",
+  "beat_grid_envelope",
+  "modulation_periodicity",
+  "modulation_rate",
+  "modulation_depth",
+  "directional_delta",
+  "transient_classification",
+  "mel_spectrogram",
+  "multi_resolution_spectral",
+  "spectral_motion",
+  "pitch_chroma",
+  "stereo_width",
+  "embedding",
+];
+
+const ROLE_LABELS = {
+  source_profile: "Source measurements",
+  prompt: "Instructions",
+  answer: "Output",
+  parsed_answer: "Parsed plan",
+  layer_analysis: "Layer plan",
+  recommendation_initial: "Starting brief",
+  recommendation: "Next Producer brief",
+  session_proposal: "Proposed session",
+  accepted_session: "Accepted session",
+  candidate_session: "Candidate session",
+  audio_diff: "Accuracy report",
+  winner_audio_diff: "Winning accuracy report",
+  winner_render: "Winning audio",
+  render: "Audio",
+};
+
+const AGENT_LABELS = {
   analyzer: "Analyzer",
   producer: "Producer",
   residual_critic: "Critic",
   loss: "Calculate Accuracy",
-  session: "Session",
-};
-const ROLE_NAMES = {
-  source_profile: "Source measurements",
-  prompt: "Agent instructions",
-  answer: "Agent output",
-  parsed_answer: "Parsed plan",
-  layer_analysis: "Layer plan",
-  recommendation_initial: "Starting recommendation",
-  recommendation: "Recommendation",
-  session_proposal: "Proposed session",
-  accepted_session: "Accepted session",
-  candidate_session: "Producer candidate",
-  audio_diff: "Accuracy report",
-  winner_audio_diff: "Winning accuracy report",
-  winner_render: "Listen to winning clip",
-  render: "Listen",
 };
 
-function setStatus(text) {
-  statusEl.textContent = text;
-}
-
-function appendToLog(element, line) {
-  element.textContent += `${line}\n`;
-  element.scrollTop = element.scrollHeight;
-}
-
-function appendClipLog(line) {
-  appendToLog(clipLogEl, line);
-}
-
-function appendRunLog(line) {
-  appendToLog(runLogEl, line);
-}
-
-function clearComparison() {
-  if (sourceCompareWave) {
-    sourceCompareWave.destroy();
-    sourceCompareWave = null;
-  }
-  if (finalCompareWave) {
-    finalCompareWave.destroy();
-    finalCompareWave = null;
-  }
-  sourceCompareWaveform.innerHTML = "";
-  finalCompareWaveform.innerHTML = "";
-  sourceCompareAudio.removeAttribute("src");
-  finalCompareAudio.removeAttribute("src");
-  comparisonPanel.hidden = true;
-}
-
-function createComparisonWave(container, url, progressColor) {
-  return WaveSurfer.create({
-    container,
-    url,
-    height: 108,
-    waveColor: "#cfdaf2",
-    progressColor,
-    cursorColor: "#262626",
-    cursorWidth: 1,
-    barWidth: 2,
-    barGap: 1,
-    barRadius: 1,
-    normalize: true,
+function api(path, options = {}) {
+  return fetch(path, options).then(async (res) => {
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+    return data;
   });
-}
-
-function renderComparison(sourceUrl, finalUrl) {
-  if (!sourceUrl || !finalUrl) {
-    clearComparison();
-    return;
-  }
-  clearComparison();
-  comparisonPanel.hidden = false;
-  sourceCompareAudio.src = sourceUrl;
-  finalCompareAudio.src = finalUrl;
-  sourceCompareWave = createComparisonWave(sourceCompareWaveform, sourceUrl, "#323a85");
-  finalCompareWave = createComparisonWave(finalCompareWaveform, finalUrl, "#657cc2");
-}
-
-async function api(path, options = {}) {
-  const res = await fetch(path, options);
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || res.statusText);
-  return data;
-}
-
-async function loadFiles() {
-  const data = await api("/api/references");
-  fileSelect.innerHTML = "";
-  data.files.forEach((file) => {
-    const option = document.createElement("option");
-    option.value = file.name;
-    option.textContent = file.name;
-    fileSelect.appendChild(option);
-  });
-  if (data.files.length) {
-    await selectFile(data.files[0].name);
-  }
-}
-
-async function loadRuns() {
-  const data = await api("/api/reconstruction-runs");
-  renderRunHistory(data.runs);
-}
-
-async function selectFile(name) {
-  currentFile = name;
-  currentClip = null;
-  startReconstruction.disabled = false;
-  artifactsEl.innerHTML = "";
-  scoreboardEl.innerHTML = "";
-  stepLogsEl.innerHTML = "";
-  clipLogEl.textContent = "";
-  runLogEl.textContent = "";
-  clearComparison();
-  const url = `/media/references/${encodeURIComponent(name)}`;
-  audio.src = url;
-  setStatus("Loading");
-
-  if (wavesurfer) wavesurfer.destroy();
-  regionsPlugin = WaveSurfer.Regions.create();
-  wavesurfer = WaveSurfer.create({
-    container: waveformEl,
-    url,
-    height: 220,
-    waveColor: "#cfdaf2",
-    progressColor: "#323a85",
-    cursorColor: "#262626",
-    cursorWidth: 1,
-    barWidth: 2,
-    barGap: 1,
-    barRadius: 1,
-    normalize: true,
-    plugins: [regionsPlugin],
-  });
-
-  wavesurfer.on("ready", () => {
-    setStatus("Ready");
-    createOrResetRegion(0);
-  });
-
-  wavesurfer.on("interaction", () => {
-    const time = wavesurfer.getCurrentTime();
-    createOrResetRegion(Math.max(0, Math.min(wavesurfer.getDuration() - CLIP_SECONDS, time)));
-  });
-
-  regionsPlugin.on("region-updated", (region) => {
-    activeRegion = region;
-    enforceFiveSeconds(region);
-    updateClipReadout();
-  });
-
-  regionsPlugin.on("region-clicked", (region, event) => {
-    event.stopPropagation();
-    activeRegion = region;
-    playRegion();
-  });
-}
-
-function createOrResetRegion(start) {
-  const duration = wavesurfer.getDuration();
-  const safeStart = Math.max(0, Math.min(Math.max(0, duration - CLIP_SECONDS), start));
-  regionsPlugin.clearRegions();
-  activeRegion = regionsPlugin.addRegion({
-    start: safeStart,
-    end: safeStart + CLIP_SECONDS,
-    color: "rgba(50, 58, 133, 0.18)",
-    drag: true,
-    resize: false,
-  });
-  wavesurfer.setTime(safeStart);
-  updateClipReadout();
-}
-
-function enforceFiveSeconds(region) {
-  const duration = wavesurfer.getDuration();
-  const start = Math.max(0, Math.min(Math.max(0, duration - CLIP_SECONDS), region.start));
-  if (Math.abs(region.start - start) > 0.001 || Math.abs(region.end - (start + CLIP_SECONDS)) > 0.001) {
-    region.setOptions({ start, end: start + CLIP_SECONDS });
-  }
-  wavesurfer.setTime(start);
-}
-
-function selectedRange() {
-  if (!activeRegion) return { start: 0, end: CLIP_SECONDS };
-  return { start: activeRegion.start, end: activeRegion.start + CLIP_SECONDS };
-}
-
-function updateClipReadout() {
-  const { start, end } = selectedRange();
-  clipRange.textContent = `${start.toFixed(2)}s - ${end.toFixed(2)}s`;
-}
-
-function playRegion() {
-  if (!activeRegion) return;
-  if (wavesurfer.isPlaying()) {
-    wavesurfer.pause();
-    playClipButton.textContent = "Play Selected 5s";
-    return;
-  }
-  playClipButton.textContent = "Pause";
-  wavesurfer.play(activeRegion.start, activeRegion.end);
-}
-
-function parseStepIndex(line) {
-  const direct = line.match(/\bstep=(\d+)/);
-  if (direct) return Number(direct[1]);
-  const done = line.match(/\bstep_complete index=(\d+)/);
-  return done ? Number(done[1]) : null;
-}
-
-function agentPanel(id, label) {
-  let panel = stepLogsEl.querySelector(`[data-step="${id}"]`);
-  if (panel) return panel;
-  const host = timelineHost(id);
-  panel = document.createElement("section");
-  panel.className = "candidate-panel running";
-  panel.dataset.step = String(id);
-  panel.innerHTML = `
-    <div class="candidate-head">
-      <div>
-        <span>${label}</span>
-        <strong class="candidate-axis">scoring</strong>
-      </div>
-      <div class="spinner" aria-label="running"></div>
-    </div>
-    <pre class="candidate-log"></pre>
-  `;
-  host.appendChild(panel);
-  return panel;
-}
-
-function stepFromPanelId(id) {
-  const direct = String(id).match(/_(\d+)$/);
-  return direct ? Number(direct[1]) : null;
-}
-
-function timelineHost(id) {
-  const step = stepFromPanelId(id);
-  if (step === null) return stepLogsEl;
-  let group = stepLogsEl.querySelector(`[data-loop="${step}"]`);
-  if (group) return group.querySelector(".loop-body");
-  group = document.createElement("details");
-  group.className = "loop-group";
-  group.dataset.loop = String(step);
-  group.open = true;
-  group.innerHTML = `
-    <summary>
-      <span>Loop ${step + 1}</span>
-      <strong>Produce, mix, calculate accuracy, critique</strong>
-    </summary>
-    <div class="loop-body"></div>
-  `;
-  stepLogsEl.appendChild(group);
-  return group.querySelector(".loop-body");
-}
-
-function friendlyAgent(agent) {
-  const base = agent.replace(/_step_\d+$/, "");
-  const step = agent.match(/_step_(\d+)/)?.[1];
-  const name = AGENT_NAMES[base] || agent.replaceAll("_", " ");
-  return step === undefined ? name : `${name} ${Number(step) + 1}`;
-}
-
-function panelLabel(agent, step) {
-  if (agent.match(/_step_\d+$/) || step === null || step === undefined) return friendlyAgent(agent);
-  return `${friendlyAgent(agent)} ${Number(step) + 1}`;
-}
-
-function friendlyRole(role, agent = "") {
-  if (role.startsWith("producer_audio_diff")) return "Producer trial accuracy";
-  if (role.startsWith("producer_render")) return "Listen Producer trial";
-  if (role.startsWith("audio_diff")) return "Accuracy report";
-  if (role.startsWith("render")) return "Listen";
-  if (role === "prompt") {
-    if (agent.startsWith("producer")) return "Producer instructions";
-    if (agent.startsWith("residual_critic")) return "Critic instructions";
-    if (agent === "analyzer") return "Analyzer instructions";
-    return "Agent instructions";
-  }
-  return ROLE_NAMES[role] || role.replaceAll("_", " ");
 }
 
 function fileUrlFromTracePath(path) {
   const match = path.match(/\/ui_runs\/([^/]+)\/(.+)$/);
   if (!match) return null;
   return `/media/runs/${encodeURIComponent(match[1])}/${match[2].split("/").map(encodeURIComponent).join("/")}`;
-}
-
-function tracePanelId(agent, step) {
-  const match = agent.match(/(.+)_step_(\d+)/);
-  if (match) return `${match[1]}_${Number(match[2])}`;
-  if (step !== null && step !== undefined) return `${agent}_${step}`;
-  return agent;
-}
-
-async function addTraceFile(payload) {
-  let agent = payload.agent || "trace";
-  const role = payload.role || "file";
-  if (agent === "session" && role === "current") return;
-  const step = payload.step ?? null;
-  if (step !== null && role.startsWith("producer_render")) agent = `producer_step_${String(step).padStart(2, "0")}`;
-  if (step !== null && role.startsWith("audio_diff")) agent = "loss";
-  const path = payload.path || "";
-  const url = payload.url || fileUrlFromTracePath(path);
-  const fileName = payload.name || path.split("/").pop();
-  const line = payload.line || `trace_file agent=${agent} role=${role} path=${path}`;
-  const panel = agentPanel(tracePanelId(agent, step), panelLabel(agent, step));
-  panel.querySelector(".candidate-axis").textContent = friendlyRole(role, agent);
-  const log = panel.querySelector(".candidate-log");
-  if (role === "layer_analysis") appendToLog(log, "Layer plan ready.");
-  if (role === "session_proposal") appendToLog(log, "Producer wrote a session proposal.");
-  if (role === "candidate_session") appendToLog(log, "Producer trial selected for scoring.");
-  if (role === "recommendation") appendToLog(log, "Critic wrote the next Producer brief.");
-  if (role === "accepted_session") appendToLog(log, "Accepted as the current best session.");
-
-  const trace = document.createElement("details");
-  trace.className = "trace-file";
-  const traceKey = `${role}:${url || path}`;
-  if (Array.from(panel.querySelectorAll(".trace-file")).some((item) => item.dataset.traceKey === traceKey)) return;
-  trace.dataset.traceKey = traceKey;
-  trace.open = fileName.endsWith(".wav") || role.includes("recommendation") || role.includes("winner_audio_diff");
-  trace.innerHTML = `<summary><span>${friendlyRole(role, agent)}</span><a href="${url || "#"}" target="_blank">Open details</a></summary>`;
-  const body = document.createElement("pre");
-  body.textContent = "loading...";
-  trace.appendChild(body);
-  panel.appendChild(trace);
-
-  if (!url) {
-    body.textContent = path;
-    return;
-  }
-  if (fileName.endsWith(".wav")) {
-    body.remove();
-    if (role.includes("winner")) {
-      const wave = document.createElement("div");
-      wave.className = "trace-waveform";
-      trace.appendChild(wave);
-      WaveSurfer.create({
-        container: wave,
-        url,
-        height: 88,
-        waveColor: "#cfdaf2",
-        progressColor: "#323a85",
-        cursorColor: "#262626",
-        cursorWidth: 1,
-        barWidth: 2,
-        barGap: 1,
-        normalize: true,
-      });
-    }
-    const player = document.createElement("audio");
-    player.controls = true;
-    player.src = url;
-    trace.appendChild(player);
-    return;
-  }
-  try {
-    const text = await fetch(url).then((res) => {
-      if (!res.ok) throw new Error(`Could not load ${url}`);
-      return res.text();
-    });
-    body.textContent = text.length > 24000 ? `${text.slice(0, 24000)}\n... [truncated in UI; open artifact for full file]` : text;
-  } catch (error) {
-    body.textContent = error.stack || String(error);
-  }
-  if (role === "answer" || role === "layer_analysis" || role === "recommendation" || role === "recommendation_initial" || role === "accepted_session" || role === "candidate_session") {
-    panel.classList.remove("running");
-    panel.classList.add("completed");
-  }
-}
-
-async function routeRunLog(line) {
-  if (line.startsWith("trace_file")) {
-    return;
-  }
-  if (line.startsWith("winner_summary")) {
-    const step = Number(line.match(/\bstep=(\d+)/)?.[1] || 0);
-    const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
-    const codexWon = line.match(/\bcodex_won=([^ ]+)/)?.[1] === "true";
-    const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
-    const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
-    appendToLog(panel.querySelector(".candidate-log"), codexWon ? `Producer proposal won with score ${score}.` : `Producer proposal lost; ${winner} won with score ${score}.`);
-    panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
-    return;
-  }
-  if (line.startsWith("producer_winner")) {
-    const step = Number(line.match(/\bstep=(\d+)/)?.[1] || 0);
-    const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
-    const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
-    const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
-    appendToLog(panel.querySelector(".candidate-log"), `Producer candidate winner: ${winner} (${score}).`);
-    panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
-    return;
-  }
-  if (line.startsWith("codex_done")) {
-    const agent = line.match(/\bagent=([^ ]+)/)?.[1];
-    if (agent) {
-      const panel = agentPanel(tracePanelId(agent, null), friendlyAgent(agent));
-      panel.classList.remove("running");
-      panel.classList.add("completed");
-    }
-    return;
-  }
-  const step = parseStepIndex(line);
-  const agentMatch = line.match(/\bagent_stage ([a-z_]+)(?: step=(\d+))?/);
-  if (agentMatch) {
-    const id = agentMatch[2] ? `${agentMatch[1]}_${agentMatch[2]}` : agentMatch[1];
-    const panel = agentPanel(id, friendlyAgent(agentMatch[1]));
-    panel.querySelector(".candidate-axis").textContent = "running";
-    return;
-  }
-  if (step === null) {
-    if (!line.includes("/Users/") && !line.startsWith("codex_") && !line.startsWith("analysis_start")) appendRunLog(line);
-    return;
-  }
-  const panel = agentPanel(`builder_${step}`, `Producer ${step + 1}`);
-  if (line.includes("candidate=")) appendToLog(panel.querySelector(".candidate-log"), line.replace(`step=${step} `, ""));
-  const scoreMatch = line.match(/\bscore=([0-9.]+)/);
-  if (scoreMatch) {
-    panel.querySelector(".candidate-axis").textContent = `score ${Number(scoreMatch[1]).toFixed(3)}`;
-  }
-  if (line.startsWith("step_complete")) {
-    markStepCompleted(step);
-  }
-}
-
-function markStepCompleted(step) {
-  [`producer_${step}`, `loss_${step}`, `residual_critic_${step}`].forEach((id) => {
-    const panel = stepLogsEl.querySelector(`[data-step="${id}"]`);
-    if (panel) {
-      panel.classList.remove("running");
-      panel.classList.add("completed");
-    }
-  });
-}
-
-async function renderTraceArtifacts(artifacts, report = null) {
-  const traceArtifacts = artifacts.filter((artifact) => {
-    const name = artifact.name;
-    return (
-      name.startsWith("codex_") ||
-      name.startsWith("audio_diff_") ||
-      name.startsWith("producer_audio_diff_") ||
-      name.match(/^producer_reconstruction_step_\d+_.+\.wav$/) ||
-      name === "final_reconstruction.wav" ||
-      name.startsWith("recommendation_step_") ||
-      name === "recommendation_initial.json" ||
-      name === "source_profile.json" ||
-      name === "pattern_constraints.json" ||
-      name === "beat_grid.json" ||
-      name === "layer_analysis.json" ||
-      name.match(/^session_step_\d+_(codex_proposal|producer_winner|accepted)\.json$/)
-    );
-  });
-  for (const artifact of traceArtifacts) {
-    const pseudoPath = `/ui_runs/${artifact.url.split("/")[3]}/${artifact.name}`;
-    const role = artifact.name.startsWith("codex_")
-      ? artifact.name.includes("_prompt") ? "prompt" : "answer"
-      : artifact.name.startsWith("producer_audio_diff") ? "producer_audio_diff"
-      : artifact.name.startsWith("audio_diff") ? "audio_diff"
-        : artifact.name.match(/^producer_reconstruction_step_/) ? "producer_render"
-        : artifact.name === "final_reconstruction.wav" ? "render"
-        : artifact.name.endsWith(".wav") ? "render"
-        : artifact.name.startsWith("session") ? "session"
-          : artifact.name.startsWith("recommendation") ? "recommendation"
-            : "file";
-    let agent = artifact.name
-      .replace(/^codex_/, "")
-      .replace(/_(prompt|answer)\.txt$/, "")
-      .replace(/\.json$/, "");
-    const stepMatch = artifact.name.match(/step_(\d+)/);
-    const step = stepMatch ? Number(stepMatch[1]) : null;
-    if (role === "producer_render" && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
-    if (role === "audio_diff" && step !== null) agent = "loss";
-    if (artifact.name === "final_reconstruction.wav") agent = "producer";
-    await addTraceFile({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name });
-  }
-  if (!report?.history) return;
-  for (const item of report.history) {
-    if (item.step === undefined || item.step === null || !item.winner) continue;
-    const step = Number(item.step);
-    const winner = item.winner;
-    const score = Number(item.scores?.final || item.scores || 0);
-    const panel = agentPanel(`loss_${step}`, `Calculate Accuracy ${step + 1}`);
-    appendToLog(panel.querySelector(".candidate-log"), winner === "codex" ? `Producer proposal won with score ${score.toFixed(3)}.` : `Producer proposal lost; ${winner} won with score ${score.toFixed(3)}.`);
-    panel.querySelector(".candidate-axis").textContent = `winner ${winner}`;
-    const audioName = item.audio_path?.split("/").pop();
-    const diffName = item.audio_diff_path?.split("/").pop();
-    const audioArtifact = artifacts.find((artifact) => artifact.name === audioName);
-    const diffArtifact = artifacts.find((artifact) => artifact.name === diffName);
-    if (audioArtifact) {
-      await addTraceFile({ agent: `loss_step_${String(step).padStart(2, "0")}`, role: "winner_render", step, path: `/ui_runs/${audioArtifact.url.split("/")[3]}/${audioArtifact.name}`, url: audioArtifact.url, name: audioArtifact.name });
-    }
-    if (diffArtifact) {
-      await addTraceFile({ agent: `loss_step_${String(step).padStart(2, "0")}`, role: "winner_audio_diff", step, path: `/ui_runs/${diffArtifact.url.split("/")[3]}/${diffArtifact.name}`, url: diffArtifact.url, name: diffArtifact.name });
-    }
-  }
 }
 
 function formatRunDate(id) {
@@ -542,295 +67,747 @@ function formatRunDate(id) {
   return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
-function renderRunHistory(runs) {
-  runHistory.innerHTML = "";
-  if (!runs.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty-history";
-    empty.textContent = "No completed V1 reconstruction runs found yet.";
-    runHistory.appendChild(empty);
-    return;
+function normalizeAgent(agent) {
+  if (!agent) return "producer";
+  if (agent.startsWith("layer_builder")) return agent.replace("layer_builder", "producer");
+  if (agent.startsWith("producer")) return agent;
+  if (agent.startsWith("residual_critic")) return agent;
+  if (agent.startsWith("loss")) return agent;
+  return agent;
+}
+
+function agentBase(agent) {
+  return normalizeAgent(agent).replace(/_step_\d+$/, "");
+}
+
+function agentStep(agent, fallback = null) {
+  const match = normalizeAgent(agent).match(/_step_(\d+)/);
+  if (match) return Number(match[1]);
+  return fallback;
+}
+
+function agentName(agent) {
+  const base = agentBase(agent);
+  if (base === "producer") return "Producer";
+  if (base === "residual_critic") return "Critic";
+  if (base === "loss") return "Calculate Accuracy";
+  return AGENT_LABELS[base] || base.replaceAll("_", " ");
+}
+
+function roleName(role, agent) {
+  if (role?.startsWith("producer_audio_diff")) return "Producer trial accuracy";
+  if (role?.startsWith("producer_render")) return "Producer trial audio";
+  if (role?.startsWith("audio_diff")) return "Accuracy report";
+  if (role?.startsWith("render")) return "Audio";
+  if (role === "prompt") {
+    if (agentBase(agent) === "producer") return "Producer instructions";
+    if (agentBase(agent) === "residual_critic") return "Critic instructions";
+    if (agentBase(agent) === "analyzer") return "Analyzer instructions";
   }
-  runs.forEach((run) => {
-    const button = document.createElement("button");
-    button.className = "run-card";
-    button.type = "button";
-    const finalScore = Number.isFinite(run.final_score) ? run.final_score.toFixed(3) : "n/a";
-    const melScore = Number.isFinite(run.mel_score) ? run.mel_score.toFixed(3) : "n/a";
-    button.innerHTML = `
-      <span class="run-time">${formatRunDate(run.id)}</span>
-      <strong>${finalScore}</strong>
-      <span>${run.overall_mix || "Reconstruction run"}</span>
-      <em>${run.stage_count || 0} stages · mel ${melScore}</em>
-    `;
-    button.addEventListener("click", () => loadPastRun(run));
-    runHistory.appendChild(button);
-  });
+  return ROLE_LABELS[role] || String(role || "File").replaceAll("_", " ");
 }
 
-async function loadPastRun(run) {
-  clipLogEl.textContent = "";
-  runLogEl.textContent = "";
-  stepLogsEl.innerHTML = "";
-  artifactsEl.innerHTML = "";
-  scoreboardEl.innerHTML = "";
-  clearComparison();
-  setStatus("Loaded run");
-  appendRunLog(`loaded v1 run: ${run.id}`);
-  appendRunLog(`status: ${run.status}`);
-  const reportArtifact = run.artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
-  if (!reportArtifact) {
-    appendRunLog("reconstruction_report.json is missing for this run");
-    await renderArtifacts(run.artifacts);
-    return;
-  }
-  const report = await fetch(reportArtifact.url).then((res) => {
-    if (!res.ok) throw new Error(`Could not load ${reportArtifact.url}`);
-    return res.json();
-  });
-  renderScoreboard(report);
-  renderHistoryTimeline(report.history || []);
-  await renderTraceArtifacts(run.artifacts, report);
-  const scores = report.best_scores || {};
-  appendRunLog(`final score: ${Number(scores.final || 0).toFixed(3)}`);
-  appendRunLog(`final audio: ${report.final_path || "not recorded"}`);
-  await renderArtifacts(run.artifacts);
+function traceKey(trace) {
+  return `${trace.agent}:${trace.step ?? "root"}:${trace.role}:${trace.url || trace.path}`;
 }
 
-function renderHistoryTimeline(history) {
-  stepLogsEl.innerHTML = "";
-  history.forEach((item, index) => {
-    const id = item.step === undefined || item.step === null ? `${item.stage}_${index}` : `${item.stage}_${item.step}`;
-    const panel = agentPanel(id, item.stage || `stage ${index + 1}`);
-    panel.classList.remove("running");
-    panel.classList.add(item.accepted === false ? "failed" : "completed");
-    const log = panel.querySelector(".candidate-log");
-    const score = item.scores?.final;
-    panel.querySelector(".candidate-axis").textContent = Number.isFinite(score) ? `score ${score.toFixed(3)}` : "loaded";
-    appendToLog(log, `stage: ${item.stage || "unknown"}`);
-    if (item.step !== undefined && item.step !== null) appendToLog(log, `step: ${item.step}`);
-    if (item.winner) appendToLog(log, `winner: ${item.winner}`);
-    if (item.accepted !== undefined) appendToLog(log, `accepted: ${item.accepted}`);
-    if (item.scores) appendToLog(log, `scores: ${JSON.stringify(item.scores, null, 2)}`);
-    if (item.recommendation_path) appendToLog(log, `recommendation: ${item.recommendation_path}`);
-  });
+function parseStep(line) {
+  const direct = line.match(/\bstep=(\d+)/);
+  if (direct) return Number(direct[1]);
+  const done = line.match(/\bstep_complete index=(\d+)/);
+  return done ? Number(done[1]) : null;
 }
 
-async function extractSelectedClip() {
-  if (!currentFile || !activeRegion) return;
-  setStatus("Extracting");
-  startReconstruction.disabled = true;
-  clipLogEl.textContent = "";
-  runLogEl.textContent = "";
-  stepLogsEl.innerHTML = "";
-  artifactsEl.innerHTML = "";
-  scoreboardEl.innerHTML = "";
-  clearComparison();
-  const { start } = selectedRange();
-  appendClipLog(`extracting exact clip: ${currentFile} @ ${start.toFixed(2)}s-${(start + CLIP_SECONDS).toFixed(2)}s`);
-  try {
-    const data = await api("/api/extract", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reference: currentFile, start, duration: CLIP_SECONDS }),
+function cleanLogLine(line) {
+  if (!line) return null;
+  if (line.includes("/site-packages/") || line.includes("FutureWarning")) return null;
+  if (line.startsWith("codex_prompt_path") || line.startsWith("codex_prompt_hidden")) return null;
+  if (line.startsWith("trace_file") || line.startsWith("analysis_start")) return null;
+  if (line.includes("/Users/ryanprendergast/")) return null;
+  return line
+    .replaceAll("layer_builder", "producer")
+    .replaceAll("residual_critic", "critic")
+    .replaceAll("Loop ", "Iteration ");
+}
+
+function WaveformPlayer({ url, label, compact = false, color = "#323a85" }) {
+  const waveRef = useRef(null);
+  const playerRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    if (!url || !waveRef.current || !window.WaveSurfer) return undefined;
+    const wave = WaveSurfer.create({
+      container: waveRef.current,
+      url,
+      height: compact ? 72 : 104,
+      waveColor: "#d8dfed",
+      progressColor: color,
+      cursorColor: "#2d2d2d",
+      cursorWidth: 1,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 1,
+      normalize: true,
     });
-    appendClipLog(`clip job id: ${data.clip_id}`);
-    const events = new EventSource(`/api/clips/${data.clip_id}/events`);
-    events.onmessage = (event) => {
-      const payload = JSON.parse(event.data);
-      if (payload.type === "log") appendClipLog(payload.line);
-      if (payload.type === "heartbeat") appendClipLog("heartbeat: extraction still running");
-      if (payload.type === "done") {
-        events.close();
-        if (payload.status !== "completed") {
-          setStatus("Extract failed");
-          appendClipLog(payload.error || "extract failed");
-          return;
-        }
-        currentClip = payload.result.clip;
-        appendClipLog(`source clip ready: ${currentClip}`);
-        setStatus("Clip ready");
-        startAutonomousRun();
-      }
+    playerRef.current = wave;
+    wave.on("finish", () => setPlaying(false));
+    wave.on("play", () => setPlaying(true));
+    wave.on("pause", () => setPlaying(false));
+    return () => {
+      wave.destroy();
+      playerRef.current = null;
     };
-    events.onerror = () => appendClipLog("event stream error; check server process");
-  } catch (error) {
-    setStatus("Extract failed");
-    startReconstruction.disabled = false;
-    appendClipLog(error.stack || String(error));
-  }
+  }, [url, compact, color]);
+
+  if (!url) return null;
+  return h("div", { className: compact ? "audio-player compact" : "audio-player" },
+    h("div", { className: "audio-player-head" },
+      h("button", {
+        type: "button",
+        className: "icon-button",
+        onClick: () => playerRef.current?.playPause(),
+        "aria-label": playing ? "Pause" : "Play",
+      }, playing ? "Pause" : "Play"),
+      h("strong", null, label || "Audio"),
+      h("a", { href: url, target: "_blank" }, "Open")
+    ),
+    h("div", { className: "audio-wave", ref: waveRef })
+  );
 }
 
-async function startAutonomousRun() {
-  if (!currentClip) return;
-  runLogEl.textContent = "";
-  stepLogsEl.innerHTML = "";
-  artifactsEl.innerHTML = "";
-  scoreboardEl.innerHTML = "";
-  clearComparison();
-  setStatus("Running");
-  startReconstruction.disabled = true;
-  appendRunLog("Starting reconstruction. The timeline below will show each agent, accuracy pass, and audio preview.");
-  try {
-    const data = await api("/api/reconstruct", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clip: currentClip,
-        steps: 5,
-        local_trials: 4,
-        max_layers: 5,
-      }),
+function SourceSelector({ files, currentFile, onSelect, onWaveReady, audioUrl, clipRange, onPlayClip, playLabel, onRefresh, disabled }) {
+  const waveRef = useRef(null);
+  const wave = useRef(null);
+  const regions = useRef(null);
+
+  useEffect(() => {
+    if (!audioUrl || !waveRef.current || !window.WaveSurfer) return undefined;
+    regions.current = WaveSurfer.Regions.create();
+    wave.current = WaveSurfer.create({
+      container: waveRef.current,
+      url: audioUrl,
+      height: 172,
+      waveColor: "#d8dfed",
+      progressColor: "#323a85",
+      cursorColor: "#262626",
+      cursorWidth: 1,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 1,
+      normalize: true,
+      plugins: [regions.current],
     });
-    appendRunLog("Run started. You can refresh this page and it will reconnect.");
-    activeRunId = data.run_id;
-    localStorage.setItem("v1ActiveRunId", activeRunId);
-    attachReconstructionEvents(data.run_id);
-  } catch (error) {
-    setStatus("Run failed");
-    startReconstruction.disabled = false;
-    appendRunLog(error.stack || String(error));
-  }
+    onWaveReady(wave.current, regions.current);
+    wave.current.on("ready", () => onSelect(currentFile, { ready: true }));
+    wave.current.on("interaction", () => onSelect(currentFile, { seek: wave.current.getCurrentTime() }));
+    regions.current.on("region-updated", (region) => onSelect(currentFile, { region }));
+    regions.current.on("region-clicked", (region, event) => {
+      event.stopPropagation();
+      onSelect(currentFile, { playRegion: region });
+    });
+    return () => {
+      wave.current?.destroy();
+      wave.current = null;
+      regions.current = null;
+    };
+  }, [audioUrl]);
+
+  return h("section", { className: "hero-panel" },
+    h("div", { className: "hero-main" },
+      h("div", { className: "top-line" },
+        h("h1", null, "Reconstruct Audio"),
+        h("span", { className: disabled ? "run-pill active" : "run-pill" }, disabled ? "Running" : "Ready")
+      ),
+      h("div", { className: "source-toolbar" },
+        h("label", { className: "select-field" },
+          h("span", null, "Source"),
+          h("select", { value: currentFile || "", onChange: (event) => onSelect(event.target.value, { newFile: true }) },
+            files.map((file) => h("option", { key: file.name, value: file.name }, file.name))
+          )
+        ),
+        h("button", { type: "button", onClick: onRefresh }, "Refresh"),
+        h("a", { href: "/", className: "quiet-link" }, "V0")
+      ),
+      h("div", { className: "source-wave", ref: waveRef }),
+      h("audio", { className: "source-native-player", controls: true, src: audioUrl }),
+      h("div", { className: "clip-controls" },
+        h("strong", null, clipRange),
+        h("button", { type: "button", onClick: onPlayClip }, playLabel)
+      )
+    )
+  );
 }
 
-async function resumeActiveRun() {
-  if (!activeRunId) return;
-  try {
-    const job = await api(`/api/reconstructions/${activeRunId}`);
-    if (job.status !== "running") {
-      localStorage.removeItem("v1ActiveRunId");
-      activeRunId = null;
+function Scoreboard({ report }) {
+  const scores = report?.best_scores || {};
+  if (!report) return null;
+  return h("section", { className: "section-block" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Accuracy"),
+      h("p", null, "Time-based loss components make obvious mismatches visible.")
+    ),
+    h("div", { className: "scoreboard react-scoreboard" },
+      SCORE_FIELDS.map((name) => {
+        const value = Number(scores[name] || 0);
+        return h("div", { className: "score-card", key: name },
+          h("span", null, name.replaceAll("_", " ")),
+          h("strong", null, value.toFixed(3)),
+          h("div", { className: "score-bar" }, h("i", { style: { width: `${Math.max(0, Math.min(100, value * 100))}%` } }))
+        );
+      })
+    )
+  );
+}
+
+function TraceFile({ trace }) {
+  const [content, setContent] = useState(trace.text || "");
+  const [loading, setLoading] = useState(false);
+  const name = trace.name || trace.path?.split("/").pop() || "artifact";
+  const isAudio = name.endsWith(".wav");
+  const startsOpen = isAudio || trace.role?.includes("recommendation") || trace.role?.includes("winner_audio_diff");
+
+  useEffect(() => {
+    if (!trace.url || isAudio || content) return undefined;
+    let cancelled = false;
+    setLoading(true);
+    fetch(trace.url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Could not load ${trace.url}`);
+        return res.text();
+      })
+      .then((text) => {
+        if (!cancelled) setContent(text.length > 24000 ? `${text.slice(0, 24000)}\n... [truncated; open artifact for full file]` : text);
+      })
+      .catch((error) => {
+        if (!cancelled) setContent(error.stack || String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [trace.url, isAudio]);
+
+  return h("details", { className: "trace-file react-trace-file", open: startsOpen },
+    h("summary", null,
+      h("span", null, roleName(trace.role, trace.agent)),
+      trace.url ? h("a", { href: trace.url, target: "_blank" }, "Open") : null
+    ),
+    isAudio
+      ? h(WaveformPlayer, { url: trace.url, label: roleName(trace.role, trace.agent), compact: true })
+      : h("pre", null, loading ? "loading..." : content || trace.path)
+  );
+}
+
+function AgentCard({ agent, traces, status, notes }) {
+  const completed = status === "completed";
+  const title = agentName(agent);
+  return h("section", { className: `agent-card ${completed ? "completed" : "running"}` },
+    h("div", { className: "agent-card-head" },
+      h("div", null,
+        h("strong", null, title),
+        notes?.length ? h("p", null, notes[notes.length - 1]) : null
+      ),
+      h("span", { className: "agent-state" }, completed ? "Done" : "Working")
+    ),
+    traces.map((trace) => h(TraceFile, { key: traceKey(trace), trace }))
+  );
+}
+
+function IterationGroup({ step, traces, statuses, notes, winners }) {
+  const producer = traces.filter((trace) => agentBase(trace.agent) === "producer");
+  const loss = traces.filter((trace) => agentBase(trace.agent) === "loss" || trace.role?.includes("audio_diff") || trace.role?.includes("winner_render"));
+  const critic = traces.filter((trace) => agentBase(trace.agent) === "residual_critic");
+  const winner = winners[step];
+  return h("details", { className: "iteration-group", open: true },
+    h("summary", null,
+      h("span", null, `Iteration ${step + 1}`),
+      h("strong", null, winner ? `Winner: ${winner.winner} · ${winner.score}` : "Produce, calculate accuracy, critique")
+    ),
+    h("div", { className: "iteration-body" },
+      h(AgentCard, { agent: "producer", traces: producer, status: statuses[`producer_${step}`], notes: notes[`producer_${step}`] || [] }),
+      h(AgentCard, { agent: "loss", traces: loss, status: statuses[`loss_${step}`], notes: notes[`loss_${step}`] || [] }),
+      h(AgentCard, { agent: "residual_critic", traces: critic, status: statuses[`residual_critic_${step}`], notes: notes[`residual_critic_${step}`] || [] })
+    )
+  );
+}
+
+function Timeline({ traces, statuses, notes, winners, runNotes }) {
+  const analyzerTraces = traces.filter((trace) => agentBase(trace.agent) === "analyzer");
+  const steps = Array.from(new Set(traces.map((trace) => trace.step).filter((step) => step !== null && step !== undefined))).sort((a, b) => a - b);
+  return h("section", { className: "section-block timeline-section" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Run Trace"),
+      h("p", null, "Each iteration shows the Producer files, scored audio, and the Critic brief for the next pass.")
+    ),
+    runNotes.length ? h("div", { className: "activity-strip" }, runNotes.slice(-5).map((note, index) => h("span", { key: `${note}-${index}` }, note))) : null,
+    analyzerTraces.length ? h(AgentCard, { agent: "analyzer", traces: analyzerTraces, status: statuses.analyzer, notes: notes.analyzer || [] }) : null,
+    h("div", { className: "iterations" },
+      steps.map((step) => h(IterationGroup, {
+        key: step,
+        step,
+        traces: traces.filter((trace) => trace.step === step),
+        statuses,
+        notes,
+        winners,
+      }))
+    )
+  );
+}
+
+function Artifacts({ artifacts, onReport }) {
+  useEffect(() => {
+    const reportArtifact = artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
+    if (!reportArtifact) return undefined;
+    let cancelled = false;
+    fetch(reportArtifact.url)
+      .then((res) => res.json())
+      .then((report) => { if (!cancelled) onReport(report); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [artifacts]);
+
+  if (!artifacts.length) return null;
+  return h("section", { className: "section-block" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Files"),
+      h("p", null, "Rendered audio, reports, prompts, and session state.")
+    ),
+    h("div", { className: "artifacts" },
+      artifacts.map((artifact) => h("div", { className: "artifact", key: artifact.url },
+        h("a", { href: artifact.url, target: "_blank" }, artifact.name),
+        artifact.name.endsWith(".wav") ? h("audio", { controls: true, src: artifact.url }) : null
+      ))
+    )
+  );
+}
+
+function Comparison({ artifacts }) {
+  const source = artifacts.find((artifact) => artifact.name === "source_clip.wav");
+  const final = artifacts.find((artifact) => artifact.name === "final_reconstruction.wav");
+  if (!source || !final) return null;
+  return h("section", { className: "section-block" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Source vs Output"),
+      h("p", null, "Scrub either waveform and compare the same five seconds directly.")
+    ),
+    h("div", { className: "comparison-grid react-comparison" },
+      h("section", { className: "comparison-item" },
+        h("div", { className: "comparison-head" }, h("span", null, "Source"), h("strong", null, "Selected clip")),
+        h(WaveformPlayer, { url: source.url, label: "Source" })
+      ),
+      h("section", { className: "comparison-item" },
+        h("div", { className: "comparison-head" }, h("span", null, "Output"), h("strong", null, "Final reconstruction")),
+        h(WaveformPlayer, { url: final.url, label: "Output", color: "#657cc2" })
+      )
+    )
+  );
+}
+
+function RunHistory({ runs, onLoad, onRefresh }) {
+  return h("section", { className: "section-block" },
+    h("div", { className: "section-title with-action" },
+      h("div", null, h("h2", null, "Past Runs"), h("p", null, "Open a previous reconstruction and inspect its trace.")),
+      h("button", { type: "button", onClick: onRefresh }, "Refresh")
+    ),
+    h("div", { className: "run-history react-run-history" },
+      runs.length
+        ? runs.map((run) => h("button", { key: run.id, className: "run-card", type: "button", onClick: () => onLoad(run) },
+          h("span", { className: "run-time" }, formatRunDate(run.id)),
+          h("strong", null, Number.isFinite(run.final_score) ? run.final_score.toFixed(3) : "n/a"),
+          h("span", null, run.overall_mix || "Reconstruction run"),
+          h("em", null, `${run.stage_count || 0} stages`)
+        ))
+        : h("div", { className: "empty-history" }, "No V1 runs yet.")
+    )
+  );
+}
+
+function App() {
+  const [files, setFiles] = useState([]);
+  const [runs, setRuns] = useState([]);
+  const [currentFile, setCurrentFile] = useState("");
+  const [clipStart, setClipStart] = useState(0);
+  const [currentClip, setCurrentClip] = useState(null);
+  const [status, setStatus] = useState("Ready");
+  const [playLabel, setPlayLabel] = useState("Play selection");
+  const [runNotes, setRunNotes] = useState([]);
+  const [traces, setTraces] = useState([]);
+  const [statuses, setStatuses] = useState({});
+  const [notes, setNotes] = useState({});
+  const [winners, setWinners] = useState({});
+  const [artifacts, setArtifacts] = useState([]);
+  const [report, setReport] = useState(null);
+  const activeRun = useRef(localStorage.getItem("v1ActiveRunId"));
+  const sourceTools = useRef({ wave: null, regions: null, activeRegion: null });
+
+  const addRunNote = useCallback((line) => {
+    const clean = cleanLogLine(line);
+    if (!clean) return;
+    setRunNotes((items) => [...items.slice(-40), clean]);
+  }, []);
+
+  const addAgentNote = useCallback((id, note) => {
+    if (!note) return;
+    setNotes((current) => ({ ...current, [id]: [...(current[id] || []).slice(-4), note] }));
+  }, []);
+
+  const addTrace = useCallback((payload) => {
+    let agent = normalizeAgent(payload.agent || "producer");
+    const role = payload.role || "file";
+    if (agent === "session" && role === "current") return;
+    let step = payload.step ?? agentStep(agent, null);
+    if (step !== null && role.startsWith("producer_render")) agent = `producer_step_${String(step).padStart(2, "0")}`;
+    if (step !== null && role.startsWith("audio_diff")) agent = `loss_step_${String(step).padStart(2, "0")}`;
+    const path = payload.path || "";
+    const trace = {
+      agent,
+      step,
+      role,
+      path,
+      url: payload.url || fileUrlFromTracePath(path),
+      name: payload.name || path.split("/").pop(),
+    };
+    setTraces((current) => current.some((item) => traceKey(item) === traceKey(trace)) ? current : [...current, trace]);
+    const base = agentBase(agent);
+    const statusId = step === null || step === undefined ? base : `${base}_${step}`;
+    setStatuses((current) => ({ ...current, [statusId]: current[statusId] === "completed" ? "completed" : "running" }));
+    if (role === "layer_analysis") addAgentNote(statusId, "Layer plan ready.");
+    if (role === "session_proposal") addAgentNote(statusId, "Producer wrote a session proposal.");
+    if (role === "accepted_session") addAgentNote(statusId, "Accepted as current session.");
+    if (role === "recommendation") addAgentNote(statusId, "Critic wrote the next Producer brief.");
+    if (["answer", "layer_analysis", "recommendation", "recommendation_initial", "accepted_session", "candidate_session"].includes(role)) {
+      setStatuses((current) => ({ ...current, [statusId]: "completed" }));
+    }
+  }, [addAgentNote]);
+
+  const loadFiles = useCallback(async () => {
+    const data = await api("/api/references");
+    setFiles(data.files || []);
+    if ((data.files || []).length && !currentFile) setCurrentFile(data.files[0].name);
+  }, [currentFile]);
+
+  const loadRuns = useCallback(async () => {
+    const data = await api("/api/reconstruction-runs");
+    setRuns(data.runs || []);
+  }, []);
+
+  const resetRunView = useCallback(() => {
+    setRunNotes([]);
+    setTraces([]);
+    setStatuses({});
+    setNotes({});
+    setWinners({});
+    setArtifacts([]);
+    setReport(null);
+  }, []);
+
+  const ensureFiveSecondRegion = useCallback((start = 0) => {
+    const wave = sourceTools.current.wave;
+    const regions = sourceTools.current.regions;
+    if (!wave || !regions) return;
+    const duration = wave.getDuration() || CLIP_SECONDS;
+    const safeStart = Math.max(0, Math.min(Math.max(0, duration - CLIP_SECONDS), start));
+    regions.clearRegions();
+    sourceTools.current.activeRegion = regions.addRegion({
+      start: safeStart,
+      end: safeStart + CLIP_SECONDS,
+      color: "rgba(50, 58, 133, 0.16)",
+      drag: true,
+      resize: false,
+    });
+    wave.setTime(safeStart);
+    setClipStart(safeStart);
+  }, []);
+
+  const handleSourceEvent = useCallback((file, action = {}) => {
+    if (action.newFile) {
+      setCurrentFile(file);
+      resetRunView();
       return;
     }
-    setStatus("Running");
-    startReconstruction.disabled = true;
-    appendRunLog(`Reconnected to active V1 run ${activeRunId}.`);
-    await renderArtifacts(job.artifacts);
-    await renderTraceArtifacts(job.artifacts);
-    attachReconstructionEvents(activeRunId);
-  } catch (_error) {
-    localStorage.removeItem("v1ActiveRunId");
-    activeRunId = null;
-  }
-}
+    if (action.ready) {
+      ensureFiveSecondRegion(0);
+      return;
+    }
+    if (action.seek !== undefined) {
+      ensureFiveSecondRegion(action.seek);
+      return;
+    }
+    if (action.region) {
+      const wave = sourceTools.current.wave;
+      const duration = wave?.getDuration() || CLIP_SECONDS;
+      const safeStart = Math.max(0, Math.min(Math.max(0, duration - CLIP_SECONDS), action.region.start));
+      if (Math.abs(action.region.start - safeStart) > 0.001 || Math.abs(action.region.end - (safeStart + CLIP_SECONDS)) > 0.001) {
+        action.region.setOptions({ start: safeStart, end: safeStart + CLIP_SECONDS });
+      }
+      wave?.setTime(safeStart);
+      sourceTools.current.activeRegion = action.region;
+      setClipStart(safeStart);
+    }
+    if (action.playRegion) playSelectedClip();
+  }, [ensureFiveSecondRegion, resetRunView]);
 
-function attachReconstructionEvents(runId) {
+  const playSelectedClip = useCallback(() => {
+    const wave = sourceTools.current.wave;
+    const region = sourceTools.current.activeRegion;
+    if (!wave || !region) return;
+    if (wave.isPlaying()) {
+      wave.pause();
+      setPlayLabel("Play selection");
+      return;
+    }
+    setPlayLabel("Pause");
+    wave.play(region.start, region.end);
+    setTimeout(() => setPlayLabel("Play selection"), CLIP_SECONDS * 1000 + 250);
+  }, []);
+
+  const routeRunLog = useCallback((line) => {
+    const step = parseStep(line);
+    if (line.startsWith("winner_summary") || line.startsWith("producer_winner")) {
+      const winner = line.match(/\bwinner=([^ ]+)/)?.[1] || "unknown";
+      const score = line.match(/\bscore=([0-9.]+)/)?.[1] || "n/a";
+      const idx = Number(line.match(/\bstep=(\d+)/)?.[1] || 0);
+      setWinners((current) => ({ ...current, [idx]: { winner, score } }));
+      addAgentNote(`loss_${idx}`, `Winner: ${winner} (${score}).`);
+      setStatuses((current) => ({ ...current, [`loss_${idx}`]: "completed" }));
+      return;
+    }
+    if (line.startsWith("codex_done")) {
+      const agent = normalizeAgent(line.match(/\bagent=([^ ]+)/)?.[1] || "");
+      const stepId = agentStep(agent, null);
+      const id = stepId === null ? agentBase(agent) : `${agentBase(agent)}_${stepId}`;
+      setStatuses((current) => ({ ...current, [id]: "completed" }));
+      return;
+    }
+    const agentMatch = line.match(/\bagent_stage ([a-z_]+)(?: step=(\d+))?/);
+    if (agentMatch) {
+      const base = normalizeAgent(agentMatch[1]);
+      const idx = agentMatch[2] !== undefined ? Number(agentMatch[2]) : null;
+      const id = idx === null ? agentBase(base) : `${agentBase(base)}_${idx}`;
+      setStatuses((current) => ({ ...current, [id]: "running" }));
+      addAgentNote(id, "Started.");
+      return;
+    }
+    if (line.startsWith("step_complete")) {
+      const idx = parseStep(line);
+      if (idx !== null) {
+        setStatuses((current) => ({
+          ...current,
+          [`producer_${idx}`]: "completed",
+          [`loss_${idx}`]: "completed",
+          [`residual_critic_${idx}`]: "completed",
+        }));
+      }
+      return;
+    }
+    if (step !== null && line.includes("score=")) {
+      const score = line.match(/\bscore=([0-9.]+)/)?.[1];
+      if (score) addAgentNote(`loss_${step}`, `Score ${Number(score).toFixed(3)}.`);
+      return;
+    }
+    addRunNote(line);
+  }, [addAgentNote, addRunNote]);
+
+  const renderTraceArtifacts = useCallback(async (artifactList, loadedReport = null) => {
+    const traceArtifacts = artifactList.filter((artifact) => {
+      const name = artifact.name;
+      return (
+        name.startsWith("codex_") ||
+        name.startsWith("audio_diff_") ||
+        name.startsWith("producer_audio_diff_") ||
+        name.match(/^producer_reconstruction_step_\d+_.+\.wav$/) ||
+        name === "final_reconstruction.wav" ||
+        name.startsWith("recommendation_step_") ||
+        name === "recommendation_initial.json" ||
+        name === "source_profile.json" ||
+        name === "pattern_constraints.json" ||
+        name === "beat_grid.json" ||
+        name === "layer_analysis.json" ||
+        name.match(/^session_step_\d+_(codex_proposal|producer_winner|accepted)\.json$/)
+      );
+    });
+    traceArtifacts.forEach((artifact) => {
+      const pseudoPath = `/ui_runs/${artifact.url.split("/")[3]}/${artifact.name}`;
+      const role = artifact.name.startsWith("codex_")
+        ? artifact.name.includes("_prompt") ? "prompt" : "answer"
+        : artifact.name.startsWith("producer_audio_diff") ? "producer_audio_diff"
+        : artifact.name.startsWith("audio_diff") ? "audio_diff"
+        : artifact.name.match(/^producer_reconstruction_step_/) ? "producer_render"
+        : artifact.name === "final_reconstruction.wav" ? "render"
+        : artifact.name.endsWith(".wav") ? "render"
+        : artifact.name.startsWith("session") ? "session"
+        : artifact.name.startsWith("recommendation") ? "recommendation"
+        : "file";
+      let agent = artifact.name
+        .replace(/^codex_/, "")
+        .replace(/_(prompt|answer)\.txt$/, "")
+        .replace(/\.json$/, "");
+      const stepMatch = artifact.name.match(/step_(\d+)/);
+      const step = stepMatch ? Number(stepMatch[1]) : null;
+      if (role === "producer_render" && step !== null) agent = `producer_step_${String(step).padStart(2, "0")}`;
+      if (role === "audio_diff" && step !== null) agent = `loss_step_${String(step).padStart(2, "0")}`;
+      addTrace({ agent, role, path: pseudoPath, url: artifact.url, name: artifact.name, step });
+    });
+    (loadedReport?.history || []).forEach((item) => {
+      if (item.step === undefined || item.step === null || !item.winner) return;
+      const step = Number(item.step);
+      const score = Number(item.scores?.final || item.scores || 0);
+      setWinners((current) => ({ ...current, [step]: { winner: item.winner, score: score.toFixed(3) } }));
+      setStatuses((current) => ({ ...current, [`producer_${step}`]: "completed", [`loss_${step}`]: "completed", [`residual_critic_${step}`]: "completed" }));
+      const audioName = item.audio_path?.split("/").pop();
+      const diffName = item.audio_diff_path?.split("/").pop();
+      const audioArtifact = artifactList.find((artifact) => artifact.name === audioName);
+      const diffArtifact = artifactList.find((artifact) => artifact.name === diffName);
+      if (audioArtifact) addTrace({ agent: `loss_step_${String(step).padStart(2, "0")}`, role: "winner_render", step, path: `/ui_runs/${audioArtifact.url.split("/")[3]}/${audioArtifact.name}`, url: audioArtifact.url, name: audioArtifact.name });
+      if (diffArtifact) addTrace({ agent: `loss_step_${String(step).padStart(2, "0")}`, role: "winner_audio_diff", step, path: `/ui_runs/${diffArtifact.url.split("/")[3]}/${diffArtifact.name}`, url: diffArtifact.url, name: diffArtifact.name });
+    });
+  }, [addTrace]);
+
+  const attachEvents = useCallback((runId) => {
     const events = new EventSource(`/api/reconstructions/${runId}/events`);
     events.onmessage = async (event) => {
       const payload = JSON.parse(event.data);
-      if (payload.type === "trace_file") await addTraceFile(payload);
-      if (payload.type === "log") await routeRunLog(payload.line);
-      if (payload.type === "heartbeat") appendRunLog("heartbeat: reconstruction still running");
+      if (payload.type === "trace_file") addTrace(payload);
+      if (payload.type === "log") routeRunLog(payload.line);
+      if (payload.type === "heartbeat") addRunNote("Still running.");
       if (payload.type === "done") {
         events.close();
-        setStatus(payload.status);
-        startReconstruction.disabled = false;
+        setStatus(payload.status === "completed" ? "Complete" : "Failed");
         localStorage.removeItem("v1ActiveRunId");
-        appendRunLog(`run ${payload.status} with return code ${payload.returncode}`);
-        if (payload.status !== "completed") {
-          stepLogsEl.querySelectorAll(".candidate-panel.running").forEach((panel) => {
-            panel.classList.remove("running");
-            panel.classList.add("failed");
-          });
-        }
+        activeRun.current = null;
+        addRunNote(`Run ${payload.status}.`);
         const job = await api(`/api/reconstructions/${runId}`);
-        await renderTraceArtifacts(job.artifacts);
-        await renderArtifacts(job.artifacts);
-        loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
+        setArtifacts(job.artifacts || []);
+        await renderTraceArtifacts(job.artifacts || []);
+        loadRuns().catch((error) => addRunNote(error.stack || String(error)));
       }
     };
-    events.onerror = () => appendRunLog("event stream error; check server process");
-}
+    events.onerror = () => addRunNote("Event stream disconnected; refresh to reconnect.");
+    return events;
+  }, [addRunNote, addTrace, loadRuns, renderTraceArtifacts, routeRunLog]);
 
-startReconstruction.addEventListener("click", extractSelectedClip);
-
-function renderScoreboard(report) {
-  const scores = report.best_scores || {};
-  scoreboardEl.innerHTML = "";
-  [
-    "final",
-    "multi_resolution_spectral",
-    "mel_spectrogram",
-    "a_weighted_spectral",
-    "envelope",
-    "segment_envelope",
-    "late_energy_ratio",
-    "sustain_coverage",
-    "frontload_balance",
-    "band_envelope_by_time",
-    "beat_grid_mel",
-    "beat_grid_band",
-    "beat_grid_envelope",
-    "beat_grid_mid_side",
-    "pitch_chroma",
-    "f0_contour",
-    "spectral_motion",
-    "centroid_trajectory",
-    "spectral_features",
-    "transient_onset",
-    "onset_count",
-    "onset_timing",
-    "stereo_width",
-    "modulation",
-    "exact_envelope_50ms",
-    "exact_band_50ms",
-    "modulation_periodicity",
-    "modulation_rate",
-    "modulation_depth",
-    "directional_delta",
-    "transient_classification",
-    "harmonic_noise",
-    "cepstral",
-    "embedding",
-    "codec_latent",
-  ].forEach((name) => {
-    const value = Number(scores[name] || 0);
-    const item = document.createElement("div");
-    item.className = "score-card";
-    item.innerHTML = `
-      <span>${name}</span>
-      <strong>${value.toFixed(3)}</strong>
-      <div class="score-bar"><i style="width:${Math.max(0, Math.min(100, value * 100))}%"></i></div>
-    `;
-    scoreboardEl.appendChild(item);
-  });
-}
-
-async function renderArtifacts(artifacts) {
-  artifactsEl.innerHTML = "";
-  const sourceArtifact = artifacts.find((artifact) => artifact.name === "source_clip.wav");
-  const finalArtifact = artifacts.find((artifact) => artifact.name === "final_reconstruction.wav");
-  renderComparison(sourceArtifact?.url, finalArtifact?.url);
-  for (const artifact of artifacts) {
-    const item = document.createElement("div");
-    item.className = "artifact";
-    const link = document.createElement("a");
-    link.href = artifact.url;
-    link.target = "_blank";
-    link.textContent = artifact.name;
-    item.appendChild(link);
-    if (artifact.name.endsWith(".wav")) {
-      const player = document.createElement("audio");
-      player.controls = true;
-      player.src = artifact.url;
-      item.appendChild(player);
+  const startRun = useCallback(async () => {
+    if (!currentFile) return;
+    try {
+      resetRunView();
+      setStatus("Extracting");
+      const start = clipStart;
+      addRunNote(`Extracting ${currentFile} from ${start.toFixed(2)}s to ${(start + CLIP_SECONDS).toFixed(2)}s.`);
+      const extracted = await api("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference: currentFile, start, duration: CLIP_SECONDS }),
+      });
+      const clipEvents = new EventSource(`/api/clips/${extracted.clip_id}/events`);
+      clipEvents.onmessage = async (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "log") addRunNote(payload.line);
+        if (payload.type === "done") {
+          clipEvents.close();
+          if (payload.status !== "completed") {
+            setStatus("Failed");
+            addRunNote(payload.error || "Clip extraction failed.");
+            return;
+          }
+          setCurrentClip(payload.result.clip);
+          setStatus("Running");
+          addRunNote("Clip ready. Starting reconstruction.");
+          const data = await api("/api/reconstruct", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clip: payload.result.clip, steps: 5, local_trials: 0, max_layers: 5 }),
+          });
+          activeRun.current = data.run_id;
+          localStorage.setItem("v1ActiveRunId", data.run_id);
+          attachEvents(data.run_id);
+        }
+      };
+      clipEvents.onerror = () => addRunNote("Clip event stream disconnected.");
+    } catch (error) {
+      setStatus("Failed");
+      addRunNote(error.stack || String(error));
     }
-    artifactsEl.appendChild(item);
-    if (artifact.name === "reconstruction_report.json") {
-      const report = await fetch(artifact.url).then((res) => res.json());
-      renderScoreboard(report);
+  }, [addRunNote, attachEvents, clipStart, currentFile, resetRunView]);
+
+  const loadPastRun = useCallback(async (run) => {
+    resetRunView();
+    setStatus("Viewing past run");
+    setArtifacts(run.artifacts || []);
+    const reportArtifact = run.artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
+    let loadedReport = null;
+    if (reportArtifact) {
+      loadedReport = await fetch(reportArtifact.url).then((res) => res.json());
+      setReport(loadedReport);
     }
-  }
+    await renderTraceArtifacts(run.artifacts || [], loadedReport);
+    addRunNote(`Opened ${run.id}.`);
+  }, [addRunNote, renderTraceArtifacts, resetRunView]);
+
+  useEffect(() => {
+    loadFiles().catch((error) => addRunNote(error.stack || String(error)));
+    loadRuns().catch((error) => addRunNote(error.stack || String(error)));
+  }, []);
+
+  useEffect(() => {
+    if (!currentFile) return;
+    resetRunView();
+  }, [currentFile]);
+
+  useEffect(() => {
+    if (!activeRun.current) return undefined;
+    let events = null;
+    api(`/api/reconstructions/${activeRun.current}`)
+      .then(async (job) => {
+        if (job.status !== "running") {
+          localStorage.removeItem("v1ActiveRunId");
+          activeRun.current = null;
+          return;
+        }
+        setStatus("Running");
+        setArtifacts(job.artifacts || []);
+        await renderTraceArtifacts(job.artifacts || []);
+        events = attachEvents(activeRun.current);
+        addRunNote("Reconnected to active run.");
+      })
+      .catch(() => {
+        localStorage.removeItem("v1ActiveRunId");
+        activeRun.current = null;
+      });
+    return () => events?.close();
+  }, []);
+
+  const audioUrl = currentFile ? `/media/references/${encodeURIComponent(currentFile)}` : "";
+  const clipRange = `${clipStart.toFixed(2)}s - ${(clipStart + CLIP_SECONDS).toFixed(2)}s`;
+  return h("main", { className: "react-shell" },
+    h(SourceSelector, {
+      files,
+      currentFile,
+      onSelect: handleSourceEvent,
+      onWaveReady: (wave, regions) => {
+        sourceTools.current.wave = wave;
+        sourceTools.current.regions = regions;
+      },
+      audioUrl,
+      clipRange,
+      onPlayClip: playSelectedClip,
+      playLabel,
+      onRefresh: loadFiles,
+      disabled: status === "Running" || status === "Extracting",
+    }),
+    h("section", { className: "start-row" },
+      h("div", null,
+        h("h2", null, "Producer loop"),
+        h("p", null, "Analyzer runs once, then each iteration produces a session, calculates accuracy, and writes the next Critic brief.")
+      ),
+      h("button", { type: "button", className: "primary inline-primary", onClick: startRun, disabled: status === "Running" || status === "Extracting" || !currentFile }, status === "Running" ? "Running" : "Start reconstruction")
+    ),
+    h(Timeline, { traces, statuses, notes, winners, runNotes }),
+    h(Comparison, { artifacts }),
+    h(Scoreboard, { report }),
+    h(Artifacts, { artifacts, onReport: setReport }),
+    h(RunHistory, { runs, onLoad: loadPastRun, onRefresh: loadRuns })
+  );
 }
 
-playClipButton.addEventListener("click", playRegion);
-fileSelect.addEventListener("change", () => selectFile(fileSelect.value));
-refreshFiles.addEventListener("click", loadFiles);
-refreshRuns.addEventListener("click", () => {
-  loadRuns().catch((error) => appendRunLog(error.stack || String(error)));
-});
-
-Promise.all([loadFiles(), loadRuns()]).then(resumeActiveRun).catch((error) => {
-  setStatus("Error");
-  runLogEl.textContent = error.stack || String(error);
-});
+ReactDOM.createRoot(document.getElementById("v1-root")).render(h(App));

@@ -711,3 +711,308 @@ textarea {
     flex-direction: column;
   }
 }
+
+.react-shell {
+  width: min(100% - 2rem, 78rem);
+  margin: 0 auto;
+  padding: 1.2rem 0 4rem;
+}
+
+.hero-panel {
+  padding: 1.25rem 0 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.hero-main {
+  display: grid;
+  gap: 1rem;
+}
+
+.top-line,
+.source-toolbar,
+.clip-controls,
+.section-title.with-action,
+.audio-player-head,
+.agent-card-head,
+.iteration-group > summary,
+.start-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.top-line h1 {
+  max-width: none;
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4.6rem);
+  line-height: .95;
+}
+
+.run-pill {
+  min-width: 5.8rem;
+  padding: .45rem .65rem;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.run-pill.active {
+  border-color: var(--blue-4);
+  color: var(--accent);
+  background: #f7f8fc;
+}
+
+.source-toolbar {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.select-field {
+  display: grid;
+  grid-template-columns: auto minmax(14rem, 28rem);
+  align-items: center;
+  gap: .75rem;
+}
+
+.select-field span {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+}
+
+.quiet-link {
+  padding: .65rem .75rem;
+  color: var(--soft);
+  text-decoration: none;
+}
+
+.quiet-link:hover {
+  color: var(--accent);
+}
+
+.source-wave {
+  min-height: 172px;
+  padding: .5rem 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  background: white;
+}
+
+.source-native-player {
+  width: 100%;
+}
+
+.clip-controls {
+  justify-content: flex-start;
+}
+
+.clip-controls strong {
+  min-width: 9rem;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.start-row,
+.section-block {
+  margin-top: 1.8rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+
+.start-row h2,
+.section-title h2 {
+  margin-bottom: .2rem;
+}
+
+.start-row p,
+.section-title p {
+  max-width: 48rem;
+}
+
+.activity-strip {
+  display: grid;
+  gap: .35rem;
+  margin-top: 1rem;
+  padding: .8rem 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--soft);
+  font-size: .86rem;
+}
+
+.activity-strip span {
+  overflow-wrap: anywhere;
+}
+
+.iterations {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.iteration-group {
+  border-left: 2px solid var(--line);
+  padding-left: 1rem;
+}
+
+.iteration-group > summary {
+  padding: .8rem 0;
+  cursor: pointer;
+}
+
+.iteration-group > summary span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.iteration-group > summary strong {
+  color: var(--muted);
+  font-size: .9rem;
+  font-weight: 500;
+}
+
+.iteration-body {
+  display: grid;
+  gap: .7rem;
+  margin-bottom: .8rem;
+  padding-left: 1rem;
+}
+
+.agent-card {
+  padding: .75rem 0 .75rem 1rem;
+  border-left: 1px solid var(--line-soft);
+}
+
+.agent-card-head {
+  margin-bottom: .25rem;
+}
+
+.agent-card-head strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.agent-card-head p {
+  margin-top: .15rem;
+  color: var(--soft);
+  font-size: .86rem;
+}
+
+.agent-state {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+}
+
+.agent-card.running .agent-state {
+  color: var(--accent);
+}
+
+.react-trace-file {
+  margin-top: .25rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.react-trace-file summary {
+  padding: .5rem 0;
+}
+
+.react-trace-file summary span {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: .85rem;
+  color: var(--text);
+}
+
+.react-trace-file summary a {
+  font-size: .82rem;
+}
+
+.audio-player {
+  display: grid;
+  gap: .65rem;
+  margin-top: .65rem;
+}
+
+.audio-player.compact {
+  margin: .25rem 0 .75rem;
+}
+
+.audio-player-head {
+  justify-content: flex-start;
+}
+
+.audio-player-head strong {
+  color: var(--text);
+  font-size: .92rem;
+}
+
+.audio-player-head a {
+  margin-left: auto;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: .82rem;
+}
+
+.icon-button {
+  min-width: 4.4rem;
+  padding: .45rem .6rem;
+  border-color: var(--line);
+}
+
+.audio-wave {
+  min-height: 72px;
+  padding: .2rem 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  background: #fff;
+}
+
+.react-comparison {
+  margin-top: 1rem;
+}
+
+.react-comparison .comparison-item {
+  padding: 1rem;
+}
+
+.react-scoreboard .score-card {
+  min-height: 7rem;
+}
+
+.react-run-history {
+  margin-top: 1rem;
+}
+
+.react-run-history .run-card {
+  max-height: 16rem;
+  overflow: hidden;
+}
+
+.react-run-history .run-card span:not(.run-time) {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (max-width: 860px) {
+  .top-line,
+  .start-row,
+  .section-title.with-action,
+  .clip-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .source-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .select-field {
+    grid-template-columns: 1fr;
+  }
+}
