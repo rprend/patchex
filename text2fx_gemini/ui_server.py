@@ -925,29 +925,37 @@ def list_reconstruction_runs() -> list[dict]:
         if run_dir.name in seen:
             continue
         report_path = run_dir / "reconstruction_report.json"
-        if not report_path.exists() and run_dir.name not in reconstruction_jobs:
-            continue
         running_job = reconstruction_jobs.get(run_dir.name)
         if running_job and running_job.get("status") == "running":
             continue
         report = None
-        try:
-            report = json.loads(report_path.read_text())
-        except json.JSONDecodeError:
-            report = None
+        if report_path.exists():
+            try:
+                report = json.loads(report_path.read_text())
+            except (json.JSONDecodeError, FileNotFoundError):
+                report = None
+        manifest = None
+        manifest_path = run_dir / "run_manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text())
+            except (json.JSONDecodeError, FileNotFoundError):
+                manifest = None
         history = (report or {}).get("history") or []
         scores = (report or {}).get("best_scores") or {}
+        artifacts = list_artifacts(run_dir)
+        status = "completed" if report_path.exists() else (manifest or {}).get("status", "partial")
         runs.append(
             {
                 "id": run_dir.name,
-                "status": "completed",
-                "overall_mix": (((report or {}).get("analysis") or {}).get("global") or {}).get("overall_mix", ""),
+                "status": status,
+                "overall_mix": (((report or {}).get("analysis") or {}).get("global") or {}).get("overall_mix", "") or (manifest or {}).get("reference", "") or "Partial reconstruction run",
                 "final_score": scores.get("final"),
                 "mel_score": scores.get("mel_spectrogram"),
                 "envelope_score": scores.get("envelope"),
                 "stage_count": len(history),
                 "accepted_layers": len(((report or {}).get("analysis") or {}).get("layers") or []),
-                "artifacts": list_artifacts(run_dir),
+                "artifacts": artifacts,
             }
         )
     return runs
