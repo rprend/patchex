@@ -1040,7 +1040,7 @@ function App() {
       if (payload.type === "heartbeat") addRunNote("Still running.");
       if (payload.type === "done") {
         events.close();
-        setStatus(payload.status === "completed" ? "Complete" : "Failed");
+        setStatus(payload.status === "completed" ? "Complete" : payload.status === "cancelled" ? "Cancelled" : "Failed");
         localStorage.removeItem("v1ActiveRunId");
         activeRun.current = null;
         addRunNote(`Run ${payload.status}.`);
@@ -1132,6 +1132,21 @@ function App() {
     addRunNote(`Opened ${run.id}.`);
   }, [addRunNote, renderTraceArtifacts, resetRunView]);
 
+  const killRun = useCallback(async () => {
+    const runId = currentRouteRunId();
+    if (!runId) return;
+    try {
+      await api(`/api/reconstructions/${runId}/kill`, { method: "POST" });
+      setStatus("Cancelled");
+      localStorage.removeItem("v1ActiveRunId");
+      if (activeRun.current === runId) activeRun.current = null;
+      addRunNote("run killed by user");
+      loadRuns().catch((error) => addRunNote(error.stack || String(error)));
+    } catch (error) {
+      addRunNote(error.stack || String(error));
+    }
+  }, [addRunNote, loadRuns]);
+
   useEffect(() => {
     loadFiles().catch((error) => addRunNote(error.stack || String(error)));
     loadRuns()
@@ -1185,12 +1200,14 @@ function App() {
   const routeRunId = currentRouteRunId();
   const hasLoadedRun = runActive || traces.length > 0 || artifacts.length > 0 || report;
   const showRunDetail = Boolean(routeRunId);
+  const canKillRun = showRunDetail && runActive && activeRun.current === routeRunId;
   return h("main", { className: showRunDetail ? "react-shell run-detail-shell" : "react-shell" },
     showRunDetail ? h("div", { className: "run-topbar" },
       h("a", { className: "back-link", href: "/v1" },
         h(ArrowLeft, { size: 16, strokeWidth: 2 }),
         h("span", null, "Back")
-      )
+      ),
+      canKillRun ? h(Button, { type: "button", variant: "outline", className: "kill-run-button", onClick: killRun }, "Kill Run") : null
     ) : null,
     showRunDetail ? null : h(SourceSelector, {
       files,

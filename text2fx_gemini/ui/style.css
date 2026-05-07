@@ -877,6 +877,8 @@ textarea {
 .run-topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
   min-height: 2.25rem;
   margin-bottom: .5rem;
 }
@@ -892,6 +894,17 @@ textarea {
   text-decoration: none;
   font-size: .9rem;
   font-weight: 650;
+}
+
+.kill-run-button {
+  border-color: #e2b8b8;
+  color: #8f1d1d;
+}
+
+.kill-run-button:hover {
+  border-color: #c24141;
+  background: #fff5f5;
+  color: #7f1d1d;
 }
 
 .back-link:hover {

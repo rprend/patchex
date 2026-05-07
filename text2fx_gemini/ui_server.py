@@ -608,18 +608,72 @@ def start_reconstruction(reference: str, steps: int = 5, local_trials: int = 0, 
         returncode = process.wait()
         if filter_state.get("suppressed_codex"):
             pass
+        was_cancelled = reconstruction_jobs[run_id].get("status") == "cancelled"
+        status = "cancelled" if was_cancelled else ("completed" if returncode == 0 else "failed")
         reconstruction_jobs[run_id]["returncode"] = returncode
-        reconstruction_jobs[run_id]["status"] = "completed" if returncode == 0 else "failed"
-        append_run_event(out_dir, {"type": "process_done", "run_id": run_id, "status": reconstruction_jobs[run_id]["status"], "returncode": returncode})
-        if returncode != 0:
+        reconstruction_jobs[run_id]["status"] = status
+        append_run_event(out_dir, {"type": "process_done", "run_id": run_id, "status": status, "returncode": returncode})
+        if returncode != 0 and not was_cancelled:
             event_queue.put({"type": "log", "line": "last raw subprocess lines before failure:"})
             for raw_line in recent_raw_lines:
                 if raw_line:
                     event_queue.put({"type": "log", "line": raw_line[:1200] + (" ... [truncated]" if len(raw_line) > 1200 else "")})
-        event_queue.put({"type": "done", "status": reconstruction_jobs[run_id]["status"], "returncode": returncode})
+        if not was_cancelled:
+            event_queue.put({"type": "done", "status": status, "returncode": returncode})
 
     threading.Thread(target=worker, daemon=True).start()
     return run_id
+
+
+def kill_reconstruction(run_id: str) -> dict:
+    job = reconstruction_jobs.get(run_id)
+    if not job:
+        raise KeyError(run_id)
+    out_dir = Path(job["output_dir"])
+    if job.get("status") != "running":
+        return {"id": run_id, "status": job.get("status"), "killed": False}
+    pid = job.get("pid")
+    if pid:
+        try:
+            os.kill(int(pid), 15)
+        except ProcessLookupError:
+            pass
+    job["status"] = "cancelled"
+    job["returncode"] = -15
+    append_run_event(out_dir, {"type": "process_kill", "run_id": run_id, "status": "cancelled", "pid": pid})
+    try:
+        job["queue"].put({"type": "log", "line": "run killed by user"})
+        job["queue"].put({"type": "done", "status": "cancelled", "returncode": -15})
+    except Exception:
+        pass
+    return {"id": run_id, "status": "cancelled", "killed": True}
+
+
+def disk_reconstruction_status(run_dir: Path, manifest: dict | None = None) -> str:
+    if (run_dir / "reconstruction_report.json").exists():
+        return "completed"
+    if manifest is None:
+        manifest_path = run_dir / "run_manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                manifest = None
+    events_path = run_dir / "events.jsonl"
+    if events_path.exists():
+        try:
+            for line in reversed(events_path.read_text().splitlines()):
+                if not line.strip():
+                    continue
+                event = json.loads(line)
+                if event.get("type") == "process_kill":
+                    return "cancelled"
+                if event.get("type") == "process_done":
+                    return event.get("status") or "partial"
+        except (json.JSONDecodeError, OSError):
+            pass
+    status = (manifest or {}).get("status")
+    return "interrupted" if status == "running" else (status or "partial")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -686,7 +740,22 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/reconstructions/"):
                 run_id = path.split("/")[-1]
-                job = reconstruction_jobs[run_id]
+                job = reconstruction_jobs.get(run_id)
+                if not job:
+                    run_dir = (RUNS / run_id).resolve()
+                    if not run_dir.is_dir():
+                        raise KeyError(run_id)
+                    json_response(
+                        self,
+                        {
+                            "id": run_id,
+                            "status": disk_reconstruction_status(run_dir),
+                            "returncode": None,
+                            "output_dir": str(run_dir),
+                            "artifacts": list_artifacts(run_dir),
+                        },
+                    )
+                    return
                 json_response(
                     self,
                     {
@@ -766,6 +835,10 @@ class Handler(BaseHTTPRequestHandler):
                     max_layers=int(payload.get("max_layers", 5)),
                 )
                 json_response(self, {"run_id": run_id})
+                return
+            kill_match = re.match(r"^/api/reconstructions/([^/]+)/kill$", parsed.path)
+            if kill_match:
+                json_response(self, kill_reconstruction(kill_match.group(1)))
                 return
             json_response(self, {"error": "unknown endpoint"}, HTTPStatus.NOT_FOUND)
         except Exception as exc:
@@ -944,7 +1017,7 @@ def list_reconstruction_runs() -> list[dict]:
         history = (report or {}).get("history") or []
         scores = (report or {}).get("best_scores") or {}
         artifacts = list_artifacts(run_dir)
-        status = "completed" if report_path.exists() else (manifest or {}).get("status", "partial")
+        status = "running" if running_job and running_job.get("status") == "running" else disk_reconstruction_status(run_dir, manifest)
         runs.append(
             {
                 "id": run_dir.name,
