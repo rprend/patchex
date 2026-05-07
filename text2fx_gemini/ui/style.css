@@ -919,21 +919,62 @@ textarea {
 }
 
 .iteration-group {
-  border-left: 2px solid var(--line);
-  padding-left: 1rem;
+  position: relative;
+  padding-left: 1.7rem;
 }
 
-.iteration-group > summary {
+.iteration-rail {
+  position: absolute;
+  top: .4rem;
+  bottom: .4rem;
+  left: -.35rem;
+  width: .7rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: var(--line);
+  cursor: pointer;
+  transition: background .15s ease, width .15s ease;
+}
+
+.iteration-rail:hover,
+.iteration-rail:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+
+.iteration-summary {
   padding: .8rem 0;
   cursor: pointer;
+  list-style: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: start;
+  column-gap: .65rem;
 }
 
-.iteration-group > summary span {
+.iteration-summary::-webkit-details-marker {
+  display: none;
+}
+
+.iteration-summary::before {
+  content: ">";
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.iteration-group[open] > .iteration-summary::before {
+  content: "v";
+}
+
+.iteration-summary span {
   color: var(--text);
   font-weight: 700;
 }
 
-.iteration-group > summary strong {
+.iteration-summary strong {
+  justify-self: end;
   color: var(--muted);
   font-size: .9rem;
   font-weight: 500;
@@ -955,6 +996,11 @@ textarea {
   margin-bottom: .25rem;
   cursor: pointer;
   list-style: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: start;
+  column-gap: .65rem;
 }
 
 .agent-card-head::-webkit-details-marker {
@@ -983,6 +1029,7 @@ textarea {
 }
 
 .agent-state {
+  justify-self: end;
   color: var(--muted);
   font-size: .78rem;
   font-weight: 650;

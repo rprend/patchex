@@ -377,12 +377,28 @@ function AgentCard({ agent, traces, status, notes }) {
 }
 
 function IterationGroup({ step, traces, statuses, notes, winners }) {
+  const [open, setOpen] = useState(true);
   const producer = traces.filter((trace) => agentBase(trace.agent) === "producer");
   const loss = traces.filter((trace) => agentBase(trace.agent) === "loss" || trace.role?.includes("audio_diff") || trace.role?.includes("winner_render"));
   const critic = traces.filter((trace) => agentBase(trace.agent) === "residual_critic");
   const winner = winners[step];
-  return h("details", { className: "iteration-group", open: true },
-    h("summary", null,
+  return h("details", { className: "iteration-group", open },
+    h("button", {
+      type: "button",
+      className: "iteration-rail",
+      onClick: (event) => {
+        event.preventDefault();
+        setOpen((value) => !value);
+      },
+      "aria-label": `${open ? "Collapse" : "Expand"} iteration ${step + 1}`,
+    }),
+    h("summary", {
+      className: "iteration-summary",
+      onClick: (event) => {
+        event.preventDefault();
+        setOpen((value) => !value);
+      },
+    },
       h("span", null, `Iteration ${step + 1}`),
       h("strong", null, winner ? `Winner: ${friendlyWinner(winner.winner)} · ${winner.score}` : "Produce, calculate accuracy, critique")
     ),
