@@ -639,11 +639,19 @@ function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = []
     return () => { cancelled = true; };
   }, [trace?.url]);
 
-  const outputAudio = (selected.traces || []).find((item) => item.name?.endsWith(".wav") || item.role?.includes("render")) ||
+  const isRenderAudio = (item) => {
+    const name = item?.name || item?.path?.split("/").pop() || "";
+    return name !== "source_clip.wav" && (
+      item?.role?.includes("render") ||
+      name === "current_render_step_initial.wav" ||
+      name.match(/^producer_reconstruction_step_.*\.wav$/) ||
+      name.match(/^patch_render_step_.*\.wav$/) ||
+      name === "final_reconstruction.wav"
+    );
+  };
+  const outputAudio = (selected.traces || []).find(isRenderAudio) ||
     allTraces.find((item) => item.step === selected.step && (
-      item.role?.includes("winner_render") ||
-      item.role?.includes("producer_render") ||
-      item.name?.match(/^producer_reconstruction_step_.*\.wav$/)
+      isRenderAudio(item)
     ));
   return h("div", { className: "session-artifact-viewer" },
     h("div", { className: "sidebar-audio-compare" },
@@ -658,6 +666,7 @@ function SidebarDetail({ selected, detail, sourceArtifact, allTraces = [] }) {
   const trace = detail?.trace;
   const name = trace?.name || trace?.path?.split("/").pop() || "";
   const isAudio = name.endsWith(".wav");
+  const isSourceAudio = name === "source_clip.wav" || trace?.role === "source_clip";
   const isAccuracy = trace?.role?.includes("audio_diff") || name.includes("audio_diff") || name.includes("accuracy");
   const isSession = trace?.role?.includes("session") || name.includes("session_step_") || name === "session.json";
   return h("aside", { className: "workflow-sidebar" },
@@ -670,8 +679,12 @@ function SidebarDetail({ selected, detail, sourceArtifact, allTraces = [] }) {
     ),
     selected.notes?.length && !detail ? h("p", { className: "sidebar-note" }, selected.notes[selected.notes.length - 1]) : null,
     isAudio ? h("div", { className: "sidebar-audio-compare" },
-      sourceArtifact ? h(WaveformPlayer, { url: sourceArtifact.url, label: "Target source", compact: true }) : null,
-      h(WaveformPlayer, { url: trace.url, label: detail?.label || "Output audio", compact: true, color: "#657cc2" })
+      isSourceAudio
+        ? h(WaveformPlayer, { url: trace.url, label: "Target source", compact: true })
+        : [
+            sourceArtifact ? h(WaveformPlayer, { url: sourceArtifact.url, label: "Target source", compact: true, key: "source" }) : null,
+            h(WaveformPlayer, { url: trace.url, label: detail?.label || "Rendered audio", compact: true, color: "#657cc2", key: "render" }),
+          ]
     ) : isAccuracy ? h(AccuracyViewer, { trace }) : isSession ? h(SessionArtifactViewer, { trace, selected, sourceArtifact, allTraces }) : detail ? h(TextArtifactViewer, { trace }) : h(AgentActivity, { selected })
   );
 }
