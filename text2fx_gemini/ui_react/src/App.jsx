@@ -559,8 +559,214 @@ function scoreMeaning(name) {
   return "Higher is closer to the target.";
 }
 
+const SCORE_GROUPS = [
+  { title: "Timing / Automation", keys: ["exact_envelope_50ms", "exact_band_50ms", "beat_grid_envelope", "beat_grid_band", "directional_delta", "band_envelope_by_time"] },
+  { title: "Timbre", keys: ["mel_spectrogram", "multi_resolution_spectral", "a_weighted_spectral", "spectral_features", "harmonic_noise", "codec_latent"] },
+  { title: "Motion", keys: ["spectral_motion", "centroid_trajectory", "modulation", "modulation_periodicity", "modulation_rate", "modulation_depth", "transient_classification"] },
+  { title: "Pitch", keys: ["pitch_chroma", "f0_contour"] },
+  { title: "Stereo", keys: ["stereo_width", "beat_grid_mid_side"] },
+];
+
+const SCORE_LABELS = {
+  time_series_core: "Time series",
+  timbre_core: "Timbre",
+  motion_core: "Motion",
+  pitch_core: "Pitch",
+  stereo_core: "Stereo",
+  structural_penalty: "Penalty",
+};
+
+const BAND_NAMES = ["sub", "bass", "low_mid", "mid", "presence", "air"];
+
+function formatScoreKey(key) {
+  return String(key || "").replaceAll("_", " ");
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
+function scoreTone(value) {
+  if (value >= 0.85) return "good";
+  if (value >= 0.7) return "ok";
+  if (value >= 0.55) return "warn";
+  return "bad";
+}
+
+function scoreAverage(scores, keys) {
+  const values = keys.map((key) => Number(scores[key])).filter(Number.isFinite);
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function windowSeverity(row) {
+  const deltaRms = Math.abs(Number(row?.delta_rms) || 0);
+  const bands = Object.values(row?.delta_bands || {}).map((value) => Math.abs(Number(value) || 0));
+  return deltaRms + (bands.length ? Math.max(...bands) : 0);
+}
+
+function windowLocalScore(row, maxSeverity) {
+  if (!maxSeverity) return 1;
+  return clamp01(1 - windowSeverity(row) / maxSeverity);
+}
+
+function deltaColor(value, maxAbs) {
+  const delta = Number(value) || 0;
+  const strength = maxAbs ? Math.min(1, Math.abs(delta) / maxAbs) : 0;
+  if (strength < 0.08) return "rgba(77, 130, 92, .22)";
+  const alpha = 0.18 + strength * 0.66;
+  return delta > 0 ? `rgba(183, 75, 49, ${alpha})` : `rgba(43, 99, 157, ${alpha})`;
+}
+
+function ScoreBar({ value, label }) {
+  const numeric = clamp01(value);
+  return h("div", { className: `score-bar score-${scoreTone(numeric)}`, "aria-label": label },
+    h("i", { style: { width: `${numeric * 100}%` } })
+  );
+}
+
+function ScoreGroup({ title, scores, keys }) {
+  const available = keys.filter((key) => Number.isFinite(Number(scores[key])));
+  if (!available.length) return null;
+  const average = scoreAverage(scores, available);
+  return h("section", { className: "accuracy-group" },
+    h("div", { className: "accuracy-group-head" },
+      h("span", null, title),
+      h("strong", { className: `score-text-${scoreTone(average)}` }, average.toFixed(3))
+    ),
+    h(ScoreBar, { value: average, label: `${title} score` }),
+    h("div", { className: "accuracy-group-metrics" },
+      available.map((key) => {
+        const value = Number(scores[key]);
+        return h("div", { className: "accuracy-metric", key },
+          h("div", { className: "accuracy-row-head" },
+            h("span", null, formatScoreKey(key)),
+            h("strong", { className: `score-text-${scoreTone(value)}` }, value.toFixed(3))
+          ),
+          h(ScoreBar, { value, label: formatScoreKey(key) }),
+          h("p", null, scoreMeaning(key))
+        );
+      })
+    )
+  );
+}
+
+function ScoreGroupTiles({ groups }) {
+  const keys = ["time_series_core", "timbre_core", "motion_core", "pitch_core", "stereo_core", "structural_penalty"];
+  const available = keys.filter((key) => Number.isFinite(Number(groups[key])));
+  if (!available.length) return null;
+  return h("div", { className: "accuracy-core-grid" },
+    available.map((key) => {
+      const value = Number(groups[key]);
+      return h("div", { className: `accuracy-core-tile score-tile-${scoreTone(value)}`, key },
+        h("span", null, SCORE_LABELS[key] || formatScoreKey(key)),
+        h("strong", null, value.toFixed(3))
+      );
+    })
+  );
+}
+
+function AccuracySparkline({ windows, maxSeverity }) {
+  if (!windows.length) return null;
+  const width = 240;
+  const height = 52;
+  const points = windows.map((row, index) => {
+    const x = windows.length === 1 ? 0 : (index / (windows.length - 1)) * width;
+    const y = height - windowLocalScore(row, maxSeverity) * height;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return h("svg", { className: "accuracy-sparkline", viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "none", role: "img", "aria-label": "50 millisecond accuracy over time" },
+    h("line", { x1: 0, x2: width, y1: height * .3, y2: height * .3 }),
+    h("line", { x1: 0, x2: width, y1: height * .7, y2: height * .7 }),
+    h("polyline", { points })
+  );
+}
+
+function FixedWindowTimeline({ diagnostics }) {
+  const fixed = diagnostics?.fixed_50ms || {};
+  const windows = Array.isArray(fixed.windows) ? fixed.windows : [];
+  if (!windows.length) return h("div", { className: "accuracy-empty" }, "No 50ms window diagnostics were recorded for this report.");
+  const maxSeverity = Math.max(...windows.map(windowSeverity), 1e-9);
+  const maxRms = Math.max(...windows.map((row) => Math.abs(Number(row.delta_rms) || 0)), 1e-9);
+  return h("section", { className: "accuracy-timeline-panel" },
+    h("div", { className: "accuracy-section-head" },
+      h("span", null, "50ms Timeline"),
+      h("strong", null, `${windows.length} chunks`)
+    ),
+    h(AccuracySparkline, { windows, maxSeverity }),
+    h("div", { className: "accuracy-delta-strip", role: "img", "aria-label": "RMS error by 50 millisecond chunk" },
+      windows.map((row) => {
+        const delta = Number(row.delta_rms) || 0;
+        return h("i", {
+          key: row.index,
+          style: { background: deltaColor(delta, maxRms) },
+          title: `${Number(row.start || 0).toFixed(2)}-${Number(row.end || 0).toFixed(2)}s, ${delta >= 0 ? "+" : ""}${delta.toFixed(5)} RMS, worst ${row.largest_band_error || "band"}`,
+        });
+      })
+    ),
+    h("div", { className: "accuracy-legend" },
+      h("span", null, h("i", { className: "under" }), "Candidate quiet"),
+      h("span", null, h("i", { className: "match" }), "Close"),
+      h("span", null, h("i", { className: "over" }), "Candidate loud")
+    )
+  );
+}
+
+function BandHeatmap({ diagnostics }) {
+  const fixed = diagnostics?.fixed_50ms || {};
+  const windows = Array.isArray(fixed.windows) ? fixed.windows : [];
+  if (!windows.length) return null;
+  const maxBand = Math.max(...windows.flatMap((row) => BAND_NAMES.map((name) => Math.abs(Number(row?.delta_bands?.[name]) || 0))), 1e-9);
+  return h("section", { className: "accuracy-heatmap-panel" },
+    h("div", { className: "accuracy-section-head" },
+      h("span", null, "Band Error"),
+      h("strong", null, "50ms cells")
+    ),
+    h("div", { className: "accuracy-heatmap" },
+      BAND_NAMES.map((band) => h(React.Fragment, { key: band },
+        h("span", { className: "accuracy-heatmap-label" }, band.replace("_", " ")),
+        h("div", { className: "accuracy-heatmap-row" },
+          windows.map((row) => {
+            const delta = Number(row?.delta_bands?.[band]) || 0;
+            return h("i", {
+              key: `${band}-${row.index}`,
+              style: { background: deltaColor(delta, maxBand) },
+              title: `${band.replace("_", " ")} ${Number(row.start || 0).toFixed(2)}-${Number(row.end || 0).toFixed(2)}s: ${delta >= 0 ? "+" : ""}${delta.toFixed(5)}`,
+            });
+          })
+        )
+      ))
+    )
+  );
+}
+
+function WeakWindows({ diagnostics }) {
+  const fixed = diagnostics?.fixed_50ms || {};
+  const weak = Array.isArray(fixed.weak_windows) ? fixed.weak_windows.slice(0, 8) : [];
+  if (!weak.length) return null;
+  const maxSeverity = Math.max(...weak.map(windowSeverity), 1e-9);
+  return h("section", { className: "accuracy-weak-panel" },
+    h("div", { className: "accuracy-section-head" },
+      h("span", null, "Worst Windows"),
+      h("strong", null, "largest local errors")
+    ),
+    weak.map((row) => {
+      const delta = Number(row.delta_rms) || 0;
+      const severity = windowSeverity(row) / maxSeverity;
+      return h("div", { className: "accuracy-weak-row", key: row.index },
+        h("div", null,
+          h("strong", null, `${Number(row.start || 0).toFixed(2)}-${Number(row.end || 0).toFixed(2)}s`),
+          h("span", null, `${delta >= 0 ? "too loud" : "too quiet"} · ${row.largest_band_error || "band"}`)
+        ),
+        h("em", { style: { width: `${Math.max(7, severity * 100)}%` } })
+      );
+    })
+  );
+}
+
 function AccuracyViewer({ trace }) {
   const [data, setData] = useState(null);
+  const [tab, setTab] = useState("overview");
   useEffect(() => {
     if (!trace?.url) return undefined;
     let cancelled = false;
@@ -571,28 +777,57 @@ function AccuracyViewer({ trace }) {
     return () => { cancelled = true; };
   }, [trace?.url]);
   const scores = data?.scores || data?.best_scores || {};
-  const keys = Object.keys(scores).filter((key) => Number.isFinite(Number(scores[key]))).slice(0, 18);
+  const diagnostics = data?.diagnostics || {};
+  const groups = diagnostics.score_groups || {};
+  const keys = Object.keys(scores).filter((key) => Number.isFinite(Number(scores[key])) && key !== "final").slice(0, 24);
+  const finalScore = Number(scores.final || 0);
   if (!trace) return null;
   if (!data) return h("div", { className: "sidebar-loading" }, "Loading accuracy report...");
   if (data.error) return h("pre", { className: "sidebar-pre" }, data.error);
   return h("div", { className: "accuracy-viewer" },
     h("div", { className: "accuracy-summary" },
-      h("strong", null, Number(scores.final || 0).toFixed(3)),
-      h("span", null, "Final similarity")
+      h("div", null,
+        h("strong", { className: `score-text-${scoreTone(finalScore)}` }, finalScore.toFixed(3)),
+        h("span", null, "Final similarity")
+      ),
+      h("em", { className: `accuracy-verdict score-tile-${scoreTone(finalScore)}` },
+        finalScore >= 0.85 ? "Strong match" : finalScore >= 0.7 ? "Close, inspect weak areas" : finalScore >= 0.55 ? "Needs targeted repair" : "Major mismatch"
+      )
     ),
-    h("div", { className: "accuracy-bars" },
+    h(ScoreGroupTiles, { groups }),
+    h("div", { className: "accuracy-tabs" },
+      ["overview", "timeline", "bands", "raw"].map((name) => h("button", {
+        key: name,
+        type: "button",
+        className: tab === name ? "active" : "",
+        onClick: () => setTab(name),
+      }, name))
+    ),
+    tab === "overview" ? h("div", { className: "accuracy-bars" },
+      SCORE_GROUPS.map((group) => h(ScoreGroup, { key: group.title, title: group.title, scores, keys: group.keys })),
+      h(WeakWindows, { diagnostics })
+    ) : null,
+    tab === "timeline" ? h("div", { className: "accuracy-bars" },
+      h(FixedWindowTimeline, { diagnostics }),
+      h(WeakWindows, { diagnostics })
+    ) : null,
+    tab === "bands" ? h("div", { className: "accuracy-bars" },
+      h(BandHeatmap, { diagnostics }),
+      h(WeakWindows, { diagnostics })
+    ) : null,
+    tab === "raw" ? h("div", { className: "accuracy-bars" },
       keys.map((key) => {
         const value = Number(scores[key] || 0);
         return h("div", { className: "accuracy-row", key },
           h("div", { className: "accuracy-row-head" },
-            h("span", null, key.replaceAll("_", " ")),
-            h("strong", null, value.toFixed(3))
+            h("span", null, formatScoreKey(key)),
+            h("strong", { className: `score-text-${scoreTone(value)}` }, value.toFixed(3))
           ),
-          h("div", { className: "score-bar" }, h("i", { style: { width: `${Math.max(0, Math.min(100, value * 100))}%` } })),
+          h(ScoreBar, { value, label: formatScoreKey(key) }),
           h("p", null, scoreMeaning(key))
         );
       })
-    )
+    ) : null
   );
 }
 
