@@ -955,6 +955,7 @@ def run_codex_json(
             "- Your final chat message can be brief; the file is the source of truth.\n"
         )
     prompt_path.write_text(prompt)
+    print(f"codex_request agent={agent} path={prompt_path}", flush=True)
     print(f"codex_start agent={agent}", flush=True)
     print(f"codex_prompt_path {prompt_path}", flush=True)
     print(f"trace_file agent={agent} role=prompt path={prompt_path}", flush=True)
@@ -989,6 +990,7 @@ def run_codex_json(
     if returncode != 0:
         raise RuntimeError(f"Codex agent {agent} failed with return code {returncode}.")
     print(f"codex_done agent={agent} answer_path={answer_path}", flush=True)
+    print(f"codex_response agent={agent} path={answer_path}", flush=True)
     print(f"trace_file agent={agent} role=answer path={answer_path}", flush=True)
     payload_text = answer_path.read_text()
     if json_output_path is not None and json_output_path.exists() and json_output_path.read_text().strip():

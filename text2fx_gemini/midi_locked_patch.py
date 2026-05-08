@@ -776,6 +776,51 @@ def rms_shape_score(reference: np.ndarray, candidate: np.ndarray) -> float:
     return float(math.exp(-np.mean(np.abs(ref_env - cand_env)) / denom))
 
 
+def sustain_shape_diagnostics(diff: dict[str, Any]) -> dict[str, Any]:
+    fixed = diff.get("diagnostics", {}).get("fixed_50ms", {})
+    windows = fixed.get("windows") or []
+    if len(windows) < 3:
+        return {
+            "score": 1.0,
+            "largest_abs_rms_error": 0.0,
+            "pumping_events": 0,
+            "weak_windows": [],
+            "summary": "Not enough 50ms windows to judge sustained-envelope shape.",
+        }
+    ref = np.asarray([float(item.get("source_rms", 0.0)) for item in windows], dtype=np.float32)
+    cand = np.asarray([float(item.get("candidate_rms", 0.0)) for item in windows], dtype=np.float32)
+    delta = cand - ref
+    ref_scale = float(np.mean(np.abs(ref)) + 1e-8)
+    abs_error = np.abs(delta)
+    derivative_error = np.abs(np.diff(cand) - np.diff(ref))
+    sign_changes = int(np.sum(np.diff(np.signbit(delta)) != 0)) if delta.size > 1 else 0
+    large_reversals = int(np.sum(np.abs(np.diff(cand)) > max(ref_scale * 0.35, 1e-4)))
+    error_score = math.exp(-float(np.mean(abs_error)) / ref_scale)
+    derivative_score = math.exp(-float(np.mean(derivative_error)) / ref_scale) if derivative_error.size else 1.0
+    pumping_penalty = math.exp(-0.08 * float(sign_changes + large_reversals))
+    score = float(max(0.0, min(1.0, 0.55 * error_score + 0.30 * derivative_score + 0.15 * pumping_penalty)))
+    weak_windows = sorted(
+        windows,
+        key=lambda item: abs(float(item.get("candidate_rms", 0.0)) - float(item.get("source_rms", 0.0))),
+        reverse=True,
+    )[:8]
+    direction = "under" if float(np.mean(delta)) < 0 else "over"
+    return {
+        "score": score,
+        "largest_abs_rms_error": float(np.max(abs_error)),
+        "mean_abs_rms_error": float(np.mean(abs_error)),
+        "directional_reversal_count": sign_changes,
+        "large_candidate_level_jumps": large_reversals,
+        "pumping_events": sign_changes + large_reversals,
+        "dominant_error": direction,
+        "weak_windows": weak_windows,
+        "summary": (
+            f"50ms sustain shape score {score:.3f}; candidate is mostly {direction} target with "
+            f"{sign_changes + large_reversals} pumping/reversal events."
+        ),
+    }
+
+
 def spectral_centroid(audio: np.ndarray, sr: int) -> float:
     mag = stft_mag(mono(audio))
     if mag.size == 0:
@@ -810,6 +855,7 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     candidate_audio = render_session(session)
     beat_grid = estimate_beat_grid(reference_audio, sr, subdivision=4)
     global_diff = compare_audio(reference_audio, candidate_audio, sr, beat_grid)
+    sustain_shape = sustain_shape_diagnostics(global_diff)
     preservation = arrangement_preservation(arrangement, session)
     layers = {str(layer.get("id")): layer for layer in session.get("layers", [])}
     track_scores = []
@@ -849,9 +895,10 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     isolation_proxy_score = float(np.mean(proxy_values)) if proxy_values else 0.0
     patch_control_score = float(np.mean(control_values)) if control_values else 0.0
     final_loss = (
-        0.50 * (1.0 - float(global_diff["scores"]["final"]))
+        0.45 * (1.0 - float(global_diff["scores"]["final"]))
         + 0.30 * (1.0 - track_active_score)
         + 0.15 * (1.0 - patch_control_score)
+        + 0.05 * (1.0 - float(sustain_shape["score"]))
         + 0.05 * float(preservation["penalty"])
     )
     return {
@@ -862,13 +909,53 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
             "track_active_window": track_active_score,
             "track_isolation_proxy": isolation_proxy_score,
             "patch_control": patch_control_score,
+            "sustain_shape": float(sustain_shape["score"]),
             "arrangement_preservation": float(1.0 - preservation["penalty"]),
         },
         "global_mix_diff": global_diff,
+        "sustain_shape_diagnostics": sustain_shape,
         "track_scores": track_scores,
         "arrangement_preservation": preservation,
         "weakest_tracks": sorted(track_scores, key=lambda item: item["active_window_score"].get("final", 0.0))[:5],
     }
+
+
+def acceptance_gate(previous: dict[str, Any] | None, candidate: dict[str, Any]) -> dict[str, Any]:
+    if previous is None:
+        return {"accepted": True, "reasons": ["no previous best report"], "regressions": []}
+    prev_scores = previous.get("scores", {})
+    cand_scores = candidate.get("scores", {})
+    prev_final = float(prev_scores.get("final", 0.0))
+    cand_final = float(cand_scores.get("final", 0.0))
+    reasons = [f"final score {cand_final:.4f} vs previous {prev_final:.4f}"]
+    regressions = []
+
+    prev_sustain = previous.get("sustain_shape_diagnostics", {})
+    cand_sustain = candidate.get("sustain_shape_diagnostics", {})
+    prev_sustain_score = float(prev_scores.get("sustain_shape", prev_sustain.get("score", 0.0)))
+    cand_sustain_score = float(cand_scores.get("sustain_shape", cand_sustain.get("score", 0.0)))
+    if cand_sustain_score + 0.02 < prev_sustain_score:
+        regressions.append(
+            f"sustain_shape regressed from {prev_sustain_score:.4f} to {cand_sustain_score:.4f}"
+        )
+
+    prev_largest = float(prev_sustain.get("largest_abs_rms_error", 0.0))
+    cand_largest = float(cand_sustain.get("largest_abs_rms_error", 0.0))
+    if prev_largest > 0.0 and cand_largest > prev_largest * 1.20:
+        regressions.append(
+            f"largest 50ms RMS error grew from {prev_largest:.5f} to {cand_largest:.5f}"
+        )
+
+    for key, tolerance in (("track_isolation_proxy", 0.04), ("patch_control", 0.03), ("global_mix", 0.03)):
+        previous_value = float(prev_scores.get(key, 0.0))
+        candidate_value = float(cand_scores.get(key, 0.0))
+        if candidate_value + tolerance < previous_value:
+            regressions.append(f"{key} regressed from {previous_value:.4f} to {candidate_value:.4f}")
+
+    accepted = cand_final >= prev_final and not regressions
+    if regressions:
+        reasons.extend(regressions)
+    return {"accepted": accepted, "reasons": reasons, "regressions": regressions}
 
 
 def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, critic_brief_path: Path, loss_report_path: Path, operations_output_path: Path, session_output_path: Path) -> str:
@@ -896,11 +983,12 @@ Workflow:
 2. Read the current patch session and identify the exact fields you will edit.
 3. Read the composition only to understand track roles and active timing. Do not solve composition in this step.
 4. Write a short production hypothesis through `set_production_hypothesis(...)`. Phrase it as production decisions, for example: "The bass is too static and dry, so add subtle filter LFO and saturation while lowering the keys that mask it" or "The pad needs a wider saw-stack source with slower attack and longer reverb tail."
-5. Make the smallest set of high-impact patch/mix changes that follows the hypothesis and Critic briefing.
-6. Save each intended patch/mix edit by calling `save_patch_change(...)`. This is how changelog entries are created.
-7. Apply your candidate operations to create a candidate session, then run loss checks on the full clip and, when relevant, on the specific time windows or beats where the Critic says the mismatch is worst.
-8. Record every loss command you ran and the score/loss result by calling `save_loss_trial(...)`.
-9. Leave {operations_output_path} as the final patch operation file. Do not write the patch session directly.
+5. Choose one primary objective for this pass: envelope/automation, timbre/source, or space/modulation. If `exact_envelope_50ms`, `directional_delta`, `modulation`, or `sustain_shape` is among the weakest areas, make an envelope/automation-focused pass unless the Critic explicitly says a different blocker is more important.
+6. Make the smallest set of high-impact patch/mix changes that follows that one objective and the Critic briefing. Avoid broad multi-domain rewrites that make it impossible to tell which edit helped.
+7. Save each intended patch/mix edit by calling `save_patch_change(...)`. This is how changelog entries are created.
+8. Apply your candidate operations to create a candidate session, then run loss checks on the full clip and on the weakest 50ms/beat windows called out by the loss report.
+9. Record every loss command you ran and the score/loss result by calling `save_loss_trial(...)`.
+10. Leave {operations_output_path} as the final patch operation file. Do not write the patch session directly.
 
 Patch operation function interface:
 - Do not hand-write {operations_output_path} as raw JSON.
@@ -1052,6 +1140,10 @@ Decision rules:
 - Follow the Critic briefing unless the loss report clearly contradicts it.
 - Prefer high-impact production moves over tiny random parameter changes.
 - Make changes that are coherent as a production hypothesis, not isolated parameter noise.
+- For sustained locked arrangements, do not create `gain_points` that alternate high/low across 0.5s segments unless the reference segment envelope also alternates. Prefer smooth holds, ramps, or one intentional duck/recovery.
+- Reject your own candidate if it improves full score but worsens the weakest local envelope windows, `sustain_shape`, `exact_envelope_50ms`, or `directional_delta` versus the current report.
+- Treat low `f0_contour` cautiously when `pitch_chroma` is high and arrangement preservation is perfect; do not infer note or chord edits from that metric.
+- In your recorded loss trial notes, include the before/after effect on weakest components such as `harmonic_noise`, `modulation`, `exact_envelope_50ms`, `directional_delta`, `band_envelope_by_time`, `stereo_width`, and `sustain_shape` when available.
 - If you try multiple candidates, write the operations for the best one to {operations_output_path} and record the rejected trials in `loss_trials`.
 - If a targeted window improves but full-clip loss worsens, choose the version that best supports the stated production goal and explain that tradeoff in `production_notes`.
 """
@@ -1112,6 +1204,7 @@ Use all available evidence:
 - stereo/space diagnostics
 - saturation/noise diagnostics
 - arrangement preservation diagnostics
+- sustain_shape diagnostics, especially largest 50ms RMS errors and pumping/reversal counts
 - audible differences between target audio and current rendered audio
 
 Be specific. For each recommendation, name the track id, the problem, and the exact production move.
@@ -1213,6 +1306,9 @@ Drums and percussion, if present:
 Prioritization:
 - Start with the changes most likely to improve the full rendered audio.
 - Prefer high-impact track and mix changes over tiny parameter tweaks.
+- If arrangement preservation is perfect and the target is sustained, rank envelope automation before timbre when whole-clip RMS is close but 50ms/local windows are extreme.
+- When `pitch_chroma` is high but `f0_contour` is low on a dense sustained pad, describe it as a tone/source or octave-support uncertainty, not as evidence to change notes.
+- Provide one primary objective for the next Producer pass and list which edit families should be avoided in that pass.
 - If the loss report and your listening disagree, explain the disagreement and choose the more musically plausible action.
 - If the full mix does not provide enough evidence to isolate a track, say so and recommend a conservative change.
 
@@ -1240,28 +1336,31 @@ def load_codex_json_artifact(json_output_path: Path, answer_path: Path) -> dict[
 
 
 def stream_codex_exec(agent: str, prompt: str, answer_path: Path, timeout: int) -> int:
+    process = subprocess.Popen(
+        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(answer_path), "-C", str(Path.cwd()), "-"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    process.stdin.write(prompt)
+    process.stdin.close()
+    started = time.monotonic()
+    for line in process.stdout:
+        print(f"codex_log agent={agent} {line.rstrip()}", flush=True)
+        if time.monotonic() - started > timeout:
+            process.kill()
+            print(f"codex_timeout agent={agent} seconds={timeout}", flush=True)
+            return 124
     try:
-        process = subprocess.run(
-            [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(answer_path), "-C", str(Path.cwd()), "-"],
-            input=prompt,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        stdout = exc.stdout or ""
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode(errors="replace")
-        if stdout.strip():
-            for line in stdout.splitlines():
-                print(f"codex_log agent={agent} {line}", flush=True)
+        return process.wait(timeout=max(1, int(timeout - (time.monotonic() - started))))
+    except subprocess.TimeoutExpired:
+        process.kill()
         print(f"codex_timeout agent={agent} seconds={timeout}", flush=True)
         return 124
-    if process.stdout.strip():
-        for line in process.stdout.splitlines():
-            print(f"codex_log agent={agent} {line}", flush=True)
-    return process.returncode
 
 
 def recover_codex_json(agent: str, json_output_path: Path, answer_path: Path, returncode: int) -> dict[str, Any]:
@@ -1448,13 +1547,13 @@ def command_run(args: argparse.Namespace) -> int:
     full_arrangement = parse_midi(args.midi, args.role_map)
     full_arrangement_path = write_json(args.output_dir / "full_arrangement.json", full_arrangement)
     print(f"trace_file agent=analyzer role=full_arrangement path={full_arrangement_path}", flush=True)
+    reference_audio, sr = load_audio(args.reference, args.seconds)
     arrangement = slice_arrangement(full_arrangement, args.clip_start, args.seconds) if args.clip_start is not None else full_arrangement
     write_json(arrangement_path, arrangement)
     print(f"trace_file agent=analyzer role=arrangement path={arrangement_path}", flush=True)
     session = neutral_session(arrangement, args.sample_rate, args.seconds)
     write_json(current_session_path, session)
     print(f"trace_file agent=session role=current path={current_session_path}", flush=True)
-    reference_audio, sr = load_audio(args.reference, args.seconds)
     source_clip_path = args.output_dir / "source_clip.wav"
     sf.write(source_clip_path, reference_audio.T, sr)
     print(f"trace_file agent=analyzer role=source_clip path={source_clip_path}", flush=True)
@@ -1513,7 +1612,8 @@ def command_run(args: argparse.Namespace) -> int:
         render_path = args.output_dir / f"patch_render_step_{step:02d}.wav"
         sf.write(render_path, render_session(proposal).T, sr)
         print(f"trace_file agent=loss step={step} role=winner_render path={render_path}", flush=True)
-        accepted = best_report is None or report["scores"]["final"] >= best_report["scores"]["final"]
+        gate_report = acceptance_gate(best_report, report)
+        accepted = bool(gate_report["accepted"])
         if accepted:
             best_report = report
             best_session = proposal
@@ -1536,6 +1636,7 @@ def command_run(args: argparse.Namespace) -> int:
             "layers": [{"id": layer.get("id"), "role": layer.get("role")} for layer in proposal.get("layers", [])],
             "arrangement_preservation": report["arrangement_preservation"],
             "arrangement_lock_report": lock_report or {"before": report["arrangement_preservation"], "after": report["arrangement_preservation"]},
+            "acceptance_gate": gate_report,
             "critic_brief_path": str(critic_brief_path),
             "critic_brief": critic_brief,
         }

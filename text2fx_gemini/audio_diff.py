@@ -893,6 +893,10 @@ def residual_from_diff(score: AudioScore, diagnostics: dict[str, Any]) -> dict[s
         ranges = ", ".join(f"{item.get('start', 0):.2f}-{item.get('end', 0):.2f}s {item.get('largest_band_error', 'band')}" for item in weak_windows)
         missing.append(f"50ms time-series match is poor; worst windows: {ranges}")
         recommendations.append("fix the exact time-local envelope/band errors before optimizing whole-clip averages")
+        signed = [float(item.get("delta_rms", 0.0)) for item in weak_windows]
+        if signed:
+            direction = "too loud" if np.mean(signed) > 0 else "too quiet"
+            recommendations.append(f"treat these as local gain automation errors first; weak windows are mostly {direction}, not a master-gain problem")
     if score.beat_grid_mel < 0.68 or score.beat_grid_band < 0.68 or score.beat_grid_envelope < 0.68:
         grid = diagnostics.get("beat_grid", {})
         grid_scores = diagnostics.get("beat_grid_scores", {})
@@ -904,8 +908,12 @@ def residual_from_diff(score: AudioScore, diagnostics: dict[str, Any]) -> dict[s
         missing.append(f"onset contour differs: source has {ref_count} prominent onset frames, candidate has {cand_count}")
         recommendations.append("reduce unwanted retriggers or add missing attacks")
     if score.pitch_chroma < 0.65 or score.f0_contour < 0.65:
-        missing.append("pitch/chord contour appears mismatched")
-        recommendations.append("change note choices, octave support, or add missing chord tones")
+        if score.pitch_chroma > 0.95 and score.f0_contour < 0.65:
+            missing.append("f0 contour is weak even though chroma matches; dense sustained timbre or octave support may be confusing pitch tracking")
+            recommendations.append("keep notes locked and adjust source blend, octave/sub support, or harmonic density before considering chord changes")
+        else:
+            missing.append("pitch/chord contour appears mismatched")
+            recommendations.append("change note choices, octave support, or add missing chord tones")
     if score.spectral_motion < 0.7 or score.centroid_trajectory < 0.72 or score.modulation < 0.7:
         ref_start = diagnostics.get("reference_centroid_start_hz", 0.0)
         ref_end = diagnostics.get("reference_centroid_end_hz", 0.0)
@@ -921,6 +929,8 @@ def residual_from_diff(score: AudioScore, diagnostics: dict[str, Any]) -> dict[s
             f"cyclic modulation differs: source rate {ref_mod.get('rate_hz', 0.0):.2f}Hz/depth {ref_mod.get('depth', 0.0):.2f}, candidate rate {cand_mod.get('rate_hz', 0.0):.2f}Hz/depth {cand_mod.get('depth', 0.0):.2f}"
         )
         recommendations.append("use a routed LFO or smooth repeated automation for filter/gain/pan; do not replace cyclic motion with a single chop")
+        if cand_mod.get("rate_hz", 0.0) < ref_mod.get("rate_hz", 0.0) * 0.5 and cand_mod.get("depth", 0.0) > ref_mod.get("depth", 0.0) * 1.5:
+            recommendations.append("candidate modulation looks like slow pumping; flatten broad gain automation before increasing LFO depth")
     if score.transient_classification < 0.72:
         missing.append("transient shape classification differs; source modulation/attacks are being confused with candidate chops or missing pulses")
         recommendations.append("decide whether the target is cyclic LFO motion or discrete MIDI attacks, then remove the wrong type of event")
