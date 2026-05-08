@@ -1610,6 +1610,23 @@ function App() {
       if (audioArtifact) addTrace({ agent: `loss_step_${String(step).padStart(2, "0")}`, role: "winner_render", step, path: `/ui_runs/${audioArtifact.url.split("/")[3]}/${audioArtifact.name}`, url: audioArtifact.url, name: audioArtifact.name });
       if (diffArtifact) addTrace({ agent: `loss_step_${String(step).padStart(2, "0")}`, role: "winner_audio_diff", step, path: `/ui_runs/${diffArtifact.url.split("/")[3]}/${diffArtifact.name}`, url: diffArtifact.url, name: diffArtifact.name });
     });
+    await Promise.all(traceArtifacts.map(async (artifact) => {
+      const name = artifact.name || "";
+      const isAccuracy = name.startsWith("patch_report_step_") || name.startsWith("audio_diff_") || name.startsWith("producer_audio_diff_");
+      const stepMatch = name.match(/step_(\d+)/);
+      if (!isAccuracy || !stepMatch) return;
+      const step = Number(stepMatch[1]);
+      try {
+        const json = await fetch(artifact.url).then((res) => res.json());
+        const payload = accuracyPayload(json);
+        const score = Number(payload.scores?.final);
+        if (!Number.isFinite(score)) return;
+        setWinners((current) => current[step]?.score ? current : { ...current, [step]: { winner: name.replace(/\.json$/, ""), score: score.toFixed(3) } });
+        setStatuses((current) => ({ ...current, [`loss_${step}`]: "completed" }));
+      } catch {
+        // The graph can still open the report even if score hydration fails.
+      }
+    }));
   }, [addTrace]);
 
   const attachEvents = useCallback((runId) => {
