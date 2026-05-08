@@ -1,0 +1,7090 @@
+{
+  "song": "between_the_buttons",
+  "method": "section-median transient warp",
+  "audio_transient_count": 480,
+  "midi_transient_cluster_count": 785,
+  "matched_count": 516,
+  "anchors": [
+    {
+      "time": 0.0,
+      "offset_seconds": 0.0
+    },
+    {
+      "time": 5.0,
+      "offset_seconds": 0.07797333333333345
+    },
+    {
+      "time": 15.0,
+      "offset_seconds": -0.007226666666666937
+    },
+    {
+      "time": 25.0,
+      "offset_seconds": -0.013626666666665344
+    },
+    {
+      "time": 35.0,
+      "offset_seconds": -0.07533333333333125
+    },
+    {
+      "time": 45.0,
+      "offset_seconds": -0.13423999999999836
+    },
+    {
+      "time": 65.0,
+      "offset_seconds": -0.14501333333333832
+    },
+    {
+      "time": 75.0,
+      "offset_seconds": -0.3323733333333365
+    },
+    {
+      "time": 85.0,
+      "offset_seconds": -0.09045333333332906
+    },
+    {
+      "time": 95.0,
+      "offset_seconds": 0.0341933333333273
+    },
+    {
+      "time": 135.0,
+      "offset_seconds": -0.19630666666665775
+    },
+    {
+      "time": 145.0,
+      "offset_seconds": -0.03624000000000649
+    },
+    {
+      "time": 155.0,
+      "offset_seconds": 0.13602666666665186
+    },
+    {
+      "time": 165.0,
+      "offset_seconds": 0.23324666666665905
+    },
+    {
+      "time": 185.0,
+      "offset_seconds": 0.043995000000023765
+    },
+    {
+      "time": 205.0,
+      "offset_seconds": 0.15093999999999141
+    },
+    {
+      "time": 225.0,
+      "offset_seconds": -0.0676516666666771
+    },
+    {
+      "time": 245.0,
+      "offset_seconds": -0.030613333333306514
+    },
+    {
+      "time": 265.0,
+      "offset_seconds": -0.054020000000008395
+    },
+    {
+      "time": 314.92032,
+      "offset_seconds": -0.054020000000008395
+    }
+  ],
+  "matches": [
+    {
+      "midi_time": 0.0,
+      "audio_time": 0.016,
+      "offset_seconds": 0.016,
+      "midi_count": 6,
+      "midi_strength": 2.551182,
+      "audio_strength": 0.5010458178367446,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 2.53968,
+      "audio_time": 2.624,
+      "offset_seconds": 0.08431999999999995,
+      "midi_count": 6,
+      "midi_strength": 2.551182,
+      "audio_strength": 0.15922928962714908,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 5.07936,
+      "audio_time": 5.157333333333334,
+      "offset_seconds": 0.07797333333333345,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.12514022664616747,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 7.61904,
+      "audio_time": 7.474666666666667,
+      "offset_seconds": -0.14437333333333324,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.11655392731042649,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 10.15872,
+      "audio_time": 10.184,
+      "offset_seconds": 0.025279999999998637,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.1495861599789231,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 12.6984,
+      "audio_time": 12.658666666666667,
+      "offset_seconds": -0.03973333333333251,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.1662715658578301,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 20.31744,
+      "audio_time": 20.741333333333333,
+      "offset_seconds": 0.4238933333333321,
+      "midi_count": 6,
+      "midi_strength": 2.551182,
+      "audio_strength": 0.1029044592872324,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 22.85712,
+      "audio_time": 22.834666666666667,
+      "offset_seconds": -0.022453333333331216,
+      "midi_count": 6,
+      "midi_strength": 2.551182,
+      "audio_strength": 0.13607183612297225,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 25.3968,
+      "audio_time": 25.392,
+      "offset_seconds": -0.004799999999999471,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.1428024387171826,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 27.93648,
+      "audio_time": 27.770666666666667,
+      "offset_seconds": -0.16581333333333248,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.11689073065986642,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 30.47616,
+      "audio_time": 30.397333333333332,
+      "offset_seconds": -0.07882666666666793,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.1402788390046992,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 33.01584,
+      "audio_time": 32.944,
+      "offset_seconds": -0.07183999999999457,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.14344494860867693,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 35.55552,
+      "audio_time": 35.408,
+      "offset_seconds": -0.1475200000000001,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.11693377717648393,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 38.0952,
+      "audio_time": 37.976,
+      "offset_seconds": -0.1191999999999993,
+      "midi_count": 8,
+      "midi_strength": 3.4015759999999995,
+      "audio_strength": 0.11267520674809213,
+      "tracks": [
+        "electric_piano_1",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 40.63488,
+      "audio_time": 40.64,
+      "offset_seconds": 0.005119999999998015,
+      "midi_count": 9,
+      "midi_strength": 4.039371,
+      "audio_strength": 0.12351643181732835,
+      "tracks": [
+        "electric_piano_1",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 43.17456,
+      "audio_time": 42.944,
+      "offset_seconds": -0.230559999999997,
+      "midi_count": 9,
+      "midi_strength": 4.11811,
+      "audio_strength": 0.18429475026711323,
+      "tracks": [
+        "electric_piano_1",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 45.714240000000004,
+      "audio_time": 45.394666666666666,
+      "offset_seconds": -0.31957333333333793,
+      "midi_count": 11,
+      "midi_strength": 5.023623,
+      "audio_strength": 0.13154136396304772,
+      "tracks": [
+        "electric_piano_1",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 48.25392,
+      "audio_time": 48.216,
+      "offset_seconds": -0.03791999999999973,
+      "midi_count": 11,
+      "midi_strength": 5.314963,
+      "audio_strength": 0.13533368466217874,
+      "tracks": [
+        "electric_piano_1",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 50.79359999999999,
+      "audio_time": 50.712,
+      "offset_seconds": -0.08159999999998746,
+      "midi_count": 11,
+      "midi_strength": 5.385827999999999,
+      "audio_strength": 0.105426442347743,
+      "tracks": [
+        "electric_piano_1",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 53.333279999999995,
+      "audio_time": 53.45066666666666,
+      "offset_seconds": 0.1173866666666683,
+      "midi_count": 11,
+      "midi_strength": 5.5275609999999995,
+      "audio_strength": 0.10573049660115943,
+      "tracks": [
+        "electric_piano_1",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 55.872960000000006,
+      "audio_time": 55.970666666666666,
+      "offset_seconds": 0.09770666666666017,
+      "midi_count": 11,
+      "midi_strength": 5.5275609999999995,
+      "audio_strength": 0.11531273949006425,
+      "tracks": [
+        "electric_piano_1",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 58.41264,
+      "audio_time": 58.096,
+      "offset_seconds": -0.3166400000000067,
+      "midi_count": 11,
+      "midi_strength": 5.716537,
+      "audio_strength": 0.1420262878740463,
+      "tracks": [
+        "electric_piano_1",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 63.49199999999999,
+      "audio_time": 63.14933333333333,
+      "offset_seconds": -0.3426666666666591,
+      "midi_count": 11,
+      "midi_strength": 6.362205,
+      "audio_strength": 0.12001454806712869,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 63.80946,
+      "audio_time": 63.14933333333333,
+      "offset_seconds": -0.6601266666666703,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.12001454806712869,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 66.03168000000002,
+      "audio_time": 65.73066666666666,
+      "offset_seconds": -0.30101333333335845,
+      "midi_count": 13,
+      "midi_strength": 7.181104,
+      "audio_strength": 0.10603291996460656,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 66.34914,
+      "audio_time": 66.352,
+      "offset_seconds": 0.0028599999999983083,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.11568806314241004,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 68.57136000000001,
+      "audio_time": 68.624,
+      "offset_seconds": 0.05263999999998248,
+      "midi_count": 13,
+      "midi_strength": 7.385829,
+      "audio_strength": 0.12850396305820178,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 68.88882,
+      "audio_time": 68.808,
+      "offset_seconds": -0.08081999999998857,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.10398404637188889,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 71.11104,
+      "audio_time": 70.77866666666667,
+      "offset_seconds": -0.3323733333333365,
+      "midi_count": 13,
+      "midi_strength": 7.307088,
+      "audio_strength": 0.12082437221294985,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 71.4285,
+      "audio_time": 70.77866666666667,
+      "offset_seconds": -0.6498333333333335,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.12082437221294985,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 73.65071999999999,
+      "audio_time": 73.264,
+      "offset_seconds": -0.38671999999999684,
+      "midi_count": 13,
+      "midi_strength": 7.425199,
+      "audio_strength": 0.11751177757603957,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 73.96818,
+      "audio_time": 74.12266666666666,
+      "offset_seconds": 0.15448666666665645,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.12163740181436083,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 76.19039999999998,
+      "audio_time": 76.44,
+      "offset_seconds": 0.24960000000001514,
+      "midi_count": 13,
+      "midi_strength": 7.346459,
+      "audio_strength": 0.11626341596049204,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 76.50786,
+      "audio_time": 76.44,
+      "offset_seconds": -0.06785999999999603,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.11626341596049204,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 78.73008000000002,
+      "audio_time": 79.22666666666667,
+      "offset_seconds": 0.4965866666666585,
+      "midi_count": 13,
+      "midi_strength": 7.440947,
+      "audio_strength": 0.11191197713769437,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 79.04754,
+      "audio_time": 79.22666666666667,
+      "offset_seconds": 0.17912666666667576,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.11191197713769437,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 81.26976,
+      "audio_time": 80.90666666666667,
+      "offset_seconds": -0.3630933333333388,
+      "midi_count": 11,
+      "midi_strength": 6.433071999999999,
+      "audio_strength": 0.12943616095431734,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 81.58722,
+      "audio_time": 80.90666666666667,
+      "offset_seconds": -0.6805533333333358,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.12943616095431734,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 86.34912,
+      "audio_time": 86.25866666666667,
+      "offset_seconds": -0.09045333333332906,
+      "midi_count": 13,
+      "midi_strength": 7.181104,
+      "audio_strength": 0.14997754863102375,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 86.66658,
+      "audio_time": 86.688,
+      "offset_seconds": 0.021420000000006212,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.13464357571648797,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 88.88879999999997,
+      "audio_time": 89.17066666666666,
+      "offset_seconds": 0.28186666666668714,
+      "midi_count": 13,
+      "midi_strength": 7.385829,
+      "audio_strength": 0.10505264111697056,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 89.20626,
+      "audio_time": 89.17066666666666,
+      "offset_seconds": -0.03559333333333825,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.10505264111697056,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 91.42848000000001,
+      "audio_time": 91.67733333333334,
+      "offset_seconds": 0.24885333333332937,
+      "midi_count": 13,
+      "midi_strength": 7.307088,
+      "audio_strength": 0.11443905598104094,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 91.74594,
+      "audio_time": 91.67733333333334,
+      "offset_seconds": -0.06860666666666759,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.11443905598104094,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 93.96815999999998,
+      "audio_time": 94.336,
+      "offset_seconds": 0.36784000000001527,
+      "midi_count": 13,
+      "midi_strength": 7.425199,
+      "audio_strength": 0.10562561085939945,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 94.28562,
+      "audio_time": 94.336,
+      "offset_seconds": 0.05038000000000409,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.10562561085939945,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 96.50784,
+      "audio_time": 96.63733333333333,
+      "offset_seconds": 0.12949333333332902,
+      "midi_count": 13,
+      "midi_strength": 7.346459,
+      "audio_strength": 0.1099386671891395,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 96.82530000000001,
+      "audio_time": 96.86933333333333,
+      "offset_seconds": 0.04403333333331716,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.13216972291392623,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 99.04752,
+      "audio_time": 99.0,
+      "offset_seconds": -0.04752000000000578,
+      "midi_count": 13,
+      "midi_strength": 7.440947,
+      "audio_strength": 0.1196266749392787,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 99.36498,
+      "audio_time": 99.38933333333334,
+      "offset_seconds": 0.024353333333337446,
+      "midi_count": 3,
+      "midi_strength": 1.716535,
+      "audio_strength": 0.12012331872796288,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 104.12688,
+      "audio_time": 104.27733333333333,
+      "offset_seconds": 0.15045333333333133,
+      "midi_count": 10,
+      "midi_strength": 5.881891,
+      "audio_strength": 0.1071645302073257,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 106.66656,
+      "audio_time": 106.68,
+      "offset_seconds": 0.013440000000002783,
+      "midi_count": 12,
+      "midi_strength": 6.614175,
+      "audio_strength": 0.10641852688102842,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 109.20624,
+      "audio_time": 109.096,
+      "offset_seconds": -0.11023999999999035,
+      "midi_count": 12,
+      "midi_strength": 6.6535459999999995,
+      "audio_strength": 0.1245113285388617,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 111.74592000000001,
+      "audio_time": 111.872,
+      "offset_seconds": 0.12607999999998754,
+      "midi_count": 12,
+      "midi_strength": 6.6614189999999995,
+      "audio_strength": 0.11042181908859756,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 114.28559999999999,
+      "audio_time": 114.336,
+      "offset_seconds": 0.050400000000010436,
+      "midi_count": 12,
+      "midi_strength": 6.771656,
+      "audio_strength": 0.1199044744646697,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 116.82528,
+      "audio_time": 116.77066666666667,
+      "offset_seconds": -0.054613333333335845,
+      "midi_count": 12,
+      "midi_strength": 6.716538,
+      "audio_strength": 0.11035924845435016,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 119.36495999999997,
+      "audio_time": 119.344,
+      "offset_seconds": -0.02095999999997389,
+      "midi_count": 11,
+      "midi_strength": 5.929136,
+      "audio_strength": 0.12560193816835402,
+      "tracks": [
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings"
+      ]
+    },
+    {
+      "midi_time": 129.52368,
+      "audio_time": 129.46933333333334,
+      "offset_seconds": -0.05434666666667454,
+      "midi_count": 12,
+      "midi_strength": 7.4488199999999996,
+      "audio_strength": 0.1125396950841476,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 130.1586,
+      "audio_time": 130.00533333333334,
+      "offset_seconds": -0.1532666666666671,
+      "midi_count": 4,
+      "midi_strength": 3.173229,
+      "audio_strength": 0.107120620707692,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 130.79352,
+      "audio_time": 131.05333333333334,
+      "offset_seconds": 0.2598133333333408,
+      "midi_count": 4,
+      "midi_strength": 3.173229,
+      "audio_strength": 0.12410247042322434,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 131.42844,
+      "audio_time": 131.36533333333333,
+      "offset_seconds": -0.06310666666666975,
+      "midi_count": 4,
+      "midi_strength": 3.220473,
+      "audio_strength": 0.1113454589848109,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 132.06336000000002,
+      "audio_time": 131.85066666666665,
+      "offset_seconds": -0.2126933333333625,
+      "midi_count": 12,
+      "midi_strength": 7.440946,
+      "audio_strength": 0.11820828725222068,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 132.69828,
+      "audio_time": 132.50933333333333,
+      "offset_seconds": -0.18894666666668058,
+      "midi_count": 4,
+      "midi_strength": 3.1811030000000002,
+      "audio_strength": 0.14666582479935358,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 133.3332,
+      "audio_time": 133.13866666666667,
+      "offset_seconds": -0.19453333333333944,
+      "midi_count": 4,
+      "midi_strength": 3.0,
+      "audio_strength": 0.15003810700450645,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 133.96812,
+      "audio_time": 133.76533333333333,
+      "offset_seconds": -0.20278666666666822,
+      "midi_count": 4,
+      "midi_strength": 3.0944890000000003,
+      "audio_strength": 0.12094839686252944,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 134.60304,
+      "audio_time": 134.83466666666666,
+      "offset_seconds": 0.23162666666667064,
+      "midi_count": 14,
+      "midi_strength": 8.29134,
+      "audio_strength": 0.10572371415810305,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 135.23796,
+      "audio_time": 135.46666666666667,
+      "offset_seconds": 0.2287066666666817,
+      "midi_count": 4,
+      "midi_strength": 3.110237,
+      "audio_strength": 0.11003370915130006,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 135.87288,
+      "audio_time": 135.46666666666667,
+      "offset_seconds": -0.40621333333334064,
+      "midi_count": 4,
+      "midi_strength": 3.070867,
+      "audio_strength": 0.11003370915130006,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 136.5078,
+      "audio_time": 136.296,
+      "offset_seconds": -0.21180000000001087,
+      "midi_count": 4,
+      "midi_strength": 2.992127,
+      "audio_strength": 0.1052506784813424,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 137.14272000000003,
+      "audio_time": 136.93066666666667,
+      "offset_seconds": -0.2120533333333583,
+      "midi_count": 14,
+      "midi_strength": 8.464569,
+      "audio_strength": 0.12584874152739473,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 137.77764,
+      "audio_time": 137.58133333333333,
+      "offset_seconds": -0.19630666666665775,
+      "midi_count": 4,
+      "midi_strength": 3.2519690000000003,
+      "audio_strength": 0.13293255909438578,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 138.41256,
+      "audio_time": 138.184,
+      "offset_seconds": -0.22856000000001586,
+      "midi_count": 4,
+      "midi_strength": 3.1574809999999998,
+      "audio_strength": 0.14055795904718524,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 139.04748,
+      "audio_time": 139.25333333333333,
+      "offset_seconds": 0.205853333333323,
+      "midi_count": 4,
+      "midi_strength": 3.267717,
+      "audio_strength": 0.11747269762465133,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 139.68239999999997,
+      "audio_time": 139.73066666666668,
+      "offset_seconds": 0.04826666666670576,
+      "midi_count": 14,
+      "midi_strength": 8.291339999999998,
+      "audio_strength": 0.11968612293887163,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 140.31732,
+      "audio_time": 140.36533333333333,
+      "offset_seconds": 0.04801333333332991,
+      "midi_count": 4,
+      "midi_strength": 3.149607,
+      "audio_strength": 0.12492936491995398,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 140.95224,
+      "audio_time": 141.152,
+      "offset_seconds": 0.19975999999999772,
+      "midi_count": 4,
+      "midi_strength": 3.110237,
+      "audio_strength": 0.10235791072557592,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 141.58716,
+      "audio_time": 141.46666666666667,
+      "offset_seconds": -0.12049333333334289,
+      "midi_count": 4,
+      "midi_strength": 3.062993,
+      "audio_strength": 0.13144908257138058,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 142.22208,
+      "audio_time": 142.41066666666666,
+      "offset_seconds": 0.18858666666665158,
+      "midi_count": 14,
+      "midi_strength": 8.425199,
+      "audio_strength": 0.10992140477409723,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 142.857,
+      "audio_time": 142.616,
+      "offset_seconds": -0.24099999999998545,
+      "midi_count": 4,
+      "midi_strength": 3.259843,
+      "audio_strength": 0.1461443453424477,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 143.49192,
+      "audio_time": 143.68,
+      "offset_seconds": 0.18808000000001357,
+      "midi_count": 4,
+      "midi_strength": 3.125985,
+      "audio_strength": 0.11290309572657188,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 144.12684,
+      "audio_time": 143.83733333333333,
+      "offset_seconds": -0.2895066666666537,
+      "midi_count": 4,
+      "midi_strength": 3.062992,
+      "audio_strength": 0.12343059557100708,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 144.76176000000004,
+      "audio_time": 144.504,
+      "offset_seconds": -0.2577600000000473,
+      "midi_count": 14,
+      "midi_strength": 8.377955,
+      "audio_strength": 0.10282767513660757,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 146.0316,
+      "audio_time": 146.20266666666666,
+      "offset_seconds": 0.17106666666666115,
+      "midi_count": 4,
+      "midi_strength": 3.1102369999999997,
+      "audio_strength": 0.11651402135790707,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 146.66652,
+      "audio_time": 146.83466666666666,
+      "offset_seconds": 0.16814666666667222,
+      "midi_count": 4,
+      "midi_strength": 3.062992,
+      "audio_strength": 0.14360715749805966,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 147.30143999999999,
+      "audio_time": 147.03466666666668,
+      "offset_seconds": -0.26677333333330466,
+      "midi_count": 14,
+      "midi_strength": 8.385829,
+      "audio_strength": 0.14206285161468477,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 147.93636,
+      "audio_time": 147.66133333333335,
+      "offset_seconds": -0.27502666666666187,
+      "midi_count": 4,
+      "midi_strength": 3.236221,
+      "audio_strength": 0.12986983942783428,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 148.57128,
+      "audio_time": 148.31466666666665,
+      "offset_seconds": -0.25661333333334824,
+      "midi_count": 5,
+      "midi_strength": 3.2755900000000002,
+      "audio_strength": 0.11508726857400163,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 148.73001,
+      "audio_time": 148.31466666666665,
+      "offset_seconds": -0.4153433333333396,
+      "midi_count": 3,
+      "midi_strength": 1.307087,
+      "audio_strength": 0.11508726857400163,
+      "tracks": [
+        "drums",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 148.88874,
+      "audio_time": 149.35733333333334,
+      "offset_seconds": 0.468593333333331,
+      "midi_count": 3,
+      "midi_strength": 2.055119,
+      "audio_strength": 0.1644975666840543,
+      "tracks": [
+        "drums",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 149.04747,
+      "audio_time": 149.35733333333334,
+      "offset_seconds": 0.3098633333333396,
+      "midi_count": 3,
+      "midi_strength": 1.708662,
+      "audio_strength": 0.1644975666840543,
+      "tracks": [
+        "drums",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 149.2062,
+      "audio_time": 149.35733333333334,
+      "offset_seconds": 0.15113333333334822,
+      "midi_count": 3,
+      "midi_strength": 2.15748,
+      "audio_strength": 0.1644975666840543,
+      "tracks": [
+        "drums"
+      ]
+    },
+    {
+      "midi_time": 149.84112000000002,
+      "audio_time": 149.99466666666666,
+      "offset_seconds": 0.1535466666666423,
+      "midi_count": 12,
+      "midi_strength": 7.4488199999999996,
+      "audio_strength": 0.1042611796502246,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 150.47604,
+      "audio_time": 150.63466666666667,
+      "offset_seconds": 0.15862666666666314,
+      "midi_count": 5,
+      "midi_strength": 4.173229,
+      "audio_strength": 0.10827278256059575,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 151.11096,
+      "audio_time": 151.25333333333333,
+      "offset_seconds": 0.14237333333332458,
+      "midi_count": 4,
+      "midi_strength": 3.173229,
+      "audio_strength": 0.14299022060399358,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 151.74588,
+      "audio_time": 151.89066666666668,
+      "offset_seconds": 0.1447866666666755,
+      "midi_count": 5,
+      "midi_strength": 4.220473,
+      "audio_strength": 0.1155967335973178,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 152.38079999999997,
+      "audio_time": 152.05333333333334,
+      "offset_seconds": -0.3274666666666235,
+      "midi_count": 12,
+      "midi_strength": 7.440946,
+      "audio_strength": 0.10622794277530945,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 153.01572,
+      "audio_time": 152.71466666666666,
+      "offset_seconds": -0.3010533333333285,
+      "midi_count": 5,
+      "midi_strength": 4.181103,
+      "audio_strength": 0.11610847135401173,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 153.65064,
+      "audio_time": 153.34133333333332,
+      "offset_seconds": -0.3093066666666857,
+      "midi_count": 4,
+      "midi_strength": 3.0,
+      "audio_strength": 0.11986549948971685,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 154.28556,
+      "audio_time": 154.00266666666667,
+      "offset_seconds": -0.2828933333333339,
+      "midi_count": 5,
+      "midi_strength": 4.094489,
+      "audio_strength": 0.13937484234675243,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 154.92048,
+      "audio_time": 155.216,
+      "offset_seconds": 0.29552000000001044,
+      "midi_count": 14,
+      "midi_strength": 8.29134,
+      "audio_strength": 0.11265793442039435,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 155.5554,
+      "audio_time": 155.848,
+      "offset_seconds": 0.2926000000000215,
+      "midi_count": 5,
+      "midi_strength": 4.110237,
+      "audio_strength": 0.11770509425748431,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 156.19032,
+      "audio_time": 156.32,
+      "offset_seconds": 0.12967999999997915,
+      "midi_count": 4,
+      "midi_strength": 3.070867,
+      "audio_strength": 0.12359309063837687,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 156.82524,
+      "audio_time": 157.13066666666666,
+      "offset_seconds": 0.30542666666664786,
+      "midi_count": 5,
+      "midi_strength": 3.992127,
+      "audio_strength": 0.1326963991529691,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 157.46016000000003,
+      "audio_time": 157.568,
+      "offset_seconds": 0.10783999999998173,
+      "midi_count": 14,
+      "midi_strength": 8.464569,
+      "audio_strength": 0.10718541667510435,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 158.09508,
+      "audio_time": 158.2,
+      "offset_seconds": 0.1049199999999928,
+      "midi_count": 5,
+      "midi_strength": 4.251969000000001,
+      "audio_strength": 0.1073818624247484,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 158.73,
+      "audio_time": 159.01333333333332,
+      "offset_seconds": 0.28333333333333144,
+      "midi_count": 4,
+      "midi_strength": 3.1574809999999998,
+      "audio_strength": 0.1261040901101175,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 159.36492,
+      "audio_time": 159.46933333333334,
+      "offset_seconds": 0.10441333333332636,
+      "midi_count": 5,
+      "midi_strength": 4.267717,
+      "audio_strength": 0.10130095872993015,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 159.99983999999998,
+      "audio_time": 159.78133333333332,
+      "offset_seconds": -0.21850666666665575,
+      "midi_count": 14,
+      "midi_strength": 8.291339999999998,
+      "audio_strength": 0.12125958688145579,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 160.63476,
+      "audio_time": 160.57066666666665,
+      "offset_seconds": -0.06409333333334644,
+      "midi_count": 5,
+      "midi_strength": 4.149607,
+      "audio_strength": 0.14186822030719898,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 161.26968,
+      "audio_time": 161.36,
+      "offset_seconds": 0.09032000000001972,
+      "midi_count": 4,
+      "midi_strength": 3.110237,
+      "audio_strength": 0.12187235066901278,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 161.9046,
+      "audio_time": 161.99466666666666,
+      "offset_seconds": 0.09006666666667229,
+      "midi_count": 5,
+      "midi_strength": 4.0629930000000005,
+      "audio_strength": 0.13897574907212146,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 162.53952,
+      "audio_time": 162.784,
+      "offset_seconds": 0.2444799999999816,
+      "midi_count": 14,
+      "midi_strength": 8.425199,
+      "audio_strength": 0.12162865623321852,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 163.17444,
+      "audio_time": 163.264,
+      "offset_seconds": 0.08956000000000586,
+      "midi_count": 5,
+      "midi_strength": 4.259843,
+      "audio_strength": 0.10690907269593429,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 163.80936,
+      "audio_time": 164.06933333333333,
+      "offset_seconds": 0.2599733333333347,
+      "midi_count": 4,
+      "midi_strength": 3.125985,
+      "audio_strength": 0.15653455938649372,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 164.44428,
+      "audio_time": 164.51733333333334,
+      "offset_seconds": 0.07305333333334829,
+      "midi_count": 5,
+      "midi_strength": 4.0629919999999995,
+      "audio_strength": 0.10685929134147318,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 165.07919999999996,
+      "audio_time": 165.14666666666668,
+      "offset_seconds": 0.06746666666671786,
+      "midi_count": 14,
+      "midi_strength": 8.377955,
+      "audio_strength": 0.10234231060161252,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 165.71412,
+      "audio_time": 165.952,
+      "offset_seconds": 0.23787999999998988,
+      "midi_count": 5,
+      "midi_strength": 3.968504,
+      "audio_strength": 0.1250631777339776,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 166.34904,
+      "audio_time": 166.424,
+      "offset_seconds": 0.07496000000000436,
+      "midi_count": 4,
+      "midi_strength": 3.1102369999999997,
+      "audio_strength": 0.10819360652096999,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 166.98396,
+      "audio_time": 167.23733333333334,
+      "offset_seconds": 0.253373333333343,
+      "midi_count": 5,
+      "midi_strength": 4.0629919999999995,
+      "audio_strength": 0.12175158056240402,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 167.61888,
+      "audio_time": 167.89066666666668,
+      "offset_seconds": 0.27178666666668505,
+      "midi_count": 14,
+      "midi_strength": 8.385829,
+      "audio_strength": 0.12516328822072584,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 168.2538,
+      "audio_time": 168.30666666666667,
+      "offset_seconds": 0.05286666666665951,
+      "midi_count": 5,
+      "midi_strength": 4.2362210000000005,
+      "audio_strength": 0.10444839339929922,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 168.88872,
+      "audio_time": 169.11733333333333,
+      "offset_seconds": 0.22861333333332823,
+      "midi_count": 4,
+      "midi_strength": 3.1023620000000003,
+      "audio_strength": 0.13187596710770597,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 169.52364,
+      "audio_time": 169.11733333333333,
+      "offset_seconds": -0.4063066666666657,
+      "midi_count": 5,
+      "midi_strength": 4.086614,
+      "audio_strength": 0.13187596710770597,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 170.79347999999996,
+      "audio_time": 171.472,
+      "offset_seconds": 0.6785200000000486,
+      "midi_count": 3,
+      "midi_strength": 1.9685039999999998,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 170.95221,
+      "audio_time": 171.472,
+      "offset_seconds": 0.5197900000000004,
+      "midi_count": 3,
+      "midi_strength": 1.9921259999999998,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 171.11094,
+      "audio_time": 171.472,
+      "offset_seconds": 0.36106000000000904,
+      "midi_count": 3,
+      "midi_strength": 2.409449,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 171.26967,
+      "audio_time": 171.472,
+      "offset_seconds": 0.20233000000001766,
+      "midi_count": 3,
+      "midi_strength": 2.220472,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 171.4284,
+      "audio_time": 171.472,
+      "offset_seconds": 0.04359999999999786,
+      "midi_count": 3,
+      "midi_strength": 1.976378,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 171.58713,
+      "audio_time": 171.472,
+      "offset_seconds": -0.11512999999999352,
+      "midi_count": 3,
+      "midi_strength": 1.976378,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 171.74586,
+      "audio_time": 171.472,
+      "offset_seconds": -0.2738599999999849,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 171.90459,
+      "audio_time": 171.472,
+      "offset_seconds": -0.4325900000000047,
+      "midi_count": 3,
+      "midi_strength": 2.23622,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 172.06332,
+      "audio_time": 171.472,
+      "offset_seconds": -0.5913199999999961,
+      "midi_count": 3,
+      "midi_strength": 2.0157480000000003,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 172.22205,
+      "audio_time": 171.472,
+      "offset_seconds": -0.7500499999999874,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.10458376497403454,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 179.52363,
+      "audio_time": 180.20266666666666,
+      "offset_seconds": 0.6790366666666614,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.10567340088352795,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 179.68236,
+      "audio_time": 180.20266666666666,
+      "offset_seconds": 0.52030666666667,
+      "midi_count": 3,
+      "midi_strength": 2.031496,
+      "audio_strength": 0.10567340088352795,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 179.84109,
+      "audio_time": 180.20266666666666,
+      "offset_seconds": 0.3615766666666502,
+      "midi_count": 3,
+      "midi_strength": 1.7952759999999999,
+      "audio_strength": 0.10567340088352795,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 179.99982,
+      "audio_time": 180.20266666666666,
+      "offset_seconds": 0.20284666666665885,
+      "midi_count": 3,
+      "midi_strength": 2.377953,
+      "audio_strength": 0.10567340088352795,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 180.15855,
+      "audio_time": 180.20266666666666,
+      "offset_seconds": 0.04411666666666747,
+      "midi_count": 3,
+      "midi_strength": 2.1023620000000003,
+      "audio_strength": 0.10567340088352795,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 180.31728000000004,
+      "audio_time": 180.20266666666666,
+      "offset_seconds": -0.11461333333338075,
+      "midi_count": 14,
+      "midi_strength": 7.905513,
+      "audio_strength": 0.10567340088352795,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 180.47601,
+      "audio_time": 180.49066666666667,
+      "offset_seconds": 0.014656666666667206,
+      "midi_count": 3,
+      "midi_strength": 2.0,
+      "audio_strength": 0.11737146072288479,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 180.63474,
+      "audio_time": 180.49066666666667,
+      "offset_seconds": -0.14407333333332417,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.11737146072288479,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 180.79346999999999,
+      "audio_time": 181.01066666666668,
+      "offset_seconds": 0.21719666666669468,
+      "midi_count": 3,
+      "midi_strength": 2.015748,
+      "audio_strength": 0.10657702083770705,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 180.95220000000003,
+      "audio_time": 181.01066666666668,
+      "offset_seconds": 0.05846666666664646,
+      "midi_count": 3,
+      "midi_strength": 1.897638,
+      "audio_strength": 0.10657702083770705,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 181.11092999999997,
+      "audio_time": 181.01066666666668,
+      "offset_seconds": -0.10026333333328807,
+      "midi_count": 3,
+      "midi_strength": 1.913386,
+      "audio_strength": 0.10657702083770705,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 181.26966000000002,
+      "audio_time": 181.01066666666668,
+      "offset_seconds": -0.2589933333333363,
+      "midi_count": 3,
+      "midi_strength": 2.338583,
+      "audio_strength": 0.10657702083770705,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 181.42839,
+      "audio_time": 181.57066666666665,
+      "offset_seconds": 0.14227666666664618,
+      "midi_count": 3,
+      "midi_strength": 2.165354,
+      "audio_strength": 0.11826546696339701,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 181.58712,
+      "audio_time": 181.57066666666665,
+      "offset_seconds": -0.0164533333333452,
+      "midi_count": 3,
+      "midi_strength": 1.8582679999999998,
+      "audio_strength": 0.11826546696339701,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 181.74585,
+      "audio_time": 181.57066666666665,
+      "offset_seconds": -0.17518333333333658,
+      "midi_count": 3,
+      "midi_strength": 1.748031,
+      "audio_strength": 0.11826546696339701,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 181.90458,
+      "audio_time": 182.20266666666666,
+      "offset_seconds": 0.2980866666666486,
+      "midi_count": 3,
+      "midi_strength": 2.3543309999999997,
+      "audio_strength": 0.11216272045132356,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 182.06331,
+      "audio_time": 182.20266666666666,
+      "offset_seconds": 0.13935666666665725,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.11216272045132356,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 182.22204,
+      "audio_time": 182.20266666666666,
+      "offset_seconds": -0.01937333333333413,
+      "midi_count": 3,
+      "midi_strength": 1.850394,
+      "audio_strength": 0.11216272045132356,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 182.38077,
+      "audio_time": 182.20266666666666,
+      "offset_seconds": -0.17810333333335393,
+      "midi_count": 3,
+      "midi_strength": 1.700787,
+      "audio_strength": 0.11216272045132356,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 182.5395,
+      "audio_time": 182.20266666666666,
+      "offset_seconds": -0.3368333333333453,
+      "midi_count": 3,
+      "midi_strength": 2.291338,
+      "audio_strength": 0.11216272045132356,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 182.69823,
+      "audio_time": 182.20266666666666,
+      "offset_seconds": -0.4955633333333367,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.11216272045132356,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 182.85696000000002,
+      "audio_time": 182.20266666666666,
+      "offset_seconds": -0.6542933333333565,
+      "midi_count": 14,
+      "midi_strength": 8.086616,
+      "audio_strength": 0.11216272045132356,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 184.76172,
+      "audio_time": 185.52,
+      "offset_seconds": 0.7582800000000134,
+      "midi_count": 3,
+      "midi_strength": 1.826771,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 184.92045,
+      "audio_time": 185.52,
+      "offset_seconds": 0.599550000000022,
+      "midi_count": 3,
+      "midi_strength": 1.598425,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 185.07918000000004,
+      "audio_time": 185.52,
+      "offset_seconds": 0.4408199999999738,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 185.23790999999997,
+      "audio_time": 185.52,
+      "offset_seconds": 0.28209000000003925,
+      "midi_count": 3,
+      "midi_strength": 1.897637,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 185.39663999999996,
+      "audio_time": 185.52,
+      "offset_seconds": 0.12336000000004788,
+      "midi_count": 14,
+      "midi_strength": 7.992127999999999,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 185.55537,
+      "audio_time": 185.52,
+      "offset_seconds": -0.035370000000000346,
+      "midi_count": 3,
+      "midi_strength": 2.015748,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 185.7141,
+      "audio_time": 185.52,
+      "offset_seconds": -0.19409999999999172,
+      "midi_count": 3,
+      "midi_strength": 2.27559,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 185.87283,
+      "audio_time": 185.52,
+      "offset_seconds": -0.3528299999999831,
+      "midi_count": 3,
+      "midi_strength": 1.9921259999999998,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 186.03156,
+      "audio_time": 185.52,
+      "offset_seconds": -0.5115600000000029,
+      "midi_count": 3,
+      "midi_strength": 1.692913,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 186.19029,
+      "audio_time": 185.52,
+      "offset_seconds": -0.6702899999999943,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.1252742544173096,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 193.80932999999996,
+      "audio_time": 194.52266666666668,
+      "offset_seconds": 0.71333666666672,
+      "midi_count": 3,
+      "midi_strength": 1.653543,
+      "audio_strength": 0.10614616757141228,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 193.96806,
+      "audio_time": 194.52266666666668,
+      "offset_seconds": 0.5546066666666718,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.10614616757141228,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 194.12679,
+      "audio_time": 194.52266666666668,
+      "offset_seconds": 0.3958766666666804,
+      "midi_count": 3,
+      "midi_strength": 1.968504,
+      "audio_strength": 0.10614616757141228,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 194.28552,
+      "audio_time": 194.52266666666668,
+      "offset_seconds": 0.23714666666668904,
+      "midi_count": 3,
+      "midi_strength": 1.8425189999999998,
+      "audio_strength": 0.10614616757141228,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 194.44425,
+      "audio_time": 194.52266666666668,
+      "offset_seconds": 0.07841666666666924,
+      "midi_count": 3,
+      "midi_strength": 1.818898,
+      "audio_strength": 0.10614616757141228,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 194.60298,
+      "audio_time": 194.52266666666668,
+      "offset_seconds": -0.08031333333332213,
+      "midi_count": 3,
+      "midi_strength": 2.354331,
+      "audio_strength": 0.10614616757141228,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 194.76171,
+      "audio_time": 194.992,
+      "offset_seconds": 0.23028999999999655,
+      "midi_count": 3,
+      "midi_strength": 1.8110239999999997,
+      "audio_strength": 0.11275778550451103,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 194.92044,
+      "audio_time": 194.992,
+      "offset_seconds": 0.07155999999997675,
+      "midi_count": 4,
+      "midi_strength": 2.92126,
+      "audio_strength": 0.11275778550451103,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 195.07917,
+      "audio_time": 194.992,
+      "offset_seconds": -0.08717000000001462,
+      "midi_count": 3,
+      "midi_strength": 1.708662,
+      "audio_strength": 0.11275778550451103,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 195.2379,
+      "audio_time": 194.992,
+      "offset_seconds": -0.245900000000006,
+      "midi_count": 3,
+      "midi_strength": 2.2913390000000002,
+      "audio_strength": 0.11275778550451103,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 195.39663,
+      "audio_time": 194.992,
+      "offset_seconds": -0.4046299999999974,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.11275778550451103,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 195.55535999999998,
+      "audio_time": 194.992,
+      "offset_seconds": -0.5633599999999888,
+      "midi_count": 14,
+      "midi_strength": 7.952757,
+      "audio_strength": 0.11275778550451103,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 195.71409000000003,
+      "audio_time": 194.992,
+      "offset_seconds": -0.722090000000037,
+      "midi_count": 3,
+      "midi_strength": 2.1181099999999997,
+      "audio_strength": 0.11275778550451103,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 196.03155,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": 0.6937833333333288,
+      "midi_count": 3,
+      "midi_strength": 2.023622,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 196.19028,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": 0.5350533333333374,
+      "midi_count": 4,
+      "midi_strength": 2.937008,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 196.34901,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": 0.376323333333346,
+      "midi_count": 3,
+      "midi_strength": 1.952756,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 196.50774,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": 0.2175933333333262,
+      "midi_count": 3,
+      "midi_strength": 2.3543309999999997,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 196.66647,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": 0.05886333333333482,
+      "midi_count": 3,
+      "midi_strength": 2.19685,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 196.8252,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": -0.09986666666665656,
+      "midi_count": 3,
+      "midi_strength": 1.9448819999999998,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 196.98393,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": -0.25859666666664793,
+      "midi_count": 3,
+      "midi_strength": 1.9055119999999999,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 197.14266,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": -0.41732666666666773,
+      "midi_count": 3,
+      "midi_strength": 2.346457,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 197.30139,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": -0.5760566666666591,
+      "midi_count": 3,
+      "midi_strength": 2.133858,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 197.46012,
+      "audio_time": 196.72533333333334,
+      "offset_seconds": -0.7347866666666505,
+      "midi_count": 4,
+      "midi_strength": 2.826772,
+      "audio_strength": 0.10714686281944368,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 199.20615,
+      "audio_time": 199.89066666666668,
+      "offset_seconds": 0.6845166666666671,
+      "midi_count": 3,
+      "midi_strength": 2.007874,
+      "audio_strength": 0.1149345951482507,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 199.36488,
+      "audio_time": 199.89066666666668,
+      "offset_seconds": 0.5257866666666757,
+      "midi_count": 3,
+      "midi_strength": 1.8976379999999997,
+      "audio_strength": 0.1149345951482507,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 199.52361,
+      "audio_time": 199.89066666666668,
+      "offset_seconds": 0.36705666666668435,
+      "midi_count": 3,
+      "midi_strength": 1.8110229999999998,
+      "audio_strength": 0.1149345951482507,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 199.68233999999998,
+      "audio_time": 199.89066666666668,
+      "offset_seconds": 0.20832666666669297,
+      "midi_count": 3,
+      "midi_strength": 2.3779529999999998,
+      "audio_strength": 0.1149345951482507,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 199.84107000000003,
+      "audio_time": 199.89066666666668,
+      "offset_seconds": 0.04959666666664475,
+      "midi_count": 3,
+      "midi_strength": 2.19685,
+      "audio_strength": 0.1149345951482507,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 199.9998,
+      "audio_time": 200.08533333333332,
+      "offset_seconds": 0.08553333333333057,
+      "midi_count": 4,
+      "midi_strength": 2.92126,
+      "audio_strength": 0.10546070358520597,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 200.15853,
+      "audio_time": 200.08533333333332,
+      "offset_seconds": -0.07319666666668923,
+      "midi_count": 3,
+      "midi_strength": 1.8582679999999998,
+      "audio_strength": 0.10546070358520597,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 200.31726,
+      "audio_time": 200.31733333333332,
+      "offset_seconds": 7.333333331871472e-05,
+      "midi_count": 3,
+      "midi_strength": 2.393701,
+      "audio_strength": 0.1073130890019361,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 200.47599,
+      "audio_time": 200.31733333333332,
+      "offset_seconds": -0.15865666666667266,
+      "midi_count": 3,
+      "midi_strength": 2.07874,
+      "audio_strength": 0.1073130890019361,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 200.63472,
+      "audio_time": 200.68266666666668,
+      "offset_seconds": 0.04794666666668945,
+      "midi_count": 14,
+      "midi_strength": 7.897638999999999,
+      "audio_strength": 0.10479614706168684,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 200.79345,
+      "audio_time": 200.68266666666668,
+      "offset_seconds": -0.11078333333333035,
+      "midi_count": 3,
+      "midi_strength": 1.818898,
+      "audio_strength": 0.10479614706168684,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 200.95218,
+      "audio_time": 200.68266666666668,
+      "offset_seconds": -0.2695133333333217,
+      "midi_count": 3,
+      "midi_strength": 2.338583,
+      "audio_strength": 0.10479614706168684,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 201.11091,
+      "audio_time": 201.43466666666666,
+      "offset_seconds": 0.323756666666668,
+      "midi_count": 3,
+      "midi_strength": 1.8976380000000002,
+      "audio_strength": 0.10322751261856328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 201.26964,
+      "audio_time": 201.43466666666666,
+      "offset_seconds": 0.16502666666664823,
+      "midi_count": 4,
+      "midi_strength": 2.9685040000000003,
+      "audio_strength": 0.10322751261856328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 201.42837,
+      "audio_time": 201.43466666666666,
+      "offset_seconds": 0.006296666666656847,
+      "midi_count": 3,
+      "midi_strength": 1.779528,
+      "audio_strength": 0.10322751261856328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 201.5871,
+      "audio_time": 201.43466666666666,
+      "offset_seconds": -0.15243333333333453,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.10322751261856328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 201.74582999999998,
+      "audio_time": 201.43466666666666,
+      "offset_seconds": -0.3111633333333259,
+      "midi_count": 3,
+      "midi_strength": 2.007874,
+      "audio_strength": 0.10322751261856328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 201.90456000000003,
+      "audio_time": 202.264,
+      "offset_seconds": 0.359439999999978,
+      "midi_count": 3,
+      "midi_strength": 1.8582679999999998,
+      "audio_strength": 0.10737441819728658,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 202.06328999999997,
+      "audio_time": 202.264,
+      "offset_seconds": 0.20071000000004346,
+      "midi_count": 3,
+      "midi_strength": 1.748031,
+      "audio_strength": 0.10737441819728658,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 202.22202000000001,
+      "audio_time": 202.264,
+      "offset_seconds": 0.04197999999999524,
+      "midi_count": 3,
+      "midi_strength": 2.3543309999999997,
+      "audio_strength": 0.10737441819728658,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 202.38075,
+      "audio_time": 202.264,
+      "offset_seconds": -0.11674999999999613,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.10737441819728658,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 202.53948,
+      "audio_time": 202.264,
+      "offset_seconds": -0.2754799999999875,
+      "midi_count": 4,
+      "midi_strength": 2.850394,
+      "audio_strength": 0.10737441819728658,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 202.69821,
+      "audio_time": 202.264,
+      "offset_seconds": -0.4342099999999789,
+      "midi_count": 3,
+      "midi_strength": 1.700787,
+      "audio_strength": 0.10737441819728658,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 202.85694,
+      "audio_time": 202.264,
+      "offset_seconds": -0.5929399999999987,
+      "midi_count": 3,
+      "midi_strength": 2.291338,
+      "audio_strength": 0.10737441819728658,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 203.01567,
+      "audio_time": 202.264,
+      "offset_seconds": -0.7516699999999901,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.10737441819728658,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 205.23789,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": 0.655443333333352,
+      "midi_count": 3,
+      "midi_strength": 1.661417,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 205.39662,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": 0.49671333333333223,
+      "midi_count": 3,
+      "midi_strength": 2.141732,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 205.55535,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": 0.33798333333334085,
+      "midi_count": 3,
+      "midi_strength": 1.874015,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 205.71408000000005,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": 0.17925333333329263,
+      "midi_count": 14,
+      "midi_strength": 7.984253999999999,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 205.87281,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": 0.020523333333358096,
+      "midi_count": 3,
+      "midi_strength": 1.834646,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 206.03154000000004,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": -0.13820666666669013,
+      "midi_count": 3,
+      "midi_strength": 2.2283459999999997,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 206.19026999999997,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": -0.29693666666662466,
+      "midi_count": 3,
+      "midi_strength": 1.8740160000000001,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 206.349,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": -0.45566666666664446,
+      "midi_count": 4,
+      "midi_strength": 2.763779,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 206.50773,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": -0.6143966666666643,
+      "midi_count": 3,
+      "midi_strength": 1.7480319999999998,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 206.66646,
+      "audio_time": 205.89333333333335,
+      "offset_seconds": -0.7731266666666556,
+      "midi_count": 3,
+      "midi_strength": 2.362205,
+      "audio_strength": 0.1248781978469111,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 209.20614,
+      "audio_time": 209.992,
+      "offset_seconds": 0.7858599999999853,
+      "midi_count": 3,
+      "midi_strength": 2.259842,
+      "audio_strength": 0.16328714270964279,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 209.36487,
+      "audio_time": 209.992,
+      "offset_seconds": 0.627129999999994,
+      "midi_count": 3,
+      "midi_strength": 2.03937,
+      "audio_strength": 0.16328714270964279,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 209.5236,
+      "audio_time": 209.992,
+      "offset_seconds": 0.4684000000000026,
+      "midi_count": 4,
+      "midi_strength": 2.19685,
+      "audio_strength": 0.16328714270964279,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 209.68233,
+      "audio_time": 209.992,
+      "offset_seconds": 0.3096699999999828,
+      "midi_count": 4,
+      "midi_strength": 2.220472,
+      "audio_strength": 0.16328714270964279,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 209.84106,
+      "audio_time": 209.992,
+      "offset_seconds": 0.15093999999999141,
+      "midi_count": 4,
+      "midi_strength": 2.889764,
+      "audio_strength": 0.16328714270964279,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 209.99979,
+      "audio_time": 209.992,
+      "offset_seconds": -0.007789999999999964,
+      "midi_count": 4,
+      "midi_strength": 2.866141,
+      "audio_strength": 0.16328714270964279,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 210.15852,
+      "audio_time": 209.992,
+      "offset_seconds": -0.16652000000001976,
+      "midi_count": 4,
+      "midi_strength": 2.826772,
+      "audio_strength": 0.16328714270964279,
+      "tracks": [
+        "drums",
+        "saw_wave"
+      ]
+    },
+    {
+      "midi_time": 211.1109,
+      "audio_time": 211.88533333333334,
+      "offset_seconds": 0.7744333333333486,
+      "midi_count": 3,
+      "midi_strength": 2.4409449999999997,
+      "audio_strength": 0.10860728642811993,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 211.26963,
+      "audio_time": 211.88533333333334,
+      "offset_seconds": 0.6157033333333288,
+      "midi_count": 3,
+      "midi_strength": 2.094488,
+      "audio_strength": 0.10860728642811993,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 211.42835999999997,
+      "audio_time": 211.88533333333334,
+      "offset_seconds": 0.45697333333336587,
+      "midi_count": 6,
+      "midi_strength": 4.8031500000000005,
+      "audio_strength": 0.10860728642811993,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 211.58709,
+      "audio_time": 211.88533333333334,
+      "offset_seconds": 0.2982433333333461,
+      "midi_count": 3,
+      "midi_strength": 1.9921259999999998,
+      "audio_strength": 0.10860728642811993,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 211.74582,
+      "audio_time": 211.88533333333334,
+      "offset_seconds": 0.13951333333332627,
+      "midi_count": 3,
+      "midi_strength": 2.409449,
+      "audio_strength": 0.10860728642811993,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 211.90455,
+      "audio_time": 211.88533333333334,
+      "offset_seconds": -0.019216666666665105,
+      "midi_count": 3,
+      "midi_strength": 2.220472,
+      "audio_strength": 0.10860728642811993,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 212.06328,
+      "audio_time": 211.88533333333334,
+      "offset_seconds": -0.17794666666665648,
+      "midi_count": 5,
+      "midi_strength": 3.8031499999999996,
+      "audio_strength": 0.10860728642811993,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 212.22201000000004,
+      "audio_time": 212.52,
+      "offset_seconds": 0.2979899999999702,
+      "midi_count": 3,
+      "midi_strength": 1.976378,
+      "audio_strength": 0.10214411214466917,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 212.38073999999997,
+      "audio_time": 212.52,
+      "offset_seconds": 0.1392600000000357,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.10214411214466917,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 212.53947000000002,
+      "audio_time": 212.52,
+      "offset_seconds": -0.019470000000012533,
+      "midi_count": 3,
+      "midi_strength": 2.23622,
+      "audio_strength": 0.10214411214466917,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 212.6982,
+      "audio_time": 212.52,
+      "offset_seconds": -0.1782000000000039,
+      "midi_count": 6,
+      "midi_strength": 4.850394,
+      "audio_strength": 0.10214411214466917,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 212.85693,
+      "audio_time": 212.52,
+      "offset_seconds": -0.3369299999999953,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.10214411214466917,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 213.01566,
+      "audio_time": 212.52,
+      "offset_seconds": -0.49565999999998667,
+      "midi_count": 3,
+      "midi_strength": 2.4645669999999997,
+      "audio_strength": 0.10214411214466917,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 213.17439,
+      "audio_time": 212.52,
+      "offset_seconds": -0.654389999999978,
+      "midi_count": 3,
+      "midi_strength": 2.141732,
+      "audio_strength": 0.10214411214466917,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 213.33312000000004,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": 0.6695466666666334,
+      "midi_count": 13,
+      "midi_strength": 8.070867,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 213.49185,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": 0.5108166666666705,
+      "midi_count": 3,
+      "midi_strength": 1.8740160000000001,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 213.65058,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": 0.3520866666666791,
+      "midi_count": 3,
+      "midi_strength": 2.299213,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 213.80931,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": 0.1933566666666593,
+      "midi_count": 3,
+      "midi_strength": 1.913386,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 213.96804,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": 0.034626666666667916,
+      "midi_count": 6,
+      "midi_strength": 4.811024,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 214.12677,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": -0.12410333333332346,
+      "midi_count": 3,
+      "midi_strength": 1.653543,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 214.28550000000004,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": -0.2828333333333717,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 214.44422999999998,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": -0.4415633333333062,
+      "midi_count": 3,
+      "midi_strength": 1.968504,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 214.60296,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": -0.600293333333326,
+      "midi_count": 5,
+      "midi_strength": 3.629921,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 214.76168999999996,
+      "audio_time": 214.00266666666667,
+      "offset_seconds": -0.759023333333289,
+      "midi_count": 3,
+      "midi_strength": 1.818898,
+      "audio_strength": 0.10982095779507181,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 218.09502,
+      "audio_time": 218.832,
+      "offset_seconds": 0.7369799999999884,
+      "midi_count": 3,
+      "midi_strength": 2.299213,
+      "audio_strength": 0.10360859059620867,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 218.25375,
+      "audio_time": 218.832,
+      "offset_seconds": 0.578249999999997,
+      "midi_count": 3,
+      "midi_strength": 2.086614,
+      "audio_strength": 0.10360859059620867,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 218.41248,
+      "audio_time": 218.832,
+      "offset_seconds": 0.41952000000000567,
+      "midi_count": 15,
+      "midi_strength": 9.094489999999999,
+      "audio_strength": 0.10360859059620867,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 218.57120999999998,
+      "audio_time": 218.832,
+      "offset_seconds": 0.2607900000000143,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.10360859059620867,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 218.72994000000003,
+      "audio_time": 218.832,
+      "offset_seconds": 0.10205999999996607,
+      "midi_count": 3,
+      "midi_strength": 2.3779529999999998,
+      "audio_strength": 0.10360859059620867,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 218.88866999999996,
+      "audio_time": 218.832,
+      "offset_seconds": -0.05666999999996847,
+      "midi_count": 3,
+      "midi_strength": 1.944882,
+      "audio_strength": 0.10360859059620867,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 219.0474,
+      "audio_time": 218.832,
+      "offset_seconds": -0.2154000000000167,
+      "midi_count": 6,
+      "midi_strength": 4.88189,
+      "audio_strength": 0.10360859059620867,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 219.20613,
+      "audio_time": 218.832,
+      "offset_seconds": -0.37413000000000807,
+      "midi_count": 3,
+      "midi_strength": 1.700788,
+      "audio_strength": 0.10360859059620867,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 219.36486,
+      "audio_time": 219.64533333333333,
+      "offset_seconds": 0.28047333333333313,
+      "midi_count": 3,
+      "midi_strength": 2.433071,
+      "audio_strength": 0.10746285816501285,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 219.52359,
+      "audio_time": 219.64533333333333,
+      "offset_seconds": 0.12174333333331333,
+      "midi_count": 3,
+      "midi_strength": 2.007874,
+      "audio_strength": 0.10746285816501285,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 219.68231999999998,
+      "audio_time": 219.64533333333333,
+      "offset_seconds": -0.036986666666649626,
+      "midi_count": 5,
+      "midi_strength": 3.7874019999999997,
+      "audio_strength": 0.10746285816501285,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 219.84105,
+      "audio_time": 219.64533333333333,
+      "offset_seconds": -0.19571666666666943,
+      "midi_count": 3,
+      "midi_strength": 1.7559049999999998,
+      "audio_strength": 0.10746285816501285,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 219.99978,
+      "audio_time": 220.10133333333334,
+      "offset_seconds": 0.10155333333335648,
+      "midi_count": 3,
+      "midi_strength": 2.393701,
+      "audio_strength": 0.1023502025223188,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 220.15851,
+      "audio_time": 220.10133333333334,
+      "offset_seconds": -0.05717666666666332,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.1023502025223188,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 220.31724,
+      "audio_time": 220.432,
+      "offset_seconds": 0.11475999999998976,
+      "midi_count": 6,
+      "midi_strength": 4.897638000000001,
+      "audio_strength": 0.10036677250499944,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 220.47597,
+      "audio_time": 220.432,
+      "offset_seconds": -0.04397000000000162,
+      "midi_count": 3,
+      "midi_strength": 1.7952759999999999,
+      "audio_strength": 0.10036677250499944,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 220.63469999999998,
+      "audio_time": 220.72533333333334,
+      "offset_seconds": 0.09063333333335777,
+      "midi_count": 3,
+      "midi_strength": 2.377953,
+      "audio_strength": 0.13222955300968475,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 220.79343000000003,
+      "audio_time": 220.72533333333334,
+      "offset_seconds": -0.06809666666669045,
+      "midi_count": 3,
+      "midi_strength": 2.1023620000000003,
+      "audio_strength": 0.13222955300968475,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 220.95215999999994,
+      "audio_time": 221.048,
+      "offset_seconds": 0.09584000000006654,
+      "midi_count": 15,
+      "midi_strength": 8.921261000000001,
+      "audio_strength": 0.11810498020078532,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 221.11089,
+      "audio_time": 221.048,
+      "offset_seconds": -0.0628900000000101,
+      "midi_count": 3,
+      "midi_strength": 2.0,
+      "audio_strength": 0.11810498020078532,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 221.26962,
+      "audio_time": 221.35733333333334,
+      "offset_seconds": 0.08771333333334042,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.20850642773227782,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 221.42835,
+      "audio_time": 221.35733333333334,
+      "offset_seconds": -0.07101666666665096,
+      "midi_count": 3,
+      "midi_strength": 2.015748,
+      "audio_strength": 0.20850642773227782,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 221.58708,
+      "audio_time": 221.35733333333334,
+      "offset_seconds": -0.22974666666664234,
+      "midi_count": 6,
+      "midi_strength": 4.779528,
+      "audio_strength": 0.20850642773227782,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 221.74581,
+      "audio_time": 221.83733333333333,
+      "offset_seconds": 0.09152333333332763,
+      "midi_count": 3,
+      "midi_strength": 1.913386,
+      "audio_strength": 0.12864000574015766,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 221.90454,
+      "audio_time": 221.83733333333333,
+      "offset_seconds": -0.06720666666666375,
+      "midi_count": 3,
+      "midi_strength": 2.338583,
+      "audio_strength": 0.12864000574015766,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 222.06327,
+      "audio_time": 221.992,
+      "offset_seconds": -0.07126999999999839,
+      "midi_count": 3,
+      "midi_strength": 2.165354,
+      "audio_strength": 0.10572309756989197,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 222.22200000000004,
+      "audio_time": 221.992,
+      "offset_seconds": -0.2300000000000466,
+      "midi_count": 5,
+      "midi_strength": 3.7401579999999996,
+      "audio_strength": 0.10572309756989197,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 222.38073,
+      "audio_time": 222.62666666666667,
+      "offset_seconds": 0.24593666666666536,
+      "midi_count": 3,
+      "midi_strength": 1.748031,
+      "audio_strength": 0.12995158844050814,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 222.53946,
+      "audio_time": 222.62666666666667,
+      "offset_seconds": 0.08720666666667398,
+      "midi_count": 3,
+      "midi_strength": 2.3543309999999997,
+      "audio_strength": 0.12995158844050814,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 222.69818999999998,
+      "audio_time": 222.62666666666667,
+      "offset_seconds": -0.0715233333333174,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.12995158844050814,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 222.85691999999997,
+      "audio_time": 222.62666666666667,
+      "offset_seconds": -0.23025333333330877,
+      "midi_count": 6,
+      "midi_strength": 4.692914,
+      "audio_strength": 0.12995158844050814,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 223.01564999999997,
+      "audio_time": 222.62666666666667,
+      "offset_seconds": -0.38898333333330015,
+      "midi_count": 3,
+      "midi_strength": 1.700787,
+      "audio_strength": 0.12995158844050814,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 223.17438,
+      "audio_time": 223.41333333333333,
+      "offset_seconds": 0.23895333333331337,
+      "midi_count": 3,
+      "midi_strength": 2.291338,
+      "audio_strength": 0.10778019381856231,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 223.33311,
+      "audio_time": 223.41333333333333,
+      "offset_seconds": 0.08022333333332199,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.10778019381856231,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 223.49184000000005,
+      "audio_time": 223.41333333333333,
+      "offset_seconds": -0.07850666666672623,
+      "midi_count": 15,
+      "midi_strength": 9.055119999999999,
+      "audio_strength": 0.10778019381856231,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 223.65057,
+      "audio_time": 223.41333333333333,
+      "offset_seconds": -0.23723666666666077,
+      "midi_count": 3,
+      "midi_strength": 1.897638,
+      "audio_strength": 0.10778019381856231,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 223.8093,
+      "audio_time": 223.41333333333333,
+      "offset_seconds": -0.39596666666668057,
+      "midi_count": 3,
+      "midi_strength": 2.314961,
+      "audio_strength": 0.10778019381856231,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 223.96803,
+      "audio_time": 223.41333333333333,
+      "offset_seconds": -0.554696666666672,
+      "midi_count": 3,
+      "midi_strength": 1.8976380000000002,
+      "audio_strength": 0.10778019381856231,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 224.12676000000002,
+      "audio_time": 224.69866666666667,
+      "offset_seconds": 0.5719066666666492,
+      "midi_count": 6,
+      "midi_strength": 4.8897639999999996,
+      "audio_strength": 0.11474614624859121,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 224.28549,
+      "audio_time": 224.69866666666667,
+      "offset_seconds": 0.41317666666665787,
+      "midi_count": 3,
+      "midi_strength": 1.685039,
+      "audio_strength": 0.11474614624859121,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 224.44422,
+      "audio_time": 224.69866666666667,
+      "offset_seconds": 0.2544466666666665,
+      "midi_count": 3,
+      "midi_strength": 2.27559,
+      "audio_strength": 0.11474614624859121,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 224.60295,
+      "audio_time": 224.69866666666667,
+      "offset_seconds": 0.09571666666667511,
+      "midi_count": 3,
+      "midi_strength": 1.897637,
+      "audio_strength": 0.11474614624859121,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 224.76168,
+      "audio_time": 224.69866666666667,
+      "offset_seconds": -0.06301333333334469,
+      "midi_count": 5,
+      "midi_strength": 3.755906,
+      "audio_strength": 0.11474614624859121,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 224.92041000000003,
+      "audio_time": 224.69866666666667,
+      "offset_seconds": -0.2217433333333645,
+      "midi_count": 3,
+      "midi_strength": 1.7086609999999998,
+      "audio_strength": 0.11474614624859121,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 225.07913999999997,
+      "audio_time": 225.14933333333335,
+      "offset_seconds": 0.0701933333333784,
+      "midi_count": 3,
+      "midi_strength": 2.15748,
+      "audio_strength": 0.10037519073881268,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 225.23787000000002,
+      "audio_time": 225.14933333333335,
+      "offset_seconds": -0.08853666666666982,
+      "midi_count": 3,
+      "midi_strength": 1.6220469999999998,
+      "audio_strength": 0.10037519073881268,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 225.3966,
+      "audio_time": 225.47466666666668,
+      "offset_seconds": 0.07806666666667184,
+      "midi_count": 6,
+      "midi_strength": 4.692913,
+      "audio_strength": 0.10017126754094449,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 225.55533,
+      "audio_time": 225.47466666666668,
+      "offset_seconds": -0.08066333333331954,
+      "midi_count": 3,
+      "midi_strength": 1.598425,
+      "audio_strength": 0.10017126754094449,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 225.71406,
+      "audio_time": 225.63733333333334,
+      "offset_seconds": -0.0767266666666444,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.10276915401870791,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 225.87279,
+      "audio_time": 225.63733333333334,
+      "offset_seconds": -0.2354566666666642,
+      "midi_count": 3,
+      "midi_strength": 1.897637,
+      "audio_strength": 0.10276915401870791,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 226.03152,
+      "audio_time": 225.63733333333334,
+      "offset_seconds": -0.3941866666666556,
+      "midi_count": 15,
+      "midi_strength": 9.007876,
+      "audio_strength": 0.10276915401870791,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 226.19025,
+      "audio_time": 225.63733333333334,
+      "offset_seconds": -0.552916666666647,
+      "midi_count": 3,
+      "midi_strength": 2.015748,
+      "audio_strength": 0.10276915401870791,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 226.34898,
+      "audio_time": 227.04533333333333,
+      "offset_seconds": 0.6963533333333203,
+      "midi_count": 3,
+      "midi_strength": 2.27559,
+      "audio_strength": 0.11729593083992666,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 226.50771,
+      "audio_time": 227.04533333333333,
+      "offset_seconds": 0.5376233333333289,
+      "midi_count": 3,
+      "midi_strength": 1.9921259999999998,
+      "audio_strength": 0.11729593083992666,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 226.66644,
+      "audio_time": 227.04533333333333,
+      "offset_seconds": 0.3788933333333375,
+      "midi_count": 6,
+      "midi_strength": 4.598425,
+      "audio_strength": 0.11729593083992666,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 226.82516999999999,
+      "audio_time": 227.04533333333333,
+      "offset_seconds": 0.22016333333334615,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.11729593083992666,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 226.98390000000003,
+      "audio_time": 227.04533333333333,
+      "offset_seconds": 0.061433333333297924,
+      "midi_count": 3,
+      "midi_strength": 2.314961,
+      "audio_strength": 0.11729593083992666,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 227.14262999999997,
+      "audio_time": 227.04533333333333,
+      "offset_seconds": -0.09729666666663661,
+      "midi_count": 3,
+      "midi_strength": 2.110236,
+      "audio_strength": 0.11729593083992666,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 227.30136,
+      "audio_time": 227.51733333333334,
+      "offset_seconds": 0.215973333333352,
+      "midi_count": 5,
+      "midi_strength": 3.740158,
+      "audio_strength": 0.10159501737147894,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 227.46009,
+      "audio_time": 227.51733333333334,
+      "offset_seconds": 0.0572433333333322,
+      "midi_count": 3,
+      "midi_strength": 1.8976379999999997,
+      "audio_strength": 0.10159501737147894,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 227.61882,
+      "audio_time": 227.67733333333334,
+      "offset_seconds": 0.058513333333337414,
+      "midi_count": 3,
+      "midi_strength": 2.244094,
+      "audio_strength": 0.10347874172657752,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 227.77755,
+      "audio_time": 227.87733333333333,
+      "offset_seconds": 0.09978333333333467,
+      "midi_count": 3,
+      "midi_strength": 1.9999989999999999,
+      "audio_strength": 0.10261290465944266,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 227.93627999999998,
+      "audio_time": 227.87733333333333,
+      "offset_seconds": -0.05894666666665671,
+      "midi_count": 6,
+      "midi_strength": 4.692913,
+      "audio_strength": 0.10261290465944266,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 228.09501,
+      "audio_time": 227.87733333333333,
+      "offset_seconds": -0.2176766666666765,
+      "midi_count": 3,
+      "midi_strength": 1.7401579999999999,
+      "audio_strength": 0.10261290465944266,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 228.25374,
+      "audio_time": 227.87733333333333,
+      "offset_seconds": -0.3764066666666679,
+      "midi_count": 3,
+      "midi_strength": 2.338583,
+      "audio_strength": 0.10261290465944266,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 228.41247,
+      "audio_time": 227.87733333333333,
+      "offset_seconds": -0.5351366666666877,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.10261290465944266,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 228.57119999999995,
+      "audio_time": 227.87733333333333,
+      "offset_seconds": -0.6938666666666222,
+      "midi_count": 15,
+      "midi_strength": 9.015749999999999,
+      "audio_strength": 0.10261290465944266,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 232.06326,
+      "audio_time": 232.73066666666668,
+      "offset_seconds": 0.6674066666666647,
+      "midi_count": 3,
+      "midi_strength": 2.409449,
+      "audio_strength": 0.10724007478163351,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 232.22199,
+      "audio_time": 232.73066666666668,
+      "offset_seconds": 0.5086766666666733,
+      "midi_count": 3,
+      "midi_strength": 2.220472,
+      "audio_strength": 0.10724007478163351,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 232.38072000000003,
+      "audio_time": 232.73066666666668,
+      "offset_seconds": 0.3499466666666535,
+      "midi_count": 5,
+      "midi_strength": 3.8031499999999996,
+      "audio_strength": 0.10724007478163351,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 232.53945,
+      "audio_time": 232.73066666666668,
+      "offset_seconds": 0.19121666666669057,
+      "midi_count": 3,
+      "midi_strength": 1.976378,
+      "audio_strength": 0.10724007478163351,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 232.69818,
+      "audio_time": 232.73066666666668,
+      "offset_seconds": 0.03248666666667077,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.10724007478163351,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 232.85691,
+      "audio_time": 232.928,
+      "offset_seconds": 0.0710899999999981,
+      "midi_count": 3,
+      "midi_strength": 2.23622,
+      "audio_strength": 0.11362606004961706,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 233.01564000000002,
+      "audio_time": 232.928,
+      "offset_seconds": -0.0876400000000217,
+      "midi_count": 7,
+      "midi_strength": 5.480315,
+      "audio_strength": 0.11362606004961706,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 233.17437000000004,
+      "audio_time": 232.928,
+      "offset_seconds": -0.2463700000000415,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.11362606004961706,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 233.33309999999997,
+      "audio_time": 232.928,
+      "offset_seconds": -0.40509999999997603,
+      "midi_count": 3,
+      "midi_strength": 2.4645669999999997,
+      "audio_strength": 0.11362606004961706,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 233.49183000000002,
+      "audio_time": 232.928,
+      "offset_seconds": -0.5638300000000243,
+      "midi_count": 3,
+      "midi_strength": 2.141732,
+      "audio_strength": 0.11362606004961706,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 233.65056,
+      "audio_time": 232.928,
+      "offset_seconds": -0.7225600000000156,
+      "midi_count": 13,
+      "midi_strength": 8.070867,
+      "audio_strength": 0.11362606004961706,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 234.12675,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": 0.7159166666666863,
+      "midi_count": 3,
+      "midi_strength": 1.913386,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 234.28548,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": 0.5571866666666665,
+      "midi_count": 7,
+      "midi_strength": 5.440944999999999,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 234.44421,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": 0.3984566666666751,
+      "midi_count": 3,
+      "midi_strength": 1.653543,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 234.60294,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": 0.23972666666668374,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 234.76167,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": 0.08099666666666394,
+      "midi_count": 3,
+      "midi_strength": 1.968504,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 234.92040000000003,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": -0.07773333333335586,
+      "midi_count": 5,
+      "midi_strength": 3.629921,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 235.07913,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": -0.23646333333331881,
+      "midi_count": 3,
+      "midi_strength": 1.818898,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 235.23786000000004,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": -0.39519333333336704,
+      "midi_count": 3,
+      "midi_strength": 2.354331,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 235.39658999999997,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": -0.5539233333333016,
+      "midi_count": 3,
+      "midi_strength": 1.8110239999999997,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 235.55531999999997,
+      "audio_time": 234.84266666666667,
+      "offset_seconds": -0.712653333333293,
+      "midi_count": 7,
+      "midi_strength": 5.354331,
+      "audio_strength": 0.10301417299000745,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 237.30135000000004,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": 0.6479833333332863,
+      "midi_count": 3,
+      "midi_strength": 2.19685,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 237.46008,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": 0.4892533333333233,
+      "midi_count": 5,
+      "midi_strength": 3.7007879999999997,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 237.61881000000002,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": 0.3305233333333035,
+      "midi_count": 3,
+      "midi_strength": 1.9055119999999999,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 237.77753999999996,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": 0.171793333333369,
+      "midi_count": 3,
+      "midi_strength": 2.346457,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 237.93627,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": 0.01306333333332077,
+      "midi_count": 3,
+      "midi_strength": 2.133858,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 238.095,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": -0.1456666666666706,
+      "midi_count": 7,
+      "midi_strength": 5.251969,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 238.25373,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": -0.304396666666662,
+      "midi_count": 3,
+      "midi_strength": 1.787402,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 238.41246,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": -0.4631266666666818,
+      "midi_count": 3,
+      "midi_strength": 2.299213,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 238.57119,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": -0.6218566666666732,
+      "midi_count": 3,
+      "midi_strength": 2.086614,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 238.72991999999988,
+      "audio_time": 237.94933333333333,
+      "offset_seconds": -0.7805866666665509,
+      "midi_count": 15,
+      "midi_strength": 9.094489999999999,
+      "audio_strength": 0.1146982307498647,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 240.63468000000006,
+      "audio_time": 241.41333333333333,
+      "offset_seconds": 0.778653333333267,
+      "midi_count": 7,
+      "midi_strength": 5.527559,
+      "audio_strength": 0.11714290390161762,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 240.79341,
+      "audio_time": 241.41333333333333,
+      "offset_seconds": 0.6199233333333325,
+      "midi_count": 3,
+      "midi_strength": 1.7952759999999999,
+      "audio_strength": 0.11714290390161762,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 240.95214,
+      "audio_time": 241.41333333333333,
+      "offset_seconds": 0.4611933333333127,
+      "midi_count": 3,
+      "midi_strength": 2.377953,
+      "audio_strength": 0.11714290390161762,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 241.11087,
+      "audio_time": 241.41333333333333,
+      "offset_seconds": 0.3024633333333213,
+      "midi_count": 3,
+      "midi_strength": 2.1023620000000003,
+      "audio_strength": 0.11714290390161762,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 241.26960000000003,
+      "audio_time": 241.41333333333333,
+      "offset_seconds": 0.14373333333330152,
+      "midi_count": 15,
+      "midi_strength": 8.921261000000001,
+      "audio_strength": 0.11714290390161762,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 241.42833,
+      "audio_time": 241.41333333333333,
+      "offset_seconds": -0.01499666666666144,
+      "midi_count": 3,
+      "midi_strength": 2.0,
+      "audio_strength": 0.11714290390161762,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 241.58705999999998,
+      "audio_time": 241.568,
+      "offset_seconds": -0.01905999999996766,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.14397492028057637,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 241.74579000000003,
+      "audio_time": 241.568,
+      "offset_seconds": -0.17779000000001588,
+      "midi_count": 3,
+      "midi_strength": 2.015748,
+      "audio_strength": 0.14397492028057637,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 241.90452000000002,
+      "audio_time": 242.05066666666667,
+      "offset_seconds": 0.14614666666665244,
+      "midi_count": 7,
+      "midi_strength": 5.409449,
+      "audio_strength": 0.10094918657581099,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 242.06325,
+      "audio_time": 242.05066666666667,
+      "offset_seconds": -0.012583333333338942,
+      "midi_count": 3,
+      "midi_strength": 1.913386,
+      "audio_strength": 0.10094918657581099,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 242.22198,
+      "audio_time": 242.05066666666667,
+      "offset_seconds": -0.17131333333333032,
+      "midi_count": 3,
+      "midi_strength": 2.338583,
+      "audio_strength": 0.10094918657581099,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 242.38071,
+      "audio_time": 242.05066666666667,
+      "offset_seconds": -0.3300433333333217,
+      "midi_count": 3,
+      "midi_strength": 2.165354,
+      "audio_strength": 0.10094918657581099,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 242.53944,
+      "audio_time": 242.83733333333333,
+      "offset_seconds": 0.29789333333332024,
+      "midi_count": 5,
+      "midi_strength": 3.7401579999999996,
+      "audio_strength": 0.10484139464435246,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 242.69817,
+      "audio_time": 242.83733333333333,
+      "offset_seconds": 0.13916333333332886,
+      "midi_count": 3,
+      "midi_strength": 1.748031,
+      "audio_strength": 0.10484139464435246,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 242.8569,
+      "audio_time": 242.83733333333333,
+      "offset_seconds": -0.019566666666662513,
+      "midi_count": 3,
+      "midi_strength": 2.3543309999999997,
+      "audio_strength": 0.10484139464435246,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 243.01563,
+      "audio_time": 242.83733333333333,
+      "offset_seconds": -0.1782966666666539,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.10484139464435246,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 243.17436,
+      "audio_time": 242.83733333333333,
+      "offset_seconds": -0.3370266666666737,
+      "midi_count": 7,
+      "midi_strength": 5.3228349999999995,
+      "audio_strength": 0.10484139464435246,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 243.33309,
+      "audio_time": 242.83733333333333,
+      "offset_seconds": -0.49575666666666507,
+      "midi_count": 3,
+      "midi_strength": 1.700787,
+      "audio_strength": 0.10484139464435246,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 243.49182,
+      "audio_time": 242.83733333333333,
+      "offset_seconds": -0.6544866666666564,
+      "midi_count": 3,
+      "midi_strength": 2.291338,
+      "audio_strength": 0.10484139464435246,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 243.65054999999998,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": 0.6667833333333419,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 243.80927999999997,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": 0.5080533333333506,
+      "midi_count": 15,
+      "midi_strength": 9.055119999999999,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 243.96800999999996,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": 0.3493233333333592,
+      "midi_count": 3,
+      "midi_strength": 1.897638,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 244.12674,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": 0.19059333333331097,
+      "midi_count": 3,
+      "midi_strength": 2.314961,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 244.28547,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": 0.03186333333331959,
+      "midi_count": 3,
+      "midi_strength": 1.8976380000000002,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 244.44419999999997,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": -0.12686666666664337,
+      "midi_count": 7,
+      "midi_strength": 5.519685,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 244.60293,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": -0.28559666666666317,
+      "midi_count": 3,
+      "midi_strength": 1.685039,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 244.76166,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": -0.44432666666668297,
+      "midi_count": 3,
+      "midi_strength": 2.27559,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 244.92039,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": -0.6030566666666743,
+      "midi_count": 3,
+      "midi_strength": 1.897637,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 245.07911999999996,
+      "audio_time": 244.31733333333332,
+      "offset_seconds": -0.7617866666666373,
+      "midi_count": 5,
+      "midi_strength": 3.755906,
+      "audio_strength": 0.12456451807309972,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 245.23785,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": 0.7514833333333115,
+      "midi_count": 3,
+      "midi_strength": 1.7086609999999998,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 245.39658,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": 0.5927533333333201,
+      "midi_count": 3,
+      "midi_strength": 2.15748,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 245.55531,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": 0.43402333333332876,
+      "midi_count": 3,
+      "midi_strength": 1.6220469999999998,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 245.71404000000004,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": 0.27529333333328054,
+      "midi_count": 7,
+      "midi_strength": 5.322834,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 245.87277000000003,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": 0.11656333333328917,
+      "midi_count": 3,
+      "midi_strength": 1.598425,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 246.03149999999997,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": -0.04216666666664537,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 246.19023,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": -0.2008966666666936,
+      "midi_count": 3,
+      "midi_strength": 1.897637,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 246.34895999999992,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": -0.3596266666665997,
+      "midi_count": 15,
+      "midi_strength": 9.007876,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 246.50769,
+      "audio_time": 245.98933333333332,
+      "offset_seconds": -0.5183566666666763,
+      "midi_count": 3,
+      "midi_strength": 2.015748,
+      "audio_strength": 0.12295524317685322,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 246.66642,
+      "audio_time": 247.256,
+      "offset_seconds": 0.5895800000000122,
+      "midi_count": 3,
+      "midi_strength": 2.27559,
+      "audio_strength": 0.11925080957758469,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 246.82515,
+      "audio_time": 247.256,
+      "offset_seconds": 0.4308499999999924,
+      "midi_count": 3,
+      "midi_strength": 1.9921259999999998,
+      "audio_strength": 0.11925080957758469,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 246.98388,
+      "audio_time": 247.256,
+      "offset_seconds": 0.272120000000001,
+      "midi_count": 7,
+      "midi_strength": 5.228346,
+      "audio_strength": 0.11925080957758469,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 247.14261,
+      "audio_time": 247.256,
+      "offset_seconds": 0.11339000000000965,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.11925080957758469,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 247.30134,
+      "audio_time": 247.256,
+      "offset_seconds": -0.04534000000001015,
+      "midi_count": 3,
+      "midi_strength": 2.314961,
+      "audio_strength": 0.11925080957758469,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 247.46007,
+      "audio_time": 247.256,
+      "offset_seconds": -0.20407000000000153,
+      "midi_count": 3,
+      "midi_strength": 2.110236,
+      "audio_strength": 0.11925080957758469,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 247.61880000000002,
+      "audio_time": 247.256,
+      "offset_seconds": -0.3628000000000213,
+      "midi_count": 5,
+      "midi_strength": 3.740158,
+      "audio_strength": 0.11925080957758469,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 247.77752999999998,
+      "audio_time": 248.05866666666665,
+      "offset_seconds": 0.2811366666666686,
+      "midi_count": 3,
+      "midi_strength": 1.8976379999999997,
+      "audio_strength": 0.11041177036904341,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 247.93626000000003,
+      "audio_time": 248.05866666666665,
+      "offset_seconds": 0.12240666666662037,
+      "midi_count": 3,
+      "midi_strength": 2.244094,
+      "audio_strength": 0.11041177036904341,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 248.09498999999997,
+      "audio_time": 248.05866666666665,
+      "offset_seconds": -0.03632333333331417,
+      "midi_count": 3,
+      "midi_strength": 1.9999989999999999,
+      "audio_strength": 0.11041177036904341,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 248.25371999999996,
+      "audio_time": 248.05866666666665,
+      "offset_seconds": -0.19505333333330555,
+      "midi_count": 7,
+      "midi_strength": 5.322834,
+      "audio_strength": 0.11041177036904341,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 248.41245,
+      "audio_time": 248.05866666666665,
+      "offset_seconds": -0.35378333333335377,
+      "midi_count": 3,
+      "midi_strength": 1.7401579999999999,
+      "audio_strength": 0.11041177036904341,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 248.57118,
+      "audio_time": 248.05866666666665,
+      "offset_seconds": -0.5125133333333451,
+      "midi_count": 3,
+      "midi_strength": 2.338583,
+      "audio_strength": 0.11041177036904341,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 248.72991,
+      "audio_time": 248.05866666666665,
+      "offset_seconds": -0.6712433333333365,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.11041177036904341,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 249.68229,
+      "audio_time": 250.416,
+      "offset_seconds": 0.7337100000000021,
+      "midi_count": 3,
+      "midi_strength": 1.700788,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 249.84102,
+      "audio_time": 250.416,
+      "offset_seconds": 0.5749800000000107,
+      "midi_count": 3,
+      "midi_strength": 2.259842,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 249.99975000000003,
+      "audio_time": 250.416,
+      "offset_seconds": 0.4162499999999625,
+      "midi_count": 3,
+      "midi_strength": 2.03937,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 250.15848,
+      "audio_time": 250.416,
+      "offset_seconds": 0.2575199999999995,
+      "midi_count": 5,
+      "midi_strength": 3.732283,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 250.31721000000002,
+      "audio_time": 250.416,
+      "offset_seconds": 0.09878999999997973,
+      "midi_count": 3,
+      "midi_strength": 1.661417,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 250.47594,
+      "audio_time": 250.416,
+      "offset_seconds": -0.05994000000001165,
+      "midi_count": 3,
+      "midi_strength": 2.307087,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 250.63467,
+      "audio_time": 250.416,
+      "offset_seconds": -0.21867000000000303,
+      "midi_count": 3,
+      "midi_strength": 1.8582679999999998,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 250.7934,
+      "audio_time": 250.416,
+      "offset_seconds": -0.3773999999999944,
+      "midi_count": 7,
+      "midi_strength": 5.346456,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 250.95213,
+      "audio_time": 250.416,
+      "offset_seconds": -0.5361300000000142,
+      "midi_count": 3,
+      "midi_strength": 1.72441,
+      "audio_strength": 0.117504554503615,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 251.11086,
+      "audio_time": 251.67466666666667,
+      "offset_seconds": 0.5638066666666646,
+      "midi_count": 3,
+      "midi_strength": 2.244094,
+      "audio_strength": 0.10990197331440035,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 251.26959,
+      "audio_time": 251.67466666666667,
+      "offset_seconds": 0.4050766666666732,
+      "midi_count": 3,
+      "midi_strength": 2.141732,
+      "audio_strength": 0.10990197331440035,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 251.42832,
+      "audio_time": 251.67466666666667,
+      "offset_seconds": 0.2463466666666534,
+      "midi_count": 13,
+      "midi_strength": 8.078740999999999,
+      "audio_strength": 0.10990197331440035,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 251.58705,
+      "audio_time": 251.67466666666667,
+      "offset_seconds": 0.08761666666666201,
+      "midi_count": 3,
+      "midi_strength": 2.07874,
+      "audio_strength": 0.10990197331440035,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 251.74578,
+      "audio_time": 251.67466666666667,
+      "offset_seconds": -0.07111333333332936,
+      "midi_count": 3,
+      "midi_strength": 2.4409449999999997,
+      "audio_strength": 0.10990197331440035,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 251.90451,
+      "audio_time": 251.67466666666667,
+      "offset_seconds": -0.22984333333332074,
+      "midi_count": 3,
+      "midi_strength": 2.094488,
+      "audio_strength": 0.10990197331440035,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 252.06323999999998,
+      "audio_time": 251.67466666666667,
+      "offset_seconds": -0.3885733333333121,
+      "midi_count": 7,
+      "midi_strength": 5.433071,
+      "audio_strength": 0.10990197331440035,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 252.22196999999997,
+      "audio_time": 252.53066666666666,
+      "offset_seconds": 0.30869666666669104,
+      "midi_count": 3,
+      "midi_strength": 1.9921259999999998,
+      "audio_strength": 0.1068312406622639,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 252.38070000000002,
+      "audio_time": 252.53066666666666,
+      "offset_seconds": 0.14996666666664282,
+      "midi_count": 3,
+      "midi_strength": 2.409449,
+      "audio_strength": 0.1068312406622639,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 252.53943,
+      "audio_time": 252.53066666666666,
+      "offset_seconds": -0.008763333333348555,
+      "midi_count": 3,
+      "midi_strength": 2.220472,
+      "audio_strength": 0.1068312406622639,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 252.69816,
+      "audio_time": 252.53066666666666,
+      "offset_seconds": -0.16749333333333993,
+      "midi_count": 5,
+      "midi_strength": 3.8031499999999996,
+      "audio_strength": 0.1068312406622639,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 252.85689,
+      "audio_time": 253.09866666666667,
+      "offset_seconds": 0.24177666666668074,
+      "midi_count": 3,
+      "midi_strength": 1.976378,
+      "audio_strength": 0.10334317788656246,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 253.01562,
+      "audio_time": 253.09866666666667,
+      "offset_seconds": 0.08304666666666094,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.10334317788656246,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 253.17435,
+      "audio_time": 253.09866666666667,
+      "offset_seconds": -0.07568333333333044,
+      "midi_count": 3,
+      "midi_strength": 2.23622,
+      "audio_strength": 0.10334317788656246,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 253.33307999999994,
+      "audio_time": 253.09866666666667,
+      "offset_seconds": -0.23441333333326497,
+      "midi_count": 7,
+      "midi_strength": 5.480315,
+      "audio_strength": 0.10334317788656246,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 253.49181,
+      "audio_time": 253.792,
+      "offset_seconds": 0.30019000000001483,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.10560691444753491,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 253.65054,
+      "audio_time": 253.792,
+      "offset_seconds": 0.14145999999999503,
+      "midi_count": 3,
+      "midi_strength": 2.4645669999999997,
+      "audio_strength": 0.10560691444753491,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 253.80927,
+      "audio_time": 253.792,
+      "offset_seconds": -0.017269999999996344,
+      "midi_count": 3,
+      "midi_strength": 2.141732,
+      "audio_strength": 0.10560691444753491,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 253.96799999999996,
+      "audio_time": 253.792,
+      "offset_seconds": -0.1759999999999593,
+      "midi_count": 13,
+      "midi_strength": 8.070867,
+      "audio_strength": 0.10560691444753491,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 254.12673000000004,
+      "audio_time": 253.792,
+      "offset_seconds": -0.33473000000003594,
+      "midi_count": 3,
+      "midi_strength": 1.8740160000000001,
+      "audio_strength": 0.10560691444753491,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 254.28545999999997,
+      "audio_time": 253.792,
+      "offset_seconds": -0.4934599999999705,
+      "midi_count": 3,
+      "midi_strength": 2.299213,
+      "audio_strength": 0.10560691444753491,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 254.44419000000002,
+      "audio_time": 253.792,
+      "offset_seconds": -0.6521900000000187,
+      "midi_count": 3,
+      "midi_strength": 1.913386,
+      "audio_strength": 0.10560691444753491,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 254.76165,
+      "audio_time": 255.464,
+      "offset_seconds": 0.7023499999999956,
+      "midi_count": 3,
+      "midi_strength": 1.653543,
+      "audio_strength": 0.11834496772357415,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 254.92038,
+      "audio_time": 255.464,
+      "offset_seconds": 0.5436200000000042,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.11834496772357415,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 255.07911,
+      "audio_time": 255.464,
+      "offset_seconds": 0.38489000000001283,
+      "midi_count": 3,
+      "midi_strength": 1.968504,
+      "audio_strength": 0.11834496772357415,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 255.23784,
+      "audio_time": 255.464,
+      "offset_seconds": 0.22615999999999303,
+      "midi_count": 5,
+      "midi_strength": 3.629921,
+      "audio_strength": 0.11834496772357415,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 255.39657,
+      "audio_time": 255.464,
+      "offset_seconds": 0.06743000000000166,
+      "midi_count": 3,
+      "midi_strength": 1.818898,
+      "audio_strength": 0.11834496772357415,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 255.5553,
+      "audio_time": 255.464,
+      "offset_seconds": -0.09129999999998972,
+      "midi_count": 3,
+      "midi_strength": 2.354331,
+      "audio_strength": 0.11834496772357415,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 255.71403,
+      "audio_time": 255.464,
+      "offset_seconds": -0.2500300000000095,
+      "midi_count": 3,
+      "midi_strength": 1.8110239999999997,
+      "audio_strength": 0.11834496772357415,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 255.87276,
+      "audio_time": 256.0933333333333,
+      "offset_seconds": 0.22057333333330575,
+      "midi_count": 7,
+      "midi_strength": 5.354331,
+      "audio_strength": 0.11247800171274694,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 256.03149,
+      "audio_time": 256.0933333333333,
+      "offset_seconds": 0.061843333333285955,
+      "midi_count": 3,
+      "midi_strength": 1.708662,
+      "audio_strength": 0.11247800171274694,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 256.19022,
+      "audio_time": 256.0933333333333,
+      "offset_seconds": -0.09688666666670542,
+      "midi_count": 3,
+      "midi_strength": 2.2913390000000002,
+      "audio_strength": 0.11247800171274694,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 256.34895,
+      "audio_time": 256.0933333333333,
+      "offset_seconds": -0.2556166666666968,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.11247800171274694,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 256.50768000000005,
+      "audio_time": 256.0933333333333,
+      "offset_seconds": -0.414346666666745,
+      "midi_count": 15,
+      "midi_strength": 8.921261000000001,
+      "audio_strength": 0.11247800171274694,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 256.66641,
+      "audio_time": 256.0933333333333,
+      "offset_seconds": -0.5730766666666796,
+      "midi_count": 3,
+      "midi_strength": 2.1181099999999997,
+      "audio_strength": 0.11247800171274694,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 256.82514,
+      "audio_time": 257.36,
+      "offset_seconds": 0.5348600000000374,
+      "midi_count": 3,
+      "midi_strength": 2.456693,
+      "audio_strength": 0.10077785897214328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 256.98387,
+      "audio_time": 257.36,
+      "offset_seconds": 0.3761299999999892,
+      "midi_count": 3,
+      "midi_strength": 2.023622,
+      "audio_strength": 0.10077785897214328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 257.1426000000001,
+      "audio_time": 257.36,
+      "offset_seconds": 0.21739999999994097,
+      "midi_count": 7,
+      "midi_strength": 5.3700790000000005,
+      "audio_strength": 0.10077785897214328,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 257.30133,
+      "audio_time": 257.36,
+      "offset_seconds": 0.05867000000000644,
+      "midi_count": 3,
+      "midi_strength": 1.952756,
+      "audio_strength": 0.10077785897214328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 257.46006,
+      "audio_time": 257.36,
+      "offset_seconds": -0.10005999999998494,
+      "midi_count": 3,
+      "midi_strength": 2.3543309999999997,
+      "audio_strength": 0.10077785897214328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 257.61879,
+      "audio_time": 257.36,
+      "offset_seconds": -0.2587899999999763,
+      "midi_count": 3,
+      "midi_strength": 2.19685,
+      "audio_strength": 0.10077785897214328,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 257.77752,
+      "audio_time": 257.992,
+      "offset_seconds": 0.2144800000000373,
+      "midi_count": 5,
+      "midi_strength": 3.7007879999999997,
+      "audio_strength": 0.11726226774822535,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 257.93625,
+      "audio_time": 257.992,
+      "offset_seconds": 0.05575000000004593,
+      "midi_count": 3,
+      "midi_strength": 1.9055119999999999,
+      "audio_strength": 0.11726226774822535,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 258.09498,
+      "audio_time": 257.992,
+      "offset_seconds": -0.10298000000000229,
+      "midi_count": 3,
+      "midi_strength": 2.346457,
+      "audio_strength": 0.11726226774822535,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 258.25371,
+      "audio_time": 257.992,
+      "offset_seconds": -0.26170999999999367,
+      "midi_count": 3,
+      "midi_strength": 2.133858,
+      "audio_strength": 0.11726226774822535,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 258.41244,
+      "audio_time": 257.992,
+      "offset_seconds": -0.42043999999998505,
+      "midi_count": 7,
+      "midi_strength": 5.251969,
+      "audio_strength": 0.11726226774822535,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 258.57117,
+      "audio_time": 257.992,
+      "offset_seconds": -0.5791699999999764,
+      "midi_count": 3,
+      "midi_strength": 1.787402,
+      "audio_strength": 0.11726226774822535,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 258.7299,
+      "audio_time": 259.256,
+      "offset_seconds": 0.5260999999999854,
+      "midi_count": 3,
+      "midi_strength": 2.299213,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 258.88863,
+      "audio_time": 259.256,
+      "offset_seconds": 0.367369999999994,
+      "midi_count": 3,
+      "midi_strength": 2.086614,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 259.04736,
+      "audio_time": 259.256,
+      "offset_seconds": 0.20863999999994576,
+      "midi_count": 15,
+      "midi_strength": 9.094489999999999,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 259.20609,
+      "audio_time": 259.256,
+      "offset_seconds": 0.04990999999995438,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 259.36482,
+      "audio_time": 259.256,
+      "offset_seconds": -0.108820000000037,
+      "midi_count": 3,
+      "midi_strength": 2.3779529999999998,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 259.52355,
+      "audio_time": 259.256,
+      "offset_seconds": -0.2675500000000284,
+      "midi_count": 3,
+      "midi_strength": 1.944882,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 259.68228,
+      "audio_time": 259.256,
+      "offset_seconds": -0.42628000000001975,
+      "midi_count": 7,
+      "midi_strength": 5.511811,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 259.84101,
+      "audio_time": 259.256,
+      "offset_seconds": -0.5850100000000111,
+      "midi_count": 3,
+      "midi_strength": 1.700788,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 259.99974,
+      "audio_time": 259.256,
+      "offset_seconds": -0.7437400000000025,
+      "midi_count": 3,
+      "midi_strength": 2.433071,
+      "audio_strength": 0.10350318200137215,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 261.74577,
+      "audio_time": 262.41066666666666,
+      "offset_seconds": 0.6648966666666638,
+      "midi_count": 3,
+      "midi_strength": 2.0,
+      "audio_strength": 0.11123449329613873,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 261.9045,
+      "audio_time": 262.41066666666666,
+      "offset_seconds": 0.5061666666666724,
+      "midi_count": 3,
+      "midi_strength": 2.385827,
+      "audio_strength": 0.11123449329613873,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 262.06323,
+      "audio_time": 262.41066666666666,
+      "offset_seconds": 0.34743666666668105,
+      "midi_count": 3,
+      "midi_strength": 2.015748,
+      "audio_strength": 0.11123449329613873,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 262.22196,
+      "audio_time": 262.41066666666666,
+      "offset_seconds": 0.18870666666663283,
+      "midi_count": 7,
+      "midi_strength": 5.409449,
+      "audio_strength": 0.11123449329613873,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 262.38069,
+      "audio_time": 262.41066666666666,
+      "offset_seconds": 0.02997666666664145,
+      "midi_count": 3,
+      "midi_strength": 1.913386,
+      "audio_strength": 0.11123449329613873,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 262.53942,
+      "audio_time": 262.41066666666666,
+      "offset_seconds": -0.12875333333334993,
+      "midi_count": 3,
+      "midi_strength": 2.338583,
+      "audio_strength": 0.11123449329613873,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 262.69815,
+      "audio_time": 262.8933333333333,
+      "offset_seconds": 0.1951833333333184,
+      "midi_count": 3,
+      "midi_strength": 2.165354,
+      "audio_strength": 0.11524293644924527,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 262.85688,
+      "audio_time": 262.8933333333333,
+      "offset_seconds": 0.03645333333332701,
+      "midi_count": 5,
+      "midi_strength": 3.7401579999999996,
+      "audio_strength": 0.11524293644924527,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 263.01561,
+      "audio_time": 262.8933333333333,
+      "offset_seconds": -0.12227666666666437,
+      "midi_count": 3,
+      "midi_strength": 1.748031,
+      "audio_strength": 0.11524293644924527,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 263.17434,
+      "audio_time": 263.26666666666665,
+      "offset_seconds": 0.0923266666666791,
+      "midi_count": 3,
+      "midi_strength": 2.3543309999999997,
+      "audio_strength": 0.11964351203134245,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 263.33307,
+      "audio_time": 263.26666666666665,
+      "offset_seconds": -0.06640333333336912,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.11964351203134245,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 263.4918,
+      "audio_time": 263.26666666666665,
+      "offset_seconds": -0.2251333333333605,
+      "midi_count": 7,
+      "midi_strength": 5.3228349999999995,
+      "audio_strength": 0.11964351203134245,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 263.65053,
+      "audio_time": 263.26666666666665,
+      "offset_seconds": -0.3838633333333519,
+      "midi_count": 3,
+      "midi_strength": 1.700787,
+      "audio_strength": 0.11964351203134245,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 263.80926,
+      "audio_time": 263.26666666666665,
+      "offset_seconds": -0.5425933333333433,
+      "midi_count": 3,
+      "midi_strength": 2.291338,
+      "audio_strength": 0.11964351203134245,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 263.96799,
+      "audio_time": 264.488,
+      "offset_seconds": 0.5200100000000134,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.1299786163778543,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 264.1267200000001,
+      "audio_time": 264.488,
+      "offset_seconds": 0.36127999999990834,
+      "midi_count": 15,
+      "midi_strength": 9.055119999999999,
+      "audio_strength": 0.1299786163778543,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 264.28545,
+      "audio_time": 264.488,
+      "offset_seconds": 0.2025499999999738,
+      "midi_count": 3,
+      "midi_strength": 1.897638,
+      "audio_strength": 0.1299786163778543,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 264.44418,
+      "audio_time": 264.488,
+      "offset_seconds": 0.04381999999998243,
+      "midi_count": 3,
+      "midi_strength": 2.314961,
+      "audio_strength": 0.1299786163778543,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 264.60291,
+      "audio_time": 264.488,
+      "offset_seconds": -0.11491000000000895,
+      "midi_count": 3,
+      "midi_strength": 1.8976380000000002,
+      "audio_strength": 0.1299786163778543,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 264.76164,
+      "audio_time": 264.488,
+      "offset_seconds": -0.2736400000000003,
+      "midi_count": 7,
+      "midi_strength": 5.519685,
+      "audio_strength": 0.1299786163778543,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 264.92037,
+      "audio_time": 265.11466666666666,
+      "offset_seconds": 0.19429666666667345,
+      "midi_count": 3,
+      "midi_strength": 1.685039,
+      "audio_strength": 0.10001461708884476,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 265.0791,
+      "audio_time": 265.11466666666666,
+      "offset_seconds": 0.03556666666668207,
+      "midi_count": 3,
+      "midi_strength": 2.27559,
+      "audio_strength": 0.10001461708884476,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 265.23783,
+      "audio_time": 265.11466666666666,
+      "offset_seconds": -0.12316333333330931,
+      "midi_count": 3,
+      "midi_strength": 1.897637,
+      "audio_strength": 0.10001461708884476,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 265.39656,
+      "audio_time": 265.5706666666667,
+      "offset_seconds": 0.17410666666665975,
+      "midi_count": 5,
+      "midi_strength": 3.755906,
+      "audio_strength": 0.10231269347207889,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 265.55529,
+      "audio_time": 265.5706666666667,
+      "offset_seconds": 0.01537666666666837,
+      "midi_count": 3,
+      "midi_strength": 1.7086609999999998,
+      "audio_strength": 0.10231269347207889,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 265.71402,
+      "audio_time": 265.5706666666667,
+      "offset_seconds": -0.143353333333323,
+      "midi_count": 3,
+      "midi_strength": 2.15748,
+      "audio_strength": 0.10231269347207889,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 265.87275,
+      "audio_time": 265.5706666666667,
+      "offset_seconds": -0.3020833333333144,
+      "midi_count": 3,
+      "midi_strength": 1.6220469999999998,
+      "audio_strength": 0.10231269347207889,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 266.03148000000004,
+      "audio_time": 266.2,
+      "offset_seconds": 0.16851999999994405,
+      "midi_count": 7,
+      "midi_strength": 5.322834,
+      "audio_strength": 0.15485230903256184,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 266.19021,
+      "audio_time": 266.2,
+      "offset_seconds": 0.009790000000009513,
+      "midi_count": 3,
+      "midi_strength": 1.598425,
+      "audio_strength": 0.15485230903256184,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 266.34894,
+      "audio_time": 266.2,
+      "offset_seconds": -0.1489400000000387,
+      "midi_count": 3,
+      "midi_strength": 2.125984,
+      "audio_strength": 0.15485230903256184,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 266.50767,
+      "audio_time": 266.2,
+      "offset_seconds": -0.3076700000000301,
+      "midi_count": 3,
+      "midi_strength": 1.897637,
+      "audio_strength": 0.15485230903256184,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 266.6664,
+      "audio_time": 266.832,
+      "offset_seconds": 0.16559999999998354,
+      "midi_count": 15,
+      "midi_strength": 9.007876,
+      "audio_strength": 0.1328277155351133,
+      "tracks": [
+        "drums",
+        "electric_piano_1",
+        "fifth_saw_wave",
+        "fingered_bass",
+        "saw_wave",
+        "square_wave",
+        "strings",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 266.82513,
+      "audio_time": 266.832,
+      "offset_seconds": 0.00686999999999216,
+      "midi_count": 3,
+      "midi_strength": 2.015748,
+      "audio_strength": 0.1328277155351133,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 266.98386,
+      "audio_time": 266.832,
+      "offset_seconds": -0.15185999999999922,
+      "midi_count": 3,
+      "midi_strength": 2.27559,
+      "audio_strength": 0.1328277155351133,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 267.14259,
+      "audio_time": 266.832,
+      "offset_seconds": -0.3105899999999906,
+      "midi_count": 3,
+      "midi_strength": 1.9921259999999998,
+      "audio_strength": 0.1328277155351133,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 267.30132,
+      "audio_time": 266.832,
+      "offset_seconds": -0.469319999999982,
+      "midi_count": 7,
+      "midi_strength": 5.228346,
+      "audio_strength": 0.1328277155351133,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 267.46005,
+      "audio_time": 266.832,
+      "offset_seconds": -0.6280500000000302,
+      "midi_count": 3,
+      "midi_strength": 1.8818899999999998,
+      "audio_strength": 0.1328277155351133,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 267.61878,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": 0.6478866666666363,
+      "midi_count": 3,
+      "midi_strength": 2.314961,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 267.77751,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": 0.4891566666666449,
+      "midi_count": 3,
+      "midi_strength": 2.110236,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 267.93624,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": 0.33042666666665355,
+      "midi_count": 5,
+      "midi_strength": 3.740158,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 268.09497,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": 0.17169666666666217,
+      "midi_count": 3,
+      "midi_strength": 1.8976379999999997,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 268.2537,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": 0.01296666666667079,
+      "midi_count": 3,
+      "midi_strength": 2.244094,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 268.41243,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": -0.1457633333333206,
+      "midi_count": 3,
+      "midi_strength": 1.9999989999999999,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 268.57116,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": -0.3044933333333688,
+      "midi_count": 7,
+      "midi_strength": 5.322834,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "fingered_bass",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 268.72989,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": -0.4632233333333602,
+      "midi_count": 3,
+      "midi_strength": 1.7401579999999999,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 268.88862,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": -0.6219533333333516,
+      "midi_count": 3,
+      "midi_strength": 2.338583,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    },
+    {
+      "midi_time": 269.04735,
+      "audio_time": 268.26666666666665,
+      "offset_seconds": -0.7806833333333429,
+      "midi_count": 3,
+      "midi_strength": 2.070866,
+      "audio_strength": 0.10187500459494817,
+      "tracks": [
+        "drums",
+        "saw_wave",
+        "synth_bass_1"
+      ]
+    }
+  ]
+}
