@@ -577,6 +577,22 @@ const SCORE_LABELS = {
 };
 
 const BAND_NAMES = ["sub", "bass", "low_mid", "mid", "presence", "air"];
+const HIDDEN_SCORE_KEYS = new Set(["arrangement_preservation"]);
+
+function accuracyPayload(data) {
+  if (data?.global_mix_diff?.scores) {
+    return {
+      scores: data.global_mix_diff.scores || {},
+      diagnostics: data.global_mix_diff.diagnostics || {},
+      source: "global_mix_diff",
+    };
+  }
+  return {
+    scores: data?.scores || data?.best_scores || {},
+    diagnostics: data?.diagnostics || {},
+    source: "report",
+  };
+}
 
 function formatScoreKey(key) {
   return String(key || "").replaceAll("_", " ");
@@ -776,10 +792,11 @@ function AccuracyViewer({ trace }) {
       .catch((error) => { if (!cancelled) setData({ error: error.stack || String(error) }); });
     return () => { cancelled = true; };
   }, [trace?.url]);
-  const scores = data?.scores || data?.best_scores || {};
-  const diagnostics = data?.diagnostics || {};
+  const payload = accuracyPayload(data);
+  const scores = payload.scores;
+  const diagnostics = payload.diagnostics;
   const groups = diagnostics.score_groups || {};
-  const keys = Object.keys(scores).filter((key) => Number.isFinite(Number(scores[key])) && key !== "final").slice(0, 24);
+  const keys = Object.keys(scores).filter((key) => Number.isFinite(Number(scores[key])) && key !== "final" && !HIDDEN_SCORE_KEYS.has(key)).slice(0, 24);
   const finalScore = Number(scores.final || 0);
   if (!trace) return null;
   if (!data) return h("div", { className: "sidebar-loading" }, "Loading accuracy report...");
@@ -788,7 +805,7 @@ function AccuracyViewer({ trace }) {
     h("div", { className: "accuracy-summary" },
       h("div", null,
         h("strong", { className: `score-text-${scoreTone(finalScore)}` }, finalScore.toFixed(3)),
-        h("span", null, "Final similarity")
+        h("span", null, payload.source === "global_mix_diff" ? "Global mix similarity" : "Final similarity")
       ),
       h("em", { className: `accuracy-verdict score-tile-${scoreTone(finalScore)}` },
         finalScore >= 0.85 ? "Strong match" : finalScore >= 0.7 ? "Close, inspect weak areas" : finalScore >= 0.55 ? "Needs targeted repair" : "Major mismatch"
