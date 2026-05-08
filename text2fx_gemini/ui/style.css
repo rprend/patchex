@@ -610,6 +610,10 @@ textarea {
   margin-top: 1rem;
 }
 
+.artifact-groups-compact {
+  margin: 0;
+}
+
 .artifact-group {
   border-top: 1px solid var(--line);
 }
@@ -617,9 +621,9 @@ textarea {
 .artifact-group [data-slot="accordion-trigger"] {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: .75rem 0;
+  justify-content: flex-start;
+  gap: .55rem;
+  padding: .85rem 1.25rem;
   cursor: pointer;
   text-align: left;
 }
@@ -633,11 +637,32 @@ textarea {
   display: none;
 }
 
+.artifact-group [data-slot="accordion-trigger"] .artifact-caret {
+  display: block;
+  flex: 0 0 auto;
+  color: var(--soft);
+  transition: transform .16s ease;
+}
+
+.artifact-group [data-slot="accordion-trigger"][data-state="open"] .artifact-caret {
+  transform: rotate(90deg);
+}
+
+.artifact-group [data-slot="accordion-trigger"] [data-slot="badge"] {
+  margin-left: auto;
+}
+
 .artifact-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   border-top: 1px solid var(--line-soft);
   border-left: 1px solid var(--line-soft);
+}
+
+.compact-artifact-list {
+  display: block;
+  border-left: 0;
+  padding: .25rem 1.25rem 1.1rem;
 }
 
 .artifact-list a {
@@ -655,8 +680,25 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.compact-artifact-list a {
+  min-height: 0;
+  padding: .58rem 0;
+  border-right: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+}
+
+.compact-artifact-list a:last-child {
+  border-bottom: 0;
+}
+
 .artifact-list a:hover {
   background: #f7f8fc;
+}
+
+.compact-artifact-list a:hover {
+  background: transparent;
+  color: var(--accent);
 }
 
 .artifact-list em {
@@ -1679,6 +1721,250 @@ textarea {
 .session-artifact-viewer {
   min-height: 0;
   overflow: auto;
+}
+
+.patch-visualizer {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.patch-section,
+.patch-track {
+  margin-top: .9rem;
+  padding-top: .85rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.patch-section-head,
+.patch-track-head,
+.patch-subhead,
+.patch-stat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .8rem;
+}
+
+.patch-section-head strong,
+.patch-track-head strong {
+  color: var(--text);
+  font-size: .95rem;
+}
+
+.patch-section-head span,
+.patch-track-head span,
+.patch-subhead span,
+.patch-stat-head span {
+  color: var(--muted);
+  font-size: .74rem;
+  font-weight: 700;
+}
+
+.patch-track-head em,
+.patch-section-head span,
+.patch-subhead strong,
+.patch-stat-head strong {
+  color: var(--soft);
+  font-size: .76rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.patch-mix-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: .45rem;
+  margin-top: .75rem;
+}
+
+.patch-flow-track,
+.patch-flow-return,
+.patch-flow-master {
+  position: relative;
+  min-height: 4.6rem;
+  padding: .62rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: #fbfbfc;
+}
+
+.patch-flow-track:after,
+.patch-flow-return:after {
+  content: "";
+  position: absolute;
+  right: -.45rem;
+  top: 50%;
+  width: .45rem;
+  border-top: 1px solid #bfc8de;
+}
+
+.patch-flow-return {
+  background: #f6f8fb;
+}
+
+.patch-flow-master {
+  color: white;
+  background: var(--accent);
+}
+
+.patch-flow-track strong,
+.patch-flow-return strong,
+.patch-flow-master strong,
+.patch-flow-track span,
+.patch-flow-return span,
+.patch-flow-master span,
+.patch-flow-track i,
+.patch-flow-return i {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patch-flow-track strong,
+.patch-flow-return strong,
+.patch-flow-master strong {
+  font-size: .78rem;
+}
+
+.patch-flow-track span,
+.patch-flow-return span,
+.patch-flow-master span,
+.patch-flow-track i,
+.patch-flow-return i {
+  margin-top: .2rem;
+  color: inherit;
+  opacity: .78;
+  font-size: .68rem;
+  font-style: normal;
+}
+
+.patch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .55rem;
+  margin-top: .7rem;
+}
+
+.patch-stat {
+  min-width: 0;
+  padding: .52rem .56rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.patch-meter {
+  height: .32rem;
+  margin-top: .42rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef0f5;
+}
+
+.patch-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.patch-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-top: .65rem;
+}
+
+.patch-tags span {
+  padding: .18rem .42rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--soft);
+  font-size: .68rem;
+}
+
+.patch-automation {
+  margin-top: .75rem;
+}
+
+.patch-point-strip {
+  display: flex;
+  align-items: end;
+  gap: .18rem;
+  height: 3.4rem;
+  margin-top: .42rem;
+  padding: .38rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: linear-gradient(to top, #f4f5f8, #fff);
+}
+
+.patch-point-strip i {
+  flex: 1 1 .45rem;
+  min-width: .28rem;
+  border-radius: 2px 2px 0 0;
+  background: #657cc2;
+}
+
+.patch-hypothesis {
+  margin: .55rem 0 0;
+  color: var(--text);
+  font-size: .84rem;
+  line-height: 1.45;
+}
+
+.patch-operation-list,
+.patch-trials {
+  display: grid;
+  gap: .45rem;
+  margin-top: .7rem;
+}
+
+.patch-operation,
+.patch-trial {
+  padding: .62rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: #fbfbfc;
+}
+
+.patch-operation > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .6rem;
+}
+
+.patch-operation strong,
+.patch-trial strong {
+  color: var(--text);
+  font-size: .82rem;
+}
+
+.patch-operation span,
+.patch-trial span {
+  display: block;
+  margin-top: .18rem;
+  color: var(--muted);
+  font-size: .7rem;
+  overflow-wrap: anywhere;
+}
+
+.patch-operation em {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: .74rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.patch-operation p {
+  margin: .42rem 0 0;
+  color: var(--soft);
+  font-size: .76rem;
+  line-height: 1.4;
 }
 
 .midi-viewer {

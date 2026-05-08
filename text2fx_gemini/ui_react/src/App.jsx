@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Activity, ArrowLeft, MessageSquareText, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Activity, ArrowLeft, ChevronRight, MessageSquareText, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { Terminal } from './components/ui/terminal.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
@@ -915,8 +915,162 @@ function MidiTimeline({ session }) {
   );
 }
 
+function displayValue(value) {
+  if (typeof value === "number") return Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(2).replace(/\.00$/, "");
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (value === null || value === undefined || value === "") return "none";
+  if (Array.isArray(value)) return `${value.length} items`;
+  if (typeof value === "object") return `${Object.keys(value).length} fields`;
+  return String(value);
+}
+
+function numericMeter(value, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const pct = Math.max(0, Math.min(100, ((numeric - min) / (max - min)) * 100));
+  return h("div", { className: "patch-meter" }, h("i", { style: { width: `${pct}%` } }));
+}
+
+function PatchStat({ label, value, min = 0, max = 1, signed = false }) {
+  return h("div", { className: "patch-stat" },
+    h("div", { className: "patch-stat-head" },
+      h("span", null, label),
+      h("strong", null, displayValue(value))
+    ),
+    numericMeter(value, min, max) || (signed ? numericMeter(Number(value) || 0, -1, 1) : null)
+  );
+}
+
+function PatchAutomation({ label, points, valueKey = "db", min = -6, max = 6 }) {
+  const rows = Array.isArray(points) ? points : [];
+  if (!rows.length) return null;
+  return h("div", { className: "patch-automation" },
+    h("div", { className: "patch-subhead" }, h("span", null, label), h("strong", null, `${rows.length} points`)),
+    h("div", { className: "patch-point-strip" },
+      rows.map((point, index) => {
+        const value = Number(point[valueKey]);
+        const pct = Number.isFinite(value) ? Math.max(4, Math.min(100, ((value - min) / (max - min)) * 100)) : 20;
+        return h("i", {
+          key: `${label}-${index}`,
+          style: { height: `${pct}%` },
+          title: `${Number(point.time || 0).toFixed(2)}s: ${displayValue(point[valueKey])}`,
+        });
+      })
+    )
+  );
+}
+
+function PatchOperations({ ops }) {
+  if (!ops) return null;
+  const operations = Array.isArray(ops.operations) ? ops.operations : [];
+  const trials = Array.isArray(ops.loss_trials) ? ops.loss_trials : [];
+  return h("section", { className: "patch-section" },
+    h("div", { className: "patch-section-head" },
+      h("strong", null, "Producer Decisions"),
+      h("span", null, `${operations.length} edits${trials.length ? `, ${trials.length} checks` : ""}`)
+    ),
+    ops.hypothesis ? h("p", { className: "patch-hypothesis" }, ops.hypothesis) : null,
+    operations.length ? h("div", { className: "patch-operation-list" },
+      operations.map((operation, index) => h("div", { className: "patch-operation", key: `${operation.path}-${index}` },
+        h("div", null,
+          h("strong", null, operation.change || operation.path || `Edit ${index + 1}`),
+          h("span", null, operation.path || operation.op || "patch operation")
+        ),
+        h("em", null, displayValue(operation.value)),
+        operation.reason ? h("p", null, operation.reason) : null
+      ))
+    ) : null,
+    trials.length ? h("div", { className: "patch-trials" },
+      trials.slice(0, 5).map((trial, index) => h("div", { className: "patch-trial", key: `${trial.command}-${index}` },
+        h("strong", null, Number.isFinite(Number(trial.score)) ? Number(trial.score).toFixed(3) : "trial"),
+        h("span", null, trial.notes || trial.command || "Loss check")
+      ))
+    ) : null
+  );
+}
+
+function PatchTrack({ layer }) {
+  const synth = layer.synth || {};
+  const envelope = layer.amp_envelope || {};
+  const filter = layer.filter || {};
+  const effects = layer.effects || {};
+  const modulation = layer.modulation || {};
+  const notes = Array.isArray(layer.notes) ? layer.notes : [];
+  return h("article", { className: "patch-track" },
+    h("div", { className: "patch-track-head" },
+      h("div", null,
+        h("strong", null, layer.id || layer.role || "track"),
+        h("span", null, `${layer.role || "layer"} · ${notes.length} notes`)
+      ),
+      h("em", null, `${displayValue(layer.gain_db)} dB`)
+    ),
+    h("div", { className: "patch-grid" },
+      h(PatchStat, { label: "Gain", value: layer.gain_db, min: -36, max: 6 }),
+      h(PatchStat, { label: "Pan", value: layer.pan, min: -1, max: 1, signed: true }),
+      h(PatchStat, { label: "Width", value: layer.width, min: 0, max: 2 }),
+      h(PatchStat, { label: "Voices", value: synth.voices, min: 1, max: 8 }),
+      h(PatchStat, { label: "Detune", value: synth.detune_cents, min: 0, max: 24 }),
+      h(PatchStat, { label: "Spread", value: synth.stereo_spread, min: 0, max: 2 }),
+      h(PatchStat, { label: "Attack", value: envelope.attack, min: 0, max: 1 }),
+      h(PatchStat, { label: "Release", value: envelope.release, min: 0, max: 2 }),
+      h(PatchStat, { label: "Cutoff", value: filter.cutoff_start_hz ?? filter.cutoff_end_hz, min: 40, max: 12000 }),
+      h(PatchStat, { label: "Reverb", value: effects.reverb_mix, min: 0, max: .6 }),
+      h(PatchStat, { label: "Delay", value: effects.delay_mix, min: 0, max: .6 }),
+      h(PatchStat, { label: "Send", value: effects.return_send, min: 0, max: .6 })
+    ),
+    h("div", { className: "patch-tags" },
+      ["waveform", "engine", "wavetable"].map((key) => synth[key] ? h("span", { key }, `${key}: ${synth[key]}`) : null),
+      modulation.lfo_rate_hz ? h("span", null, `lfo: ${displayValue(modulation.lfo_rate_hz)} Hz`) : null
+    ),
+    h(PatchAutomation, { label: "Gain Automation", points: layer.gain_points, valueKey: "db", min: -6, max: 6 }),
+    h(PatchAutomation, { label: "Filter Motion", points: filter.cutoff_points, valueKey: "hz", min: 40, max: 12000 })
+  );
+}
+
+function PatchSessionVisualizer({ session, ops }) {
+  const layers = Array.isArray(session?.layers) ? session.layers : [];
+  const returns = session?.returns || {};
+  const master = session?.master || {};
+  return h("section", { className: "patch-visualizer" },
+    h("div", { className: "patch-section-head" },
+      h("strong", null, "Patch / Effects / Mix"),
+      h("span", null, `${layers.length} tracks`)
+    ),
+    h("div", { className: "patch-mix-flow" },
+      layers.map((layer) => h("div", { className: "patch-flow-track", key: layer.id || layer.role },
+        h("strong", null, layer.id || layer.role || "track"),
+        h("span", null, `gain ${displayValue(layer.gain_db)} dB`),
+        h("i", null, `send ${displayValue(layer.effects?.return_send)}`)
+      )),
+      Object.entries(returns).map(([name, value]) => h("div", { className: "patch-flow-return", key: name },
+        h("strong", null, name),
+        h("span", null, `decay ${displayValue(value?.decay)}`),
+        h("i", null, `width ${displayValue(value?.width)}`)
+      )),
+      h("div", { className: "patch-flow-master" },
+        h("strong", null, "master"),
+        h("span", null, `${displayValue(master.gain_db)} dB`)
+      )
+    ),
+    layers.map((layer) => h(PatchTrack, { key: layer.id || layer.role, layer })),
+    Object.keys(returns).length || Object.keys(master).length ? h("section", { className: "patch-section patch-master-section" },
+      h("div", { className: "patch-section-head" }, h("strong", null, "Returns / Master"), h("span", null, "routing and final mix")),
+      h("div", { className: "patch-grid" },
+        Object.entries(returns).flatMap(([name, value]) => Object.entries(value || {}).map(([key, val]) =>
+          h(PatchStat, { key: `${name}.${key}`, label: `${name} ${key}`, value: val, min: key.includes("gain") ? -36 : 0, max: key.includes("width") ? 2 : key.includes("gain") ? 6 : 2 })
+        )),
+        Object.entries(master).map(([key, val]) =>
+          h(PatchStat, { key: `master.${key}`, label: `master ${key}`, value: val, min: key.includes("gain") ? -36 : 0, max: key.includes("gain") ? 6 : 2 })
+        )
+      )
+    ) : null,
+    h(PatchOperations, { ops })
+  );
+}
+
 function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = [] }) {
   const [session, setSession] = useState(null);
+  const [ops, setOps] = useState(null);
   useEffect(() => {
     if (!trace?.url) return undefined;
     let cancelled = false;
@@ -926,6 +1080,20 @@ function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = []
       .catch((error) => { if (!cancelled) setSession({ error: error.stack || String(error) }); });
     return () => { cancelled = true; };
   }, [trace?.url]);
+  useEffect(() => {
+    const opTrace = (selected.traces || []).find((item) => item.name?.startsWith("patch_ops_step_") || item.name?.startsWith("patch_ops_applied_step_")) ||
+      allTraces.find((item) => item.step === selected.step && (item.name?.startsWith("patch_ops_step_") || item.name?.startsWith("patch_ops_applied_step_")));
+    if (!opTrace?.url) {
+      setOps(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetch(opTrace.url)
+      .then((res) => res.json())
+      .then((json) => { if (!cancelled) setOps(json); })
+      .catch(() => { if (!cancelled) setOps(null); });
+    return () => { cancelled = true; };
+  }, [selected.id, selected.step, selected.traces, allTraces]);
 
   const isRenderAudio = (item) => {
     const name = item?.name || item?.path?.split("/").pop() || "";
@@ -949,7 +1117,10 @@ function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = []
         renderLabel: "Producer audio",
       })
     ),
-    session?.error ? h("pre", { className: "sidebar-pre" }, session.error) : session ? h(MidiTimeline, { session }) : h("div", { className: "sidebar-loading" }, "Loading session...")
+    session?.error ? h("pre", { className: "sidebar-pre" }, session.error) : session ? h(React.Fragment, null,
+      h(MidiTimeline, { session }),
+      h(PatchSessionVisualizer, { session, ops })
+    ) : h("div", { className: "sidebar-loading" }, "Loading session...")
   );
 }
 
@@ -1239,18 +1410,15 @@ function Artifacts({ artifacts, onReport }) {
   if (!artifacts.length) return null;
   const sortedArtifacts = [...artifacts].sort((a, b) => a.name.localeCompare(b.name));
   return h("section", { className: "section-block" },
-    h("div", { className: "section-title" },
-      h("h2", null, "Files"),
-      h("p", null, "Every output from the run.")
-    ),
-    h(Accordion, { className: "artifact-groups", type: "single", collapsible: true, defaultValue: "files" },
+    h(Accordion, { className: "artifact-groups artifact-groups-compact", type: "single", collapsible: true },
       h(AccordionItem, { className: "artifact-group", value: "files" },
         h(AccordionTrigger, null,
+          h(ChevronRight, { className: "artifact-caret", size: 16, strokeWidth: 2.4 }),
           h("span", null, "Files"),
           h(Badge, { variant: "outline" }, String(sortedArtifacts.length))
         ),
         h(AccordionContent, null,
-          h("div", { className: "artifact-list" },
+          h("div", { className: "artifact-list compact-artifact-list" },
             sortedArtifacts.map((artifact) => h("a", { className: artifact.name.endsWith(".wav") ? "audio-artifact-link" : "", href: artifact.url, target: "_blank", key: artifact.url },
               h("span", null, artifact.name),
               artifact.name.endsWith(".wav") ? h(Badge, { variant: "secondary" }, "audio") : null
