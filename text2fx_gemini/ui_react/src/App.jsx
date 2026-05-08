@@ -1364,7 +1364,7 @@ function App() {
     if (role === "session_proposal") addAgentNote(statusId, "Producer wrote a session proposal.");
     if (role === "accepted_session") addAgentNote(statusId, "Accepted as current session.");
     if (role === "recommendation") addAgentNote(statusId, "Critic wrote the next Producer brief.");
-    if (["answer", "layer_analysis", "recommendation", "recommendation_initial", "accepted_session", "candidate_session"].includes(role)) {
+    if (role.includes("audio_diff") || ["answer", "layer_analysis", "recommendation", "recommendation_initial", "accepted_session", "candidate_session"].includes(role)) {
       setStatuses((current) => ({ ...current, [statusId]: "completed" }));
     }
   }, [addAgentNote]);
