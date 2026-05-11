@@ -1,0 +1,435 @@
+{
+  "schema": "patchex.patch_ops.v1",
+  "hypothesis": "The current sustained chord bed is loud enough but too bright, too mono, and pumps at the chord change, so this pass darkens both locked layers, shifts body toward the centered electric-piano fundamental, smooths the 2.6s gain hump, and widens only the string ensemble with shallow 3.8 Hz motion.",
+  "critic_brief_used": "text2fx_gemini/ui_runs/20260511_152606_goal_first5/critic_brief_step_01.md",
+  "operations": [
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.filter.cutoff_start_hz",
+      "value": 650.0,
+      "track_id": "electric_piano_1",
+      "change": "lower starting cutoff for dark fundamental body",
+      "reason": "Critic reports candidate centroid starts far above target and excess mid/presence/air."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.filter.cutoff_end_hz",
+      "value": 520.0,
+      "track_id": "electric_piano_1",
+      "change": "lower ending cutoff so tone darkens over time",
+      "reason": "Reference centroid falls through the clip while render gets brighter."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.filter.cutoff_points",
+      "value": [
+        {
+          "time": 0.0,
+          "hz": 650.0
+        },
+        {
+          "time": 2.6,
+          "hz": 580.0
+        },
+        {
+          "time": 5.0,
+          "hz": 520.0
+        }
+      ],
+      "track_id": "electric_piano_1",
+      "change": "replace cutoff automation with downward darkening curve",
+      "reason": "Targets the wrong upward brightness motion without changing MIDI."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.filter.resonance",
+      "value": 0.07,
+      "track_id": "electric_piano_1",
+      "change": "reduce resonance for smoother low organ tone",
+      "reason": "Keeps the dark layer from adding nasal/presence peaks."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.synth.sub_level",
+      "value": 0.24,
+      "track_id": "electric_piano_1",
+      "change": "increase controlled sub/fundamental support",
+      "reason": "Target is bass-dominant and chroma is correct, so body should come from source support not note edits."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.synth.blend",
+      "value": 0.4,
+      "track_id": "electric_piano_1",
+      "change": "reduce buzzy square-saw blend",
+      "reason": "Critic asks for sine/triangle plus low square character instead of saw-heavy upper partials."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.synth.wavetable_position",
+      "value": 0.32,
+      "track_id": "electric_piano_1",
+      "change": "move wavetable toward a purer darker organ body",
+      "reason": "Reduces upper-harmonic density while retaining the sustained chord source."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.width",
+      "value": 0.52,
+      "track_id": "electric_piano_1",
+      "change": "narrow and center the fundamental layer",
+      "reason": "Keeps bass/body stable while strings provide side energy."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.synth.stereo_spread",
+      "value": 0.42,
+      "track_id": "electric_piano_1",
+      "change": "reduce synth spread on the body layer",
+      "reason": "Prevents widened low fundamentals from destabilizing the center."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.gain_db",
+      "value": -14.2,
+      "track_id": "electric_piano_1",
+      "change": "lower body layer base gain after adding sub support",
+      "reason": "Full RMS is already close and added sub needs headroom."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.gain_points",
+      "value": [
+        {
+          "time": 0.0,
+          "db": -2.2
+        },
+        {
+          "time": 1.0,
+          "db": -0.7
+        },
+        {
+          "time": 2.55,
+          "db": -0.6
+        },
+        {
+          "time": 2.8,
+          "db": -0.2
+        },
+        {
+          "time": 4.8,
+          "db": 1.7
+        },
+        {
+          "time": 5.0,
+          "db": 1.9
+        }
+      ],
+      "track_id": "electric_piano_1",
+      "change": "smooth gain automation and reduce the 2.6s lift",
+      "reason": "Weak windows show a large RMS overshoot at 2.62-2.75s while final sustain still needs gradual support."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.effects.high_gain_db",
+      "value": -3.0,
+      "track_id": "electric_piano_1",
+      "change": "cut high band on the body layer",
+      "reason": "Render has far too much presence/air relative to bass."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.effects.mid_gain_db",
+      "value": -1.5,
+      "track_id": "electric_piano_1",
+      "change": "trim mid buildup on the body layer",
+      "reason": "Global band balance shows excess mid energy versus the target."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.filter.cutoff_start_hz",
+      "value": 850.0,
+      "track_id": "strings",
+      "change": "lower starting cutoff for dark ensemble",
+      "reason": "Strings are acting as a bright saw pad while target is a dark organ/string bed."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.filter.cutoff_end_hz",
+      "value": 650.0,
+      "track_id": "strings",
+      "change": "lower ending cutoff for darker final sustain",
+      "reason": "Reference becomes darker by the end and final window is still proportionally too bright."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.filter.cutoff_points",
+      "value": [
+        {
+          "time": 0.0,
+          "hz": 850.0
+        },
+        {
+          "time": 2.6,
+          "hz": 720.0
+        },
+        {
+          "time": 5.0,
+          "hz": 650.0
+        }
+      ],
+      "track_id": "strings",
+      "change": "replace string cutoff with downward darkening curve",
+      "reason": "Pulls spectral centroid down over the same locked chord timing."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.filter.resonance",
+      "value": 0.08,
+      "track_id": "strings",
+      "change": "soften filter resonance",
+      "reason": "Avoids nasal presence while lowering cutoff."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.synth.wavetable_position",
+      "value": 0.3,
+      "track_id": "strings",
+      "change": "darken saw-stack position",
+      "reason": "Reduces bright saw partial density but keeps ensemble identity."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.synth.blend",
+      "value": 0.35,
+      "track_id": "strings",
+      "change": "reduce bright string blend",
+      "reason": "Moves the string pad toward softer ensemble body."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.width",
+      "value": 1.48,
+      "track_id": "strings",
+      "change": "widen string layer",
+      "reason": "Target width and side energy are much higher while the body layer remains centered."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.synth.stereo_spread",
+      "value": 1.0,
+      "track_id": "strings",
+      "change": "keep maximum string stereo spread",
+      "reason": "Builds width from chorus/unison instead of long reverb."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.effects.chorus_mix",
+      "value": 0.22,
+      "track_id": "strings",
+      "change": "keep moderate chorus ensemble width",
+      "reason": "Adds side energy without increasing reverb tail or blurring 50ms envelope."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.modulation.lfos",
+      "value": [
+        {
+          "target": "gain_db",
+          "shape": "sine",
+          "rate_hz": 3.8,
+          "depth": 0.07,
+          "amount": 0.07,
+          "phase": 0.0,
+          "center": 0.0
+        }
+      ],
+      "track_id": "strings",
+      "change": "reduce to shallow fast modulation",
+      "reason": "Reference motion is around 3.8 Hz with shallow depth; prior motion reads too deep."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.gain_points",
+      "value": [
+        {
+          "time": 0.0,
+          "db": -2.4
+        },
+        {
+          "time": 1.0,
+          "db": -0.8
+        },
+        {
+          "time": 2.55,
+          "db": -0.5
+        },
+        {
+          "time": 2.8,
+          "db": -0.1
+        },
+        {
+          "time": 4.8,
+          "db": 1.8
+        },
+        {
+          "time": 5.0,
+          "db": 2.0
+        }
+      ],
+      "track_id": "strings",
+      "change": "smooth string gain automation around chord change",
+      "reason": "Reduces the local 2.6-2.8s hump while preserving a gradual late sustain lift."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.effects.high_gain_db",
+      "value": -4.0,
+      "track_id": "strings",
+      "change": "cut high/presence fizz on strings",
+      "reason": "Render has excess air and presence that the target nearly lacks."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.effects.mid_gain_db",
+      "value": -2.0,
+      "track_id": "strings",
+      "change": "trim string mid glare",
+      "reason": "Helps shift the global balance toward bass and low-mid."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.effects.low_gain_db",
+      "value": 1.0,
+      "track_id": "strings",
+      "change": "add modest low-mid body to strings",
+      "reason": "Supports the target bass/low-mid weighting without increasing brightness."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.amp_envelope.attack",
+      "value": 0.14,
+      "track_id": "electric_piano_1",
+      "change": "soften body-layer attack",
+      "reason": "Opening and chord-change windows are still too loud in 50ms scoring; slower attack smooths the locked note onsets without retiming notes."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.amp_envelope.attack",
+      "value": 0.16,
+      "track_id": "strings",
+      "change": "soften string attack",
+      "reason": "Reduces the 2.6s chord-change hump and opening transient while preserving sustained string width."
+    },
+    {
+      "op": "set",
+      "path": "layers.electric_piano_1.gain_points",
+      "value": [
+        {
+          "time": 0.0,
+          "db": -2.2
+        },
+        {
+          "time": 1.0,
+          "db": -0.7
+        },
+        {
+          "time": 2.55,
+          "db": -0.6
+        },
+        {
+          "time": 2.8,
+          "db": -0.2
+        },
+        {
+          "time": 4.8,
+          "db": 2.3
+        },
+        {
+          "time": 5.0,
+          "db": 2.5
+        }
+      ],
+      "track_id": "electric_piano_1",
+      "change": "restore more late body after smoothing chord change",
+      "reason": "The v2 candidate fixed the 2.6s overshoot but ended below the target RMS, so the final lift is increased gradually without adding brightness."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.gain_points",
+      "value": [
+        {
+          "time": 0.0,
+          "db": -2.4
+        },
+        {
+          "time": 1.0,
+          "db": -0.8
+        },
+        {
+          "time": 2.55,
+          "db": -0.5
+        },
+        {
+          "time": 2.8,
+          "db": -0.1
+        },
+        {
+          "time": 4.8,
+          "db": 2.5
+        },
+        {
+          "time": 5.0,
+          "db": 2.7
+        }
+      ],
+      "track_id": "strings",
+      "change": "restore more late string sustain after smoothing chord change",
+      "reason": "The ending window improved spectrally but became too quiet; this preserves the dark final sustain with a smooth late ramp."
+    }
+  ],
+  "loss_trials": [
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_01.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_01_full.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_01_full.wav --seconds 5",
+      "notes": "Rejected v1: full score improved to 0.321 and spectral_timbre 0.412, centroid_trajectory 0.310, stereo_width 0.691 improved, but exact_envelope_50ms fell to 0.385 and sustain_shape fell to 0.649; local attacks still too hot.",
+      "score": 0.3211159412336475,
+      "loss": 0.6788840587663525
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_01_v2.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_01_v2_full.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_01_v2_full.wav --seconds 5",
+      "notes": "Rejected v2: slower attacks improved opening/chord-change local windows versus v1, but full score dropped to 0.300 and exact_envelope_50ms remained below current at 0.405; kept the slower attack idea for final candidate because it supports the envelope objective.",
+      "score": 0.3000198562763292,
+      "loss": 0.6999801437236708
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_01_v3.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_01_v3_full.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_01_v3_full.wav --seconds 5",
+      "notes": "Accepted tradeoff for this envelope/timbre pass: full final 0.301 vs current 0.294, spectral_timbre 0.410 vs 0.264, spectral_features 0.213 vs 0.010, centroid_trajectory 0.299 vs 0.015, harmonic_noise 0.414 vs 0.370, modulation 0.304 vs 0.289, stereo_width 0.692 vs 0.670. exact_envelope_50ms and sustain_shape remain worse globally, but targeted opening and chord-change windows improved.",
+      "score": 0.30086152727832827,
+      "loss": 0.6991384727216717
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_01_v2.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_01_v2_w000.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_01_v2_w000.wav --seconds 5 --window-start 0.0 --window-duration 0.17",
+      "notes": "Opening window improved over current: final 0.436 vs 0.284, exact_envelope_50ms 0.164 vs 0.037, spectral_timbre 0.592 vs 0.294, centroid much closer; sustain_shape slightly lower.",
+      "score": 0.43624565582628194,
+      "loss": 0.5637543441737181,
+      "window_start": 0.0,
+      "window_duration": 0.17
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_01_v2.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_01_v2_w262.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_01_v2_w262.wav --seconds 5 --window-start 2.62 --window-duration 0.18",
+      "notes": "Chord-change window improved over current: final 0.471 vs 0.347, exact_envelope_50ms 0.241 vs 0.139, spectral_timbre 0.542 vs 0.260, centroid end 306 Hz vs current 728 Hz; sustain_shape lower but RMS overshoot reduced.",
+      "score": 0.47133557300425033,
+      "loss": 0.5286644269957497,
+      "window_start": 2.62,
+      "window_duration": 0.18
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_01_v3.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_01_v3_w490.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_01_v3_w490.wav --seconds 5 --window-start 4.90 --window-duration 0.10",
+      "notes": "Ending window improves final 0.535 vs current 0.468 and spectral_timbre 0.561 vs 0.315 with sustain_shape held at 1.0; exact_envelope_50ms is slightly lower at 0.477 vs 0.501 because the darkened ending is quieter than current but less bright.",
+      "score": 0.5354283027623892,
+      "loss": 0.4645716972376108,
+      "window_start": 4.9,
+      "window_duration": 0.1
+    }
+  ]
+}
