@@ -1789,38 +1789,59 @@ def command_run(args: argparse.Namespace) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     arrangement_path = args.output_dir / "arrangement.json"
     current_session_path = args.output_dir / "patch_session_current.json"
-    full_arrangement = parse_midi(args.midi, args.role_map)
-    full_arrangement_path = write_json(args.output_dir / "full_arrangement.json", full_arrangement)
-    print(f"trace_file agent=analyzer role=full_arrangement path={full_arrangement_path}", flush=True)
-    reference_audio, sr = load_audio(args.reference, args.seconds)
-    arrangement = slice_arrangement(full_arrangement, args.clip_start, args.seconds) if args.clip_start is not None else full_arrangement
-    write_json(arrangement_path, arrangement)
-    print(f"trace_file agent=analyzer role=arrangement path={arrangement_path}", flush=True)
-    session_sample_rate = sr if int(args.sample_rate) == 44100 else int(args.sample_rate)
-    if args.initial_session:
-        session = json.loads(args.initial_session.read_text())
-        session["sample_rate"] = session_sample_rate
-        session["duration"] = float(args.seconds)
-        session, initial_lock_report = enforce_arrangement_lock(arrangement, session)
-        write_json(args.output_dir / "initial_session_lock.json", initial_lock_report)
-    else:
-        session = neutral_session(arrangement, session_sample_rate, args.seconds)
-    write_json(current_session_path, session)
-    print(f"trace_file agent=session role=current path={current_session_path}", flush=True)
     source_clip_path = args.output_dir / "source_clip.wav"
-    sf.write(source_clip_path, reference_audio.T, sr)
-    print(f"trace_file agent=analyzer role=source_clip path={source_clip_path}", flush=True)
-    current_render_path = args.output_dir / "current_render_step_initial.wav"
-    sf.write(current_render_path, render_session(session).T, sr)
-    print(f"trace_file agent=loss role=winner_render path={current_render_path}", flush=True)
-    current_loss_report = score_midi_locked(arrangement, session, reference_audio, sr)
-    current_loss_report_path = write_json(args.output_dir / "loss_report_step_initial.json", current_loss_report)
-    print(f"trace_file agent=loss role=audio_diff path={current_loss_report_path}", flush=True)
-    history: list[dict[str, Any]] = []
-    best_report: dict[str, Any] | None = current_loss_report
-    best_session = session
-    best_render_path: Path | None = current_render_path
-    for step in range(args.steps):
+    history: list[dict[str, Any]]
+    start_step = 0
+    full_arrangement_path = args.output_dir / "full_arrangement.json"
+    if args.resume and arrangement_path.exists() and current_session_path.exists() and source_clip_path.exists():
+        full_arrangement = json.loads(full_arrangement_path.read_text()) if full_arrangement_path.exists() else parse_midi(args.midi, args.role_map)
+        arrangement = json.loads(arrangement_path.read_text())
+        reference_audio, sr = sf.read(source_clip_path, always_2d=True)
+        reference_audio = reference_audio.T
+        session = json.loads(current_session_path.read_text())
+        history_paths = sorted(args.output_dir.glob("history_item_step_*.json"))
+        history = [json.loads(path.read_text()) for path in history_paths]
+        start_step = max((int(item.get("step", -1)) for item in history), default=-1) + 1
+        accepted_history = [item for item in history if item.get("accepted")]
+        best_item = accepted_history[-1] if accepted_history else None
+        current_loss_report_path = Path(best_item["audio_diff_path"]) if best_item else args.output_dir / "loss_report_step_initial.json"
+        current_render_path = Path(best_item["audio_path"]) if best_item else args.output_dir / "current_render_step_initial.wav"
+        best_report = json.loads(current_loss_report_path.read_text()) if current_loss_report_path.exists() else score_midi_locked(arrangement, session, reference_audio, sr)
+        best_session = session
+        best_render_path: Path | None = current_render_path if current_render_path.exists() else None
+        print(f"resume_run start_step={start_step} history_items={len(history)} best_score={best_report['scores']['final']:.4f}", flush=True)
+    else:
+        full_arrangement = parse_midi(args.midi, args.role_map)
+        full_arrangement_path = write_json(args.output_dir / "full_arrangement.json", full_arrangement)
+        print(f"trace_file agent=analyzer role=full_arrangement path={full_arrangement_path}", flush=True)
+        reference_audio, sr = load_audio(args.reference, args.seconds)
+        arrangement = slice_arrangement(full_arrangement, args.clip_start, args.seconds) if args.clip_start is not None else full_arrangement
+        write_json(arrangement_path, arrangement)
+        print(f"trace_file agent=analyzer role=arrangement path={arrangement_path}", flush=True)
+        session_sample_rate = sr if int(args.sample_rate) == 44100 else int(args.sample_rate)
+        if args.initial_session:
+            session = json.loads(args.initial_session.read_text())
+            session["sample_rate"] = session_sample_rate
+            session["duration"] = float(args.seconds)
+            session, initial_lock_report = enforce_arrangement_lock(arrangement, session)
+            write_json(args.output_dir / "initial_session_lock.json", initial_lock_report)
+        else:
+            session = neutral_session(arrangement, session_sample_rate, args.seconds)
+        write_json(current_session_path, session)
+        print(f"trace_file agent=session role=current path={current_session_path}", flush=True)
+        sf.write(source_clip_path, reference_audio.T, sr)
+        print(f"trace_file agent=analyzer role=source_clip path={source_clip_path}", flush=True)
+        current_render_path = args.output_dir / "current_render_step_initial.wav"
+        sf.write(current_render_path, render_session(session).T, sr)
+        print(f"trace_file agent=loss role=winner_render path={current_render_path}", flush=True)
+        current_loss_report = score_midi_locked(arrangement, session, reference_audio, sr)
+        current_loss_report_path = write_json(args.output_dir / "loss_report_step_initial.json", current_loss_report)
+        print(f"trace_file agent=loss role=audio_diff path={current_loss_report_path}", flush=True)
+        history = []
+        best_report: dict[str, Any] | None = current_loss_report
+        best_session = session
+        best_render_path: Path | None = current_render_path
+    for step in range(start_step, start_step + args.steps):
         lock_report: dict[str, Any] = {}
         print(f"agent_stage residual_critic step={step}", flush=True)
         critic_brief_path = args.output_dir / f"critic_brief_step_{step:02d}.md"
@@ -1976,6 +1997,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--clip-start", type=float)
     p_run.add_argument("--steps", type=int, default=1)
     p_run.add_argument("--timeout", type=int, default=600)
+    p_run.add_argument("--resume", action="store_true", help="continue an existing output directory from the next history step")
     p_run.add_argument("--neutral-only", action="store_true")
     p_run.add_argument("--initial-session", type=Path)
     p_run.set_defaults(func=command_run)
