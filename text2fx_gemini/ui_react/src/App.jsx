@@ -1539,6 +1539,40 @@ function directCandidateArtifact(artifacts, step, suffix) {
     artifact.name.startsWith(prefix) && artifact.name.endsWith(suffix));
 }
 
+function parseGoalRunLog(text = "") {
+  return String(text || "")
+    .split(/\n(?=## Iteration\s+\d+)/)
+    .map((block) => {
+      const title = block.match(/^## Iteration\s+(\d+)\s+-\s+(.+)$/m);
+      if (!title) return null;
+      const rawStep = Number(title[1]);
+      const lines = [...block.matchAll(/^- ([^:]+):\s*([\s\S]*?)(?=\n- [^:]+:|\n## |\s*$)/gm)]
+        .map((match) => ({
+          label: match[1].trim(),
+          value: goalDisplayText(match[2].replace(/\s+/g, " ").trim()),
+        }))
+        .filter((item) => item.value);
+      const byLabel = (label) => lines.find((item) => item.label.toLowerCase() === label.toLowerCase())?.value || "";
+      const decision = byLabel("Decision");
+      return {
+        type: "goal_log",
+        rawStep,
+        title: title[2].trim(),
+        accepted: /\baccepted\b/i.test(decision),
+        rejected: /\brejected\b/i.test(decision),
+        decision,
+        score: byLabel("Latest candidate score"),
+        currentBest: byLabel("Current best score") || byLabel("Current best score before change"),
+        change: byLabel("Change"),
+        improved: byLabel("Improved"),
+        regressed: byLabel("Regressed") || byLabel("Regression"),
+        next: byLabel("Next bottleneck") || byLabel("Next planned bottleneck"),
+        source: "goal_run_log.md",
+      };
+    })
+    .filter(Boolean);
+}
+
 function DecisionLog({ artifacts, runActive }) {
   const [items, setItems] = useState([]);
   const artifactKey = artifacts.map((artifact) => `${artifact.name}:${artifact.size}`).join("|");
@@ -1547,7 +1581,12 @@ function DecisionLog({ artifacts, runActive }) {
     let cancelled = false;
     const opsArtifacts = artifacts.filter((artifact) => artifact.name.startsWith("patch_ops_step_"));
     const criticArtifacts = artifacts.filter((artifact) => artifact.name.startsWith("critic_brief_step_"));
+    const goalLog = artifacts.find((artifact) => artifact.name === "goal_run_log.md");
     Promise.all([
+      goalLog ? fetch(goalLog.url)
+        .then((res) => res.text())
+        .then((text) => ({ type: "goal_log", artifact: goalLog, items: parseGoalRunLog(text) }))
+        .catch(() => null) : null,
       ...opsArtifacts.map(async (artifact) => {
         try {
           const data = await fetch(artifact.url).then((res) => res.json());
@@ -1566,6 +1605,25 @@ function DecisionLog({ artifacts, runActive }) {
       }),
     ]).then((records) => {
       if (cancelled) return;
+      const goalItems = records.find((item) => item?.type === "goal_log")?.items || [];
+      if (goalItems.length) {
+        setItems(goalItems.map((item, index) => ({
+          ...item,
+          step: index,
+          operationCount: item.accepted ? "accepted" : item.rejected ? "rejected" : "logged",
+          hypothesis: item.decision || "Codex logged a focused patch/effects/mix decision.",
+          operations: [
+            item.currentBest ? `Current best: ${item.currentBest}` : null,
+            item.score ? `Candidate score: ${item.score}` : null,
+            item.change ? `Change: ${item.change}` : null,
+            item.improved ? `Improved: ${item.improved}` : null,
+            item.regressed ? `Regressed: ${item.regressed}` : null,
+            item.next ? `Next bottleneck: ${item.next}` : null,
+          ].filter(Boolean),
+          source: `${item.source}#${item.rawStep}`,
+        })));
+        return;
+      }
       const critics = new Map(records.filter((item) => item?.type === "critic").map((item) => [item.step, item.text]));
       const nextItems = records
         .filter((item) => item?.type === "ops")
@@ -1603,12 +1661,12 @@ function DecisionLog({ artifacts, runActive }) {
     h("div", { className: "decision-list" },
       items.map((item) => h("article", { className: "decision-card", key: item.source },
         h("div", { className: "decision-head" },
-          h("strong", null, item.step === null || item.step === undefined ? "Baseline pass" : `Iteration ${item.step + 1}`),
-          h(Badge, { variant: "outline" }, `${item.operationCount} edits`)
+          h("strong", null, item.step === null || item.step === undefined ? "Baseline pass" : `Iteration ${item.step + 1}${item.title ? ` - ${item.title}` : ""}`),
+          h(Badge, { variant: "outline" }, typeof item.operationCount === "number" ? `${item.operationCount} edits` : item.operationCount)
         ),
         h("p", { className: "decision-hypothesis" }, item.hypothesis),
         h("ul", null, item.operations.map((line, index) => h("li", { key: `${item.source}-${index}` }, line))),
-        item.operationCount > item.operations.length ? h("em", null, `${item.operationCount - item.operations.length} more edits in ${item.source}`) : null
+        typeof item.operationCount === "number" && item.operationCount > item.operations.length ? h("em", null, `${item.operationCount - item.operations.length} more edits in ${item.source}`) : null
       ))
     )
   );
