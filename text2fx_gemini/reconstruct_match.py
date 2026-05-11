@@ -727,6 +727,26 @@ def render_vital_layer(layer: dict[str, Any], duration: float, sr: int) -> np.nd
 def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     samples = int(duration * sr)
     synth = layer["synth"]
+    if synth.get("engine") in {"sample", "audio_file"}:
+        if sf is None:
+            import soundfile as soundfile_module
+
+            globals()["sf"] = soundfile_module
+        sample_path = synth.get("sample_path") or synth.get("audio_path")
+        if not sample_path:
+            raise ValueError(f"sample engine layer {layer.get('id')} is missing synth.sample_path")
+        audio, rendered_sr = sf.read(Path(sample_path).expanduser(), always_2d=True)
+        if int(rendered_sr) != int(sr):
+            raise RuntimeError(f"sample layer {layer.get('id')} rendered at {rendered_sr} Hz, expected {sr} Hz")
+        start = max(0, int(round(float(synth.get("sample_start", 0.0)) * sr)))
+        rendered = audio.T.astype(np.float32)
+        if rendered.shape[0] == 1:
+            rendered = np.vstack([rendered[0], rendered[0]])
+        rendered = rendered[:2, start : start + samples]
+        if rendered.shape[1] < samples:
+            rendered = np.pad(rendered, ((0, 0), (0, samples - rendered.shape[1])))
+        rendered *= db_to_amp(float(synth.get("sample_gain_db", 0.0)))
+        return rendered[:, :samples].astype(np.float32)
     if synth.get("engine") == "vital":
         stereo = render_vital_layer(layer, duration, sr)
         mod = layer["modulation"]

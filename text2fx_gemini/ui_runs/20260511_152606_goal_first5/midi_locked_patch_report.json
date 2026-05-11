@@ -1,0 +1,23 @@
+{
+  "arrangement_path": "text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json",
+  "current_session_path": "text2fx_gemini/ui_runs/20260511_152606_goal_first5/patch_session_current.json",
+  "current_loss_report_path": "text2fx_gemini/ui_runs/20260511_152606_goal_first5/patch_report_step_05.json",
+  "current_render_path": "text2fx_gemini/ui_runs/20260511_152606_goal_first5/patch_render_step_05.wav",
+  "best_scores": {
+    "final": 0.9825720929314399,
+    "loss": 0.017427907068560122,
+    "global_mix": 0.9999658946081073,
+    "track_active_window": 0.9999658946081073,
+    "track_isolation_proxy": 0.5558573865420632,
+    "patch_control": 0.7409362544966795,
+    "sustain_shape": 0.8884988299032962,
+    "loudness_envelope": 0.9776994082513895,
+    "loudness_floor": 1.0,
+    "groove_envelope": 0.9999958096101096,
+    "modulation_identity": 0.9999981124322452,
+    "spectral_timbre": 0.9999531495893715,
+    "stereo_motion": 0.9999996166643987,
+    "pitch_chroma": 0.9999999999999863,
+    "arrangement_preservation": 1.0
+  }
+}
