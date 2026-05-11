@@ -1572,7 +1572,17 @@ def load_codex_json_artifact(json_output_path: Path, answer_path: Path) -> dict[
 
 def stream_codex_exec(agent: str, prompt: str, answer_path: Path, timeout: int) -> int:
     process = subprocess.Popen(
-        [CODEX_PATH, "exec", "--skip-git-repo-check", "--output-last-message", str(answer_path), "-C", str(Path.cwd()), "-"],
+        [
+            CODEX_PATH,
+            "exec",
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--output-last-message",
+            str(answer_path),
+            "-C",
+            str(Path.cwd()),
+            "-",
+        ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

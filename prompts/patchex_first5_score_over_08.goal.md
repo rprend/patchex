@@ -45,6 +45,6 @@ python text2fx_gemini/midi_locked_patch.py run \
   --output-dir text2fx_gemini/ui_runs/$(date +%Y%m%d_%H%M%S)_goal_first5 \
   --clip-start 0 \
   --seconds 5 \
-  --steps 5
+  --steps 20
 
 Use scripts/summarize_run.py and scripts/inspect_run.py on the resulting run directory before deciding the next change.

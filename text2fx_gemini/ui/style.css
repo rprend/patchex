@@ -1569,6 +1569,11 @@ textarea {
   box-shadow: 0 12px 30px rgba(24, 24, 24, .06);
 }
 
+.workflow-node.base-goal {
+  width: 318px;
+  min-height: 164px;
+}
+
 .workflow-node button {
   font: inherit;
 }
@@ -1628,6 +1633,10 @@ textarea {
   color: var(--text);
   font-weight: 750;
   font-size: 1.1rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workflow-node-row {
@@ -1668,6 +1677,14 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workflow-node.base-goal .workflow-node-row {
+  grid-template-columns: minmax(6.8rem, auto) minmax(0, 1fr);
+}
+
+.workflow-node.base-goal .workflow-node-row strong {
+  font-size: .9rem;
 }
 
 .accuracy-node {

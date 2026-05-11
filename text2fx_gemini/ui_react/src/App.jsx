@@ -447,6 +447,7 @@ function AgentTranscript({ traces }) {
 
 function FlowAgentNode({ data, selected }) {
   const classes = ["workflow-node", `status-${data.status || "waiting"}`];
+  if (data.base) classes.push(`base-${data.base}`);
   if (selected) classes.push("selected");
   const openRow = (row, event) => {
     event.stopPropagation();
@@ -1490,6 +1491,17 @@ function summarizeOperation(operation) {
   return `Now I am going to ${change} on ${track} because ${reason}`;
 }
 
+function goalArtifactStatus(artifact, ready = "ready") {
+  return artifact ? ready : "pending";
+}
+
+function latestNamedArtifact(artifacts, predicate) {
+  return artifacts
+    .filter(predicate)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    .at(-1);
+}
+
 function DecisionLog({ artifacts, runActive }) {
   const [items, setItems] = useState([]);
   const artifactKey = artifacts.map((artifact) => `${artifact.name}:${artifact.size}`).join("|");
@@ -1696,8 +1708,13 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
   const [selectedId, setSelectedId] = useState("goal-baseline");
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [scores, setScores] = useState({});
+  const [stepMeta, setStepMeta] = useState({});
   const artifactKey = artifacts.map((artifact) => `${artifact.name}:${artifact.size}`).join("|");
   const byName = (name) => artifacts.find((artifact) => artifact.name === name);
+  const stepArtifact = (prefix, step, suffix = ".json") => latestNamedArtifact(artifacts, (artifact) =>
+    artifact.name.startsWith(`${prefix}${String(step).padStart(2, "0")}`) && artifact.name.endsWith(suffix));
+  const candidateArtifact = (kind, step, suffix) => latestNamedArtifact(artifacts, (artifact) =>
+    artifact.name.startsWith(`candidate_${kind}_step_${String(step).padStart(2, "0")}`) && artifact.name.endsWith(suffix));
   const stepNumbers = Array.from(new Set(artifacts.flatMap((artifact) => {
     const matches = [...artifact.name.matchAll(/step_(\d+)/g)];
     return matches.map((match) => Number(match[1]));
@@ -1708,6 +1725,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
     const scoreArtifacts = [
       byName("loss_report_step_initial.json"),
       ...artifacts.filter((artifact) => artifact.name.startsWith("patch_report_step_")),
+      ...artifacts.filter((artifact) => artifact.name.startsWith("candidate_loss_step_") && artifact.name.includes("_full")),
       byName("reconstruction_report.json"),
     ].filter(Boolean);
     Promise.all(scoreArtifacts.map(async (artifact) => {
@@ -1730,6 +1748,28 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
     return () => { cancelled = true; };
   }, [artifactKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const opsArtifacts = artifacts.filter((artifact) => artifact.name.startsWith("patch_ops_step_"));
+    Promise.all(opsArtifacts.map(async (artifact) => {
+      try {
+        const data = await fetch(artifact.url).then((res) => res.json());
+        const operations = Array.isArray(data?.operations) ? data.operations : [];
+        const trials = Array.isArray(data?.loss_trials) ? data.loss_trials : [];
+        return [decisionStepFromName(artifact.name), {
+          hypothesis: goalDisplayText(data?.hypothesis || ""),
+          editCount: operations.length,
+          trialCount: trials.length,
+        }];
+      } catch {
+        return [decisionStepFromName(artifact.name), { editCount: null, trialCount: null }];
+      }
+    })).then((entries) => {
+      if (!cancelled) setStepMeta(Object.fromEntries(entries.filter(([step]) => step !== null && step !== undefined)));
+    });
+    return () => { cancelled = true; };
+  }, [artifactKey]);
+
   const source = byName("source_clip.wav");
   const makeOpen = (trace, label) => trace ? (nodeData) => {
     setSelectedId(nodeData.id);
@@ -1746,7 +1786,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
   nodes.push({
     id: "goal-baseline",
     type: "agent",
-    position: { x: 40, y: 50 },
+    position: { x: 40, y: 60 },
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
     draggable: false,
@@ -1762,10 +1802,10 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
       codexEvents: [],
       notes: [],
       rows: [
-        { label: "Target", value: source?.name || "pending", trace: baselineTraces.find((trace) => trace.role === "source_clip") },
-        { label: "Initial audio", value: byName("current_render_step_initial.wav")?.name || "pending", trace: baselineTraces.find((trace) => trace.name === "current_render_step_initial.wav") },
+        { label: "Target", value: goalArtifactStatus(source, "ready"), trace: baselineTraces.find((trace) => trace.role === "source_clip") },
+        { label: "Initial render", value: goalArtifactStatus(byName("current_render_step_initial.wav"), "listen"), trace: baselineTraces.find((trace) => trace.name === "current_render_step_initial.wav") },
         { label: "Initial score", value: scores.initial || "pending", trace: baselineTraces.find((trace) => trace.name === "loss_report_step_initial.json") },
-        { label: "Session", value: byName("patch_session_current.json")?.name || "pending", trace: baselineTraces.find((trace) => trace.name === "patch_session_current.json") },
+        { label: "Patch state", value: goalArtifactStatus(byName("patch_session_current.json"), "ready"), trace: baselineTraces.find((trace) => trace.name === "patch_session_current.json") },
       ],
       onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${goalRoleName(trace.role)}`)?.(nodeData),
     },
@@ -1773,14 +1813,21 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
 
   stepNumbers.forEach((step, index) => {
     const stepId = `goal-step-${step}`;
-    const y = 50 + (index + 1) * 220;
+    const y = 60 + (index + 1) * 250;
     const plan = byName(`critic_brief_step_${String(step).padStart(2, "0")}.md`);
-    const ops = byName(`patch_ops_step_${String(step).padStart(2, "0")}.json`);
-    const applied = byName(`patch_ops_applied_step_${String(step).padStart(2, "0")}.json`);
-    const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`);
-    const report = byName(`patch_report_step_${String(step).padStart(2, "0")}.json`);
-    const session = byName(`patch_session_step_${String(step).padStart(2, "0")}.json`) || byName("patch_session_current.json");
+    const ops = stepArtifact("patch_ops_step_", step);
+    const applied = stepArtifact("patch_ops_applied_step_", step);
+    const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`) || candidateArtifact("render", step, ".wav");
+    const report = byName(`patch_report_step_${String(step).padStart(2, "0")}.json`) || candidateArtifact("loss", step, ".json");
+    const session = byName(`patch_session_step_${String(step).padStart(2, "0")}.json`) || candidateArtifact("session", step, ".json") || byName("patch_session_current.json");
     const trialCount = artifacts.filter((artifact) => artifact.name.startsWith(`candidate_loss_step_${String(step).padStart(2, "0")}`)).length;
+    const meta = stepMeta[step] || {};
+    const editCount = Number.isFinite(meta.editCount) ? `${meta.editCount} edits` : goalArtifactStatus(ops, "ready");
+    const checkedCount = Number.isFinite(meta.trialCount) && meta.trialCount > 0
+      ? `${meta.trialCount} checks`
+      : trialCount
+        ? `${trialCount} checks`
+        : "pending";
     const traces = [
       goalTraceFromArtifact(plan, "recommendation", step, "goal"),
       goalTraceFromArtifact(ops, "patch_ops", step, "goal"),
@@ -1792,7 +1839,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
     nodes.push({
       id: stepId,
       type: "agent",
-      position: { x: 360, y },
+      position: { x: 430, y },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       draggable: false,
@@ -1808,11 +1855,11 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
         codexEvents: [],
         notes: [],
         rows: [
-          { label: "Plan", value: plan?.name || "pending", trace: traces.find((trace) => trace.name === plan?.name) },
-          { label: "Decisions", value: ops?.name || "pending", trace: traces.find((trace) => trace.name === ops?.name) },
-          { label: "Audio", value: render?.name || "pending", trace: traces.find((trace) => trace.name === render?.name) },
+          { label: "Bottleneck", value: goalArtifactStatus(plan, "identified"), trace: traces.find((trace) => trace.name === plan?.name) },
+          { label: "Patch edits", value: editCount, trace: traces.find((trace) => trace.name === ops?.name) },
+          { label: "Audio", value: goalArtifactStatus(render, "listen"), trace: traces.find((trace) => trace.name === render?.name) },
           { label: "Score", value: scores[step] || "pending", trace: traces.find((trace) => trace.name === report?.name) },
-          { label: "Trials", value: trialCount ? `${trialCount} checks` : "pending" },
+          { label: "Checks", value: checkedCount },
         ],
         onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${goalRoleName(trace.role)}`)?.(nodeData),
       },
@@ -1839,7 +1886,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
     nodes.push({
       id: "goal-complete",
       type: "agent",
-      position: { x: 700, y: 50 + Math.max(1, stepNumbers.length) * 220 },
+      position: { x: 820, y: 60 + Math.max(1, stepNumbers.length) * 250 },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       draggable: false,
@@ -1856,8 +1903,8 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
         notes: [],
         rows: [
           { label: "Final score", value: scores.final || "report", trace: finalTraces.find((trace) => trace.name === "reconstruction_report.json") },
-          { label: "Final audio", value: byName("final_reconstruction.wav")?.name || "pending", trace: finalTraces.find((trace) => trace.name === "final_reconstruction.wav") },
-          { label: "Session", value: byName("reconstruction_session.json")?.name || "pending", trace: finalTraces.find((trace) => trace.name === "reconstruction_session.json") },
+          { label: "Final audio", value: goalArtifactStatus(byName("final_reconstruction.wav"), "listen"), trace: finalTraces.find((trace) => trace.name === "final_reconstruction.wav") },
+          { label: "Session", value: goalArtifactStatus(byName("reconstruction_session.json"), "ready"), trace: finalTraces.find((trace) => trace.name === "reconstruction_session.json") },
         ],
         onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${goalRoleName(trace.role)}`)?.(nodeData),
       },
