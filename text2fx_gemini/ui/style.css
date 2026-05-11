@@ -1055,6 +1055,69 @@ textarea {
   max-width: 48rem;
 }
 
+.decision-log-section {
+  border-top-color: #d8dde8;
+}
+
+.decision-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: .8rem;
+  margin-top: 1rem;
+}
+
+.decision-card {
+  display: grid;
+  gap: .7rem;
+  padding: .95rem;
+  border: 1px solid var(--line);
+  border-radius: .45rem;
+  background: #fff;
+}
+
+.decision-card.pending {
+  margin-top: 1rem;
+  background: #f7f9fc;
+}
+
+.decision-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.decision-head strong,
+.decision-card > strong {
+  font-size: .95rem;
+}
+
+.decision-hypothesis {
+  margin: 0;
+  color: var(--ink);
+  font-size: .92rem;
+  line-height: 1.45;
+}
+
+.decision-card ul {
+  display: grid;
+  gap: .45rem;
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.decision-card li {
+  color: var(--soft);
+  font-size: .88rem;
+  line-height: 1.42;
+}
+
+.decision-card em {
+  color: var(--muted);
+  font-size: .78rem;
+  font-style: normal;
+}
+
 .start-inline {
   display: inline-flex;
   align-items: center;

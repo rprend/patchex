@@ -1430,6 +1430,93 @@ function Artifacts({ artifacts, onReport }) {
   );
 }
 
+function decisionStepFromName(name) {
+  const match = String(name || "").match(/step_(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function summarizeOperation(operation) {
+  const track = operation.track_id || String(operation.path || "").match(/layers\.([^.]+)/)?.[1] || "mix";
+  const change = operation.change || operation.op || "make a patch change";
+  const reason = operation.reason || "the current score showed this as a likely bottleneck";
+  return `Now I am going to ${change} on ${track} because ${reason}`;
+}
+
+function DecisionLog({ artifacts, runActive }) {
+  const [items, setItems] = useState([]);
+  const artifactKey = artifacts.map((artifact) => `${artifact.name}:${artifact.size}`).join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    const opsArtifacts = artifacts.filter((artifact) => artifact.name.startsWith("patch_ops_step_"));
+    const criticArtifacts = artifacts.filter((artifact) => artifact.name.startsWith("critic_brief_step_"));
+    Promise.all([
+      ...opsArtifacts.map(async (artifact) => {
+        try {
+          const data = await fetch(artifact.url).then((res) => res.json());
+          return { type: "ops", artifact, data, step: decisionStepFromName(artifact.name) };
+        } catch (error) {
+          return { type: "error", artifact, error: error.stack || String(error), step: decisionStepFromName(artifact.name) };
+        }
+      }),
+      ...criticArtifacts.map(async (artifact) => {
+        try {
+          const text = await fetch(artifact.url).then((res) => res.text());
+          return { type: "critic", artifact, text, step: decisionStepFromName(artifact.name) };
+        } catch {
+          return null;
+        }
+      }),
+    ]).then((records) => {
+      if (cancelled) return;
+      const critics = new Map(records.filter((item) => item?.type === "critic").map((item) => [item.step, item.text]));
+      const nextItems = records
+        .filter((item) => item?.type === "ops")
+        .sort((a, b) => (a.step ?? 0) - (b.step ?? 0))
+        .map((item) => {
+          const operations = Array.isArray(item.data?.operations) ? item.data.operations : [];
+          const criticText = critics.get(item.step) || "";
+          const objective = (criticText.match(/## Primary Objective\s+([\s\S]*?)(?:\n##|\n#|$)/i)?.[1] ||
+            criticText.match(/## Primary objective\s+([\s\S]*?)(?:\n##|\n#|$)/i)?.[1] ||
+            "").replace(/\s+/g, " ").trim();
+          return {
+            step: item.step,
+            hypothesis: item.data?.hypothesis || objective || "The producer made a focused patch/mix pass.",
+            operations: operations.slice(0, 6).map(summarizeOperation),
+            operationCount: operations.length,
+            source: item.artifact.name,
+          };
+        });
+      setItems(nextItems);
+    });
+    return () => { cancelled = true; };
+  }, [artifactKey]);
+
+  const hasOpsPending = runActive && artifacts.some((artifact) => artifact.name.startsWith("critic_brief_step_")) && !artifacts.some((artifact) => artifact.name.startsWith("patch_ops_step_"));
+  if (!items.length && !hasOpsPending) return null;
+  return h("section", { className: "section-block decision-log-section" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Decision Log"),
+      h("p", null, "Plain-English patch, effects, modulation, and mix choices from the V1 goal run.")
+    ),
+    hasOpsPending ? h("div", { className: "decision-card pending" },
+      h("strong", null, "Producer pass pending"),
+      h("p", null, "The Critic has written guidance. Waiting for the Producer to choose concrete patch and mix edits.")
+    ) : null,
+    h("div", { className: "decision-list" },
+      items.map((item) => h("article", { className: "decision-card", key: item.source },
+        h("div", { className: "decision-head" },
+          h("strong", null, item.step === null || item.step === undefined ? "Baseline pass" : `Iteration ${item.step + 1}`),
+          h(Badge, { variant: "outline" }, `${item.operationCount} edits`)
+        ),
+        h("p", { className: "decision-hypothesis" }, item.hypothesis),
+        h("ul", null, item.operations.map((line, index) => h("li", { key: `${item.source}-${index}` }, line))),
+        item.operationCount > item.operations.length ? h("em", null, `${item.operationCount - item.operations.length} more edits in ${item.source}`) : null
+      ))
+    )
+  );
+}
+
 function Comparison({ artifacts }) {
   const source = artifacts.find((artifact) => artifact.name === "source_clip.wav");
   const final = artifacts.find((artifact) => artifact.name === "final_reconstruction.wav");
@@ -1999,6 +2086,7 @@ function App() {
       disabled: starting || !currentSongId,
       running: starting,
     }),
+    showRunDetail && hasLoadedRun ? h(DecisionLog, { artifacts, runActive }) : null,
     showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts, codexEvents }) : null,
     showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Scoreboard, { report }) : null,
