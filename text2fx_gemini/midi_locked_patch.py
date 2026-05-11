@@ -534,6 +534,7 @@ def enforce_arrangement_lock(arrangement: dict[str, Any], session: dict[str, Any
 
 
 BLOCKED_PATCH_PATH_PARTS = {"notes", "id", "role", "arrangement_locked", "source_midi_track_index", "gm_program"}
+BLOCKED_SAMPLE_PATCH_PATH_PARTS = {"sample_path", "sample_file", "sample_start", "sample_gain_db"}
 ALLOWED_PATCH_ROOTS = {"layers", "returns", "master", "production_notes"}
 
 
@@ -578,6 +579,7 @@ def save_patch_change(
     op: str = "set",
 ) -> Path:
     parse_patch_path(path)
+    validate_patch_operation(path, value)
     payload = load_patch_ops_payload(Path(operations_path))
     payload["operations"].append(
         {
@@ -624,7 +626,15 @@ def parse_patch_path(path: str) -> list[str]:
         raise ValueError(f"Patch operation root is not editable: {parts[0]}")
     if any(part in BLOCKED_PATCH_PATH_PARTS for part in parts):
         raise ValueError(f"Patch operation may not edit arrangement-owned path: {path}")
+    if any(part in BLOCKED_SAMPLE_PATCH_PATH_PARTS for part in parts):
+        raise ValueError(f"Patch operation may not edit sample playback paths in MIDI-locked synth mode: {path}")
     return parts
+
+
+def validate_patch_operation(path: str, value: Any) -> None:
+    parts = parse_patch_path(path)
+    if parts[-2:] == ["synth", "engine"] and str(value).lower() == "sample":
+        raise ValueError("MIDI-locked synth mode may not switch a layer to the sample engine.")
 
 
 def resolve_patch_parent(session: dict[str, Any], parts: list[str]) -> tuple[Any, str]:
@@ -689,9 +699,10 @@ def apply_patch_operations(session: dict[str, Any], operations_payload: dict[str
             raise ValueError("Each patch operation must be an object.")
         op = str(operation.get("op", "set")).lower()
         path = str(operation.get("path", ""))
+        value = deepcopy(operation.get("value"))
+        validate_patch_operation(path, value)
         parts = parse_patch_path(path)
         parent, key = resolve_patch_parent(updated, parts)
-        value = deepcopy(operation.get("value"))
         if op == "set":
             if isinstance(parent, dict):
                 parent[key] = value
@@ -720,6 +731,44 @@ def apply_patch_operations(session: dict[str, Any], operations_payload: dict[str
         notes["change_log"].append(entry)
         applied.append(entry)
     return updated, {"applied": applied, "operation_count": len(applied)}
+
+
+def sample_source_violations(session: dict[str, Any]) -> list[dict[str, str]]:
+    violations: list[dict[str, str]] = []
+    for layer in session.get("layers", []):
+        synth = layer.get("synth", {}) if isinstance(layer, dict) else {}
+        if not isinstance(synth, dict):
+            continue
+        engine = str(synth.get("engine", "")).lower()
+        sample_path = str(synth.get("sample_path") or synth.get("sample_file") or "")
+        if engine == "sample" or sample_path:
+            violations.append(
+                {
+                    "layer_id": str(layer.get("id", "")),
+                    "engine": engine,
+                    "sample_path": sample_path,
+                    "reason": "MIDI-locked synth mode must synthesize from locked notes, not replay audio files.",
+                }
+            )
+    return violations
+
+
+def apply_source_integrity_penalty(report: dict[str, Any], violations: list[dict[str, str]]) -> dict[str, Any]:
+    if not violations:
+        return report
+    patched = deepcopy(report)
+    scores = patched.setdefault("scores", {})
+    scores["final_without_source_integrity_penalty"] = float(scores.get("final", 0.0))
+    scores["loss_without_source_integrity_penalty"] = float(scores.get("loss", 1.0))
+    scores["source_integrity"] = 0.0
+    scores["final"] = 0.0
+    scores["loss"] = 1.0
+    components = patched.setdefault("loss_components", {})
+    components["source_integrity_penalty"] = {
+        "violations": violations,
+        "effect": "forced final score to 0.0 because sample playback is not allowed for this MIDI-locked synth objective",
+    }
+    return patched
 
 
 def active_windows(track: dict[str, Any], duration: float, pad: float = 0.04) -> list[tuple[float, float]]:
@@ -1287,6 +1336,9 @@ Hard boundary:
 - Preserve every layer id from composition tracks.
 - Preserve every layer's `notes` array exactly from the current patch session. The harness will repair note changes, but you should not rely on repair.
 - Do not add/delete composition tracks. If a track should be silent or tucked back, change gain/mix, not notes.
+- Do not use audio-file playback as a solution. In this MIDI-locked synth workflow you may not set `synth.engine` to `sample`, may not set `synth.sample_path`, `synth.sample_file`, `synth.sample_start`, or `synth.sample_gain_db`, and may not load `source_clip.wav`, the reference MP3, candidate renders, final renders, or any other run artifact as an oscillator/source.
+- Do not mute all synthesized musical layers and replace them with a sampled copy of the target. That is source leakage, not reconstruction. The scoring harness will force source-leak candidates to score `0.0`.
+- "Synth source" means oscillator/wavetable/noise/FM/unison/sub settings rendered from the locked MIDI notes, not sampler playback of target audio.
 
 Allowed patch and production changes:
 
@@ -1765,6 +1817,7 @@ def command_score(args: argparse.Namespace) -> int:
         arrangement = slice_arrangement(arrangement, window_start, window_duration)
         session = slice_patch_session(session, window_start, window_duration)
     report = score_midi_locked(arrangement, session, reference_audio, sr)
+    report = apply_source_integrity_penalty(report, sample_source_violations(session))
     write_json(args.output, report)
     if args.render_output:
         sf.write(args.render_output, render_session(session).T, sr)
@@ -1807,6 +1860,7 @@ def command_run(args: argparse.Namespace) -> int:
         current_loss_report_path = Path(best_item["audio_diff_path"]) if best_item else args.output_dir / "loss_report_step_initial.json"
         current_render_path = Path(best_item["audio_path"]) if best_item else args.output_dir / "current_render_step_initial.wav"
         best_report = json.loads(current_loss_report_path.read_text()) if current_loss_report_path.exists() else score_midi_locked(arrangement, session, reference_audio, sr)
+        best_report = apply_source_integrity_penalty(best_report, sample_source_violations(session))
         best_session = session
         best_render_path: Path | None = current_render_path if current_render_path.exists() else None
         print(f"resume_run start_step={start_step} history_items={len(history)} best_score={best_report['scores']['final']:.4f}", flush=True)
@@ -1835,6 +1889,7 @@ def command_run(args: argparse.Namespace) -> int:
         sf.write(current_render_path, render_session(session).T, sr)
         print(f"trace_file agent=loss role=winner_render path={current_render_path}", flush=True)
         current_loss_report = score_midi_locked(arrangement, session, reference_audio, sr)
+        current_loss_report = apply_source_integrity_penalty(current_loss_report, sample_source_violations(session))
         current_loss_report_path = write_json(args.output_dir / "loss_report_step_initial.json", current_loss_report)
         print(f"trace_file agent=loss role=audio_diff path={current_loss_report_path}", flush=True)
         history = []
@@ -1881,6 +1936,7 @@ def command_run(args: argparse.Namespace) -> int:
             write_json(proposal_path, proposal)
             write_json(args.output_dir / f"arrangement_lock_step_{step:02d}.json", lock_report)
         report = score_midi_locked(arrangement, proposal, reference_audio, sr)
+        report = apply_source_integrity_penalty(report, sample_source_violations(proposal))
         report_path = write_json(args.output_dir / f"patch_report_step_{step:02d}.json", report)
         print(f"trace_file agent=loss step={step} role=audio_diff path={report_path}", flush=True)
         render_path = args.output_dir / f"patch_render_step_{step:02d}.wav"
