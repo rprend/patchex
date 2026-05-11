@@ -1118,6 +1118,76 @@ textarea {
   font-style: normal;
 }
 
+.goal-timeline {
+  display: grid;
+  gap: .85rem;
+  margin-top: 1rem;
+}
+
+.goal-step-card {
+  display: grid;
+  gap: .65rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: .45rem;
+  background: #fff;
+}
+
+.goal-step-card.pending {
+  background: #f7f9fc;
+}
+
+.goal-step-card.final {
+  border-color: #b9c8dd;
+  background: #fbfcff;
+}
+
+.goal-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+}
+
+.goal-step-card p {
+  margin: 0;
+  color: var(--soft);
+  font-size: .9rem;
+  line-height: 1.45;
+}
+
+.goal-step-card ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: .45rem .8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.goal-step-card li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .8rem;
+  min-width: 0;
+  padding: .45rem .55rem;
+  border: 1px solid var(--line-soft);
+  border-radius: .35rem;
+  font-size: .84rem;
+}
+
+.goal-step-card li span {
+  color: var(--muted);
+}
+
+.goal-step-card li a {
+  overflow: hidden;
+  color: var(--accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .start-inline {
   display: inline-flex;
   align-items: center;

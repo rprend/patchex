@@ -39,9 +39,9 @@ const ROLE_LABELS = {
   answer: "Output",
   parsed_answer: "Parsed plan",
   layer_analysis: "Layer plan",
-  recommendation_initial: "Starting guidance",
-  recommendation: "Goal guidance",
-  session_proposal: "Proposed patch",
+  recommendation_initial: "Starting brief",
+  recommendation: "Next Producer brief",
+  session_proposal: "Proposed session",
   accepted_session: "Accepted session",
   candidate_session: "Candidate session",
   audio_diff: "Accuracy report",
@@ -52,10 +52,10 @@ const ROLE_LABELS = {
 };
 
 const AGENT_LABELS = {
-  producer: "Patch Editor",
-  residual_critic: "Goal Guidance",
-  harness_improver: "Harness Tuning",
-  loss: "Scoring",
+  producer: "Producer",
+  residual_critic: "Critic",
+  harness_improver: "Harness Improver",
+  loss: "Calculate Accuracy",
 };
 
 const RUN_ID_PATTERN = /^\d{8}_\d{6}_[A-Za-z0-9][A-Za-z0-9_-]*$/;
@@ -103,21 +103,21 @@ function agentStep(agent, fallback = null) {
 
 function agentName(agent) {
   const base = agentBase(agent);
-  if (base === "producer") return "Patch Editor";
-  if (base === "residual_critic") return "Goal Guidance";
-  if (base === "harness_improver") return "Harness Tuning";
-  if (base === "loss") return "Scoring";
+  if (base === "producer") return "Producer";
+  if (base === "residual_critic") return "Critic";
+  if (base === "harness_improver") return "Harness Improver";
+  if (base === "loss") return "Calculate Accuracy";
   return AGENT_LABELS[base] || base.replaceAll("_", " ");
 }
 
 function roleName(role, agent) {
-  if (role?.startsWith("producer_audio_diff")) return "Patch trial accuracy";
-  if (role?.startsWith("producer_render")) return "Patch trial audio";
+  if (role?.startsWith("producer_audio_diff")) return "Producer trial accuracy";
+  if (role?.startsWith("producer_render")) return "Producer trial audio";
   if (role?.startsWith("audio_diff")) return "Accuracy report";
   if (role?.startsWith("render")) return "Audio";
   if (role === "prompt") {
-    if (agentBase(agent) === "producer") return "Patch edit instructions";
-    if (agentBase(agent) === "residual_critic") return "Goal guidance instructions";
+    if (agentBase(agent) === "producer") return "Producer instructions";
+    if (agentBase(agent) === "residual_critic") return "Critic instructions";
     if (agentBase(agent) === "harness_improver") return "Harness instructions";
   }
   return ROLE_LABELS[role] || String(role || "File").replaceAll("_", " ");
@@ -126,8 +126,8 @@ function roleName(role, agent) {
 function friendlyWinner(name) {
   if (!name) return "unknown";
   const inner = String(name).match(/^codex_inner_(\d+)/);
-  if (inner) return `Patch trial ${Number(inner[1]) + 1}`;
-  if (name === "codex") return "Patch proposal";
+  if (inner) return `Producer trial ${Number(inner[1]) + 1}`;
+  if (name === "codex") return "Producer proposal";
   return String(name).replaceAll("_", " ");
 }
 
@@ -171,8 +171,7 @@ function cleanLogLine(line) {
   if (line.includes("/Users/ryanprendergast/")) return null;
   return line
     .replaceAll("layer_builder", "producer")
-    .replaceAll("residual_critic", "goal guidance")
-    .replaceAll("producer", "patch editor")
+    .replaceAll("residual_critic", "critic")
     .replaceAll("Loop ", "Iteration ");
 }
 
@@ -415,8 +414,7 @@ function AgentTranscript({ traces }) {
         const res = await fetch(trace.url);
         if (!res.ok) throw new Error(`Could not load ${trace.url}`);
         const text = await res.text();
-        const displayText = goalDisplayText(text);
-        return { trace, text: displayText.length > 24000 ? `${displayText.slice(0, 24000)}\n... [truncated; open artifact for full file]` : displayText };
+        return { trace, text: text.length > 24000 ? `${text.slice(0, 24000)}\n... [truncated; open artifact for full file]` : text };
       } catch (error) {
         return { trace, text: error.stack || String(error) };
       }
@@ -479,7 +477,7 @@ function AccuracyNode({ data, selected }) {
   return h("button", {
     type: "button",
     className: classes.join(" "),
-    title: "Score this iteration",
+    title: "Calculate accuracy",
     onClick: (event) => {
       event.stopPropagation();
       data.onOpen?.();
@@ -968,7 +966,7 @@ function PatchOperations({ ops }) {
   const trials = Array.isArray(ops.loss_trials) ? ops.loss_trials : [];
   return h("section", { className: "patch-section" },
     h("div", { className: "patch-section-head" },
-      h("strong", null, "Patch Decisions"),
+      h("strong", null, "Producer Decisions"),
       h("span", null, `${operations.length} edits${trials.length ? `, ${trials.length} checks` : ""}`)
     ),
     ops.hypothesis ? h("p", { className: "patch-hypothesis" }, ops.hypothesis) : null,
@@ -1116,7 +1114,7 @@ function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = []
       h(AudioComparePlayers, {
         sourceUrl: sourceArtifact?.url,
         renderUrl: outputAudio?.url,
-        renderLabel: "Rendered audio",
+        renderLabel: "Producer audio",
       })
     ),
     session?.error ? h("pre", { className: "sidebar-pre" }, session.error) : session ? h(React.Fragment, null,
@@ -1136,7 +1134,7 @@ function SidebarDetail({ selected, detail, sourceArtifact, allTraces = [] }) {
   return h("aside", { className: "workflow-sidebar" },
     h("div", { className: "sidebar-head" },
       h("div", null,
-        h("span", null, selected.step === null || selected.step === undefined ? "Goal run" : `Iteration ${selected.step + 1}`),
+        h("span", null, selected.step === null || selected.step === undefined ? "Agent" : `Iteration ${selected.step + 1}`),
         h("h3", null, detail?.label || selected.label)
       ),
       h(Badge, { variant: "outline" }, selected.status === "completed" ? "Done" : selected.status === "running" ? "Working" : "Waiting")
@@ -1159,7 +1157,7 @@ function activityKind(trace) {
   if (trace.role === "answer") return "Answer";
   if (trace.role?.includes("render") || trace.name?.endsWith(".wav")) return "Audio render";
   if (trace.role?.includes("audio_diff")) return "Accuracy report";
-  if (trace.role?.includes("recommendation")) return "Goal guidance";
+  if (trace.role?.includes("recommendation")) return "Critic brief";
   if (trace.role?.includes("session")) return "Session file";
   if (trace.role?.includes("layer_analysis")) return "Layer plan";
   return roleName(trace.role, trace.agent);
@@ -1218,7 +1216,7 @@ function AgentActivity({ selected }) {
     h("div", { className: "codex-status-line" }, active ? `Working for ${elapsed || 1}s` : selected.status === "completed" ? "Finished" : "Waiting"),
     requestEvent ? h("p", { className: "producer-plain-line" }, hideRawPrompt ? `Instructions are available in ${requestLabel}.` : requestText || "Loading request...") : null,
     progressLines.length ? progressLines.map((line, index) => h("p", { className: "producer-plain-line", key: `${line}-${index}` }, line)) : latestNote ? h("p", { className: "producer-plain-line" }, latestNote) : null,
-    responseEvent ? h("p", { className: "producer-plain-line" }, hideRawPrompt ? `Response is available in ${responseLabel}.` : responseText || (active ? "Waiting for the goal step response..." : "Response file is not available yet.")) : null,
+    responseEvent ? h("p", { className: "producer-plain-line" }, hideRawPrompt ? `Response is available in ${responseLabel}.` : responseText || (active ? "Waiting for the Producer response..." : "Response file is not available yet.")) : null,
     artifacts.length ? h("p", { className: "producer-plain-line" }, artifacts.slice(0, 8).map((trace) => roleName(trace.role, trace.agent)).join(", ")) : null,
     active ? h("div", { className: "thinking-shimmer" }, "Thinking") : null
   );
@@ -1231,12 +1229,12 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
     .filter((step) => step !== undefined)
     .map((step) => Number(step));
   const steps = Array.from(new Set([...traceSteps, ...statusSteps])).sort((a, b) => a - b);
-  const [selectedId, setSelectedId] = useState("guidance-0");
+  const [selectedId, setSelectedId] = useState("critic-0");
   const [selectedDetail, setSelectedDetail] = useState(null);
 
   useEffect(() => {
     if (steps.some((step) => selectedId.endsWith(`-${step}`))) return;
-    setSelectedId(steps.length ? `guidance-${steps[0]}` : "guidance-0");
+    setSelectedId(steps.length ? `critic-${steps[0]}` : "critic-0");
   }, [steps.join(","), selectedId]);
 
   const makeAgentNode = (id, label, base, step, x, y, parentId = undefined, detail = "") => {
@@ -1303,8 +1301,8 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
       draggable: false,
       data: {
         id: "baseline",
-        label: "Baseline",
-        detail: "initial render and first score",
+        label: "Initial Baseline",
+        detail: "before first Critic brief",
         icon: Activity,
         rows: rows.map((row) => ({ ...row, value: row.value || "pending" })),
         onOpen: (trace, nodeData) => {
@@ -1334,7 +1332,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
         score: winner?.score,
         status: statuses[`loss_${step}`] || (accuracyTrace ? "completed" : "waiting"),
         onOpen: accuracyTrace ? () => {
-          setSelectedId(`patch-${step}`);
+          setSelectedId(`producer-${step}`);
           setSelectedDetail({ trace: accuracyTrace, label: `Accuracy: ${roleName(accuracyTrace.role, accuracyTrace.agent)}` });
         } : undefined,
       },
@@ -1352,14 +1350,14 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
       style: { width: 880, height: 196 },
       data: {},
     });
-    nodes.push(makeAgentNode(`guidance-${step}`, "Goal Guidance", "residual_critic", step, 36, 34, frameId, "identifies the next bottleneck"));
-    nodes.push(makeAgentNode(`patch-${step}`, "Patch Edits", "producer", step, 336, 34, frameId, "updates synth, effects, modulation, and mix"));
+    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 36, 34, frameId, "writes Producer brief"));
+    nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 336, 34, frameId, "writes session files"));
     nodes.push(makeAccuracyNode(step, 636, 78, frameId));
-    if (index === 0 && baselineTraces.length) edges.push(makeEdge("baseline-guidance-0", "baseline", `guidance-${step}`, statuses[`residual_critic_${step}`] === "running"));
-    edges.push(makeEdge(`guidance-patch-${step}`, `guidance-${step}`, `patch-${step}`, statuses[`producer_${step}`] === "running"));
-    edges.push(makeEdge(`patch-score-${step}`, `patch-${step}`, `accuracy-${step}`, statuses[`loss_${step}`] === "running"));
+    if (index === 0 && baselineTraces.length) edges.push(makeEdge("baseline-critic-0", "baseline", `critic-${step}`, statuses[`residual_critic_${step}`] === "running"));
+    edges.push(makeEdge(`c-p-${step}`, `critic-${step}`, `producer-${step}`, statuses[`producer_${step}`] === "running"));
+    edges.push(makeEdge(`p-a-${step}`, `producer-${step}`, `accuracy-${step}`, statuses[`loss_${step}`] === "running"));
     const nextStep = steps[index + 1];
-    if (nextStep !== undefined) edges.push(makeEdge(`score-guidance-${step}-${nextStep}`, `accuracy-${step}`, `guidance-${nextStep}`, statuses[`residual_critic_${nextStep}`] === "running"));
+    if (nextStep !== undefined) edges.push(makeEdge(`a-c-${step}-${nextStep}`, `accuracy-${step}`, `critic-${nextStep}`, statuses[`residual_critic_${nextStep}`] === "running"));
   });
 
   const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.type === "agent");
@@ -1530,6 +1528,352 @@ function DecisionLog({ artifacts, runActive }) {
   );
 }
 
+function artifactHref(artifact) {
+  return artifact?.url ? h("a", { href: artifact.url, target: "_blank" }, artifact.name) : "pending";
+}
+
+function scoreArtifactName(step) {
+  return step === "initial" ? "loss_report_step_initial.json" : `patch_report_step_${String(step).padStart(2, "0")}.json`;
+}
+
+function GoalRunTimeline({ artifacts, runActive }) {
+  const [scores, setScores] = useState({});
+  const artifactKey = artifacts.map((artifact) => `${artifact.name}:${artifact.size}`).join("|");
+  const byName = (name) => artifacts.find((artifact) => artifact.name === name);
+  const starts = (prefix) => artifacts.filter((artifact) => artifact.name.startsWith(prefix));
+  const stepNumbers = Array.from(new Set(artifacts.flatMap((artifact) => {
+    const matches = [...artifact.name.matchAll(/step_(\d+)/g)];
+    return matches.map((match) => Number(match[1]));
+  }))).sort((a, b) => a - b);
+
+  useEffect(() => {
+    let cancelled = false;
+    const scoreArtifacts = [
+      byName("loss_report_step_initial.json"),
+      ...starts("patch_report_step_"),
+      byName("reconstruction_report.json"),
+    ].filter(Boolean);
+    Promise.all(scoreArtifacts.map(async (artifact) => {
+      try {
+        const json = await fetch(artifact.url).then((res) => res.json());
+        const payload = accuracyPayload(json);
+        const score = Number(payload.scores?.final);
+        const step = artifact.name === "loss_report_step_initial.json"
+          ? "initial"
+          : artifact.name === "reconstruction_report.json"
+            ? "final"
+            : decisionStepFromName(artifact.name);
+        return [step, Number.isFinite(score) ? score : null];
+      } catch {
+        return null;
+      }
+    })).then((entries) => {
+      if (!cancelled) setScores(Object.fromEntries(entries.filter(Boolean)));
+    });
+    return () => { cancelled = true; };
+  }, [artifactKey]);
+
+  const baselineItems = [
+    ["Target clip", byName("source_clip.wav")],
+    ["Initial render", byName("current_render_step_initial.wav")],
+    ["Initial score", byName("loss_report_step_initial.json")],
+  ];
+  const finalReport = byName("reconstruction_report.json");
+  return h("section", { className: "section-block goal-run-section" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Goal Run Timeline"),
+      h("p", null, "This view follows the files written by a Codex TUI /goal session. It is not the UI critic/producer orchestrator graph.")
+    ),
+    h("div", { className: "goal-timeline" },
+      h("article", { className: "goal-step-card" },
+        h("div", { className: "goal-step-head" },
+          h("strong", null, "Baseline"),
+          h(Badge, { variant: "outline" }, Number.isFinite(scores.initial) ? scores.initial.toFixed(3) : "scoring")
+        ),
+        h("p", null, "Codex established the target clip, current patch session, first render, and initial loss report."),
+        h("ul", null, baselineItems.map(([label, artifact]) => h("li", { key: label }, h("span", null, label), artifactHref(artifact))))
+      ),
+      stepNumbers.map((step) => {
+        const guidance = byName(`critic_brief_step_${String(step).padStart(2, "0")}.md`);
+        const ops = byName(`patch_ops_step_${String(step).padStart(2, "0")}.json`);
+        const applied = byName(`patch_ops_applied_step_${String(step).padStart(2, "0")}.json`);
+        const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`);
+        const report = byName(scoreArtifactName(step));
+        const trialCount = artifacts.filter((artifact) => artifact.name.startsWith(`candidate_loss_step_${String(step).padStart(2, "0")}`)).length;
+        const status = report ? "scored" : ops ? "edits written" : guidance ? "planning" : "observed";
+        return h("article", { className: "goal-step-card", key: step },
+          h("div", { className: "goal-step-head" },
+            h("strong", null, `Iteration ${step + 1}`),
+            h(Badge, { variant: "outline" }, Number.isFinite(scores[step]) ? scores[step].toFixed(3) : status)
+          ),
+          h("p", null, ops
+            ? "Codex chose patch/effects/mix edits, tested candidates, and wrote the artifacts below."
+            : guidance
+              ? "Codex has identified the next bottleneck and is preparing patch edits."
+              : "Codex has written some iteration artifacts."),
+          h("ul", null,
+            h("li", null, h("span", null, "Bottleneck / plan"), artifactHref(guidance)),
+            h("li", null, h("span", null, "Patch decisions"), artifactHref(ops)),
+            h("li", null, h("span", null, "Applied patch"), artifactHref(applied)),
+            h("li", null, h("span", null, "Rendered audio"), artifactHref(render)),
+            h("li", null, h("span", null, "Score report"), artifactHref(report)),
+            trialCount ? h("li", null, h("span", null, "Candidate checks"), `${trialCount} loss windows`) : null
+          )
+        );
+      }),
+      finalReport ? h("article", { className: "goal-step-card final" },
+        h("div", { className: "goal-step-head" },
+          h("strong", null, "Completion Report"),
+          h(Badge, { variant: "outline" }, Number.isFinite(scores.final) ? scores.final.toFixed(3) : "final")
+        ),
+        h("p", null, "The run wrote its final reconstruction report and output artifacts."),
+        h("ul", null,
+          h("li", null, h("span", null, "Report"), artifactHref(finalReport)),
+          h("li", null, h("span", null, "Final audio"), artifactHref(byName("final_reconstruction.wav"))),
+          h("li", null, h("span", null, "Session"), artifactHref(byName("reconstruction_session.json")))
+        )
+      ) : runActive ? h("article", { className: "goal-step-card pending" },
+        h("div", { className: "goal-step-head" },
+          h("strong", null, "Still Running"),
+          h(Badge, { variant: "outline" }, "watching")
+        ),
+        h("p", null, "The page is watching the run folder and will add new artifacts as Codex writes them.")
+      ) : null
+    )
+  );
+}
+
+function goalTraceFromArtifact(artifact, role, step = null, agent = "goal") {
+  if (!artifact) return null;
+  return {
+    agent,
+    step,
+    role,
+    path: `/ui_runs/${artifact.url.split("/")[3]}/${artifact.name}`,
+    url: artifact.url,
+    name: artifact.name,
+  };
+}
+
+function GoalWorkflowCanvas({ artifacts, runActive }) {
+  const [selectedId, setSelectedId] = useState("goal-baseline");
+  const [selectedDetail, setSelectedDetail] = useState(null);
+  const [scores, setScores] = useState({});
+  const artifactKey = artifacts.map((artifact) => `${artifact.name}:${artifact.size}`).join("|");
+  const byName = (name) => artifacts.find((artifact) => artifact.name === name);
+  const stepNumbers = Array.from(new Set(artifacts.flatMap((artifact) => {
+    const matches = [...artifact.name.matchAll(/step_(\d+)/g)];
+    return matches.map((match) => Number(match[1]));
+  }))).sort((a, b) => a - b);
+
+  useEffect(() => {
+    let cancelled = false;
+    const scoreArtifacts = [
+      byName("loss_report_step_initial.json"),
+      ...artifacts.filter((artifact) => artifact.name.startsWith("patch_report_step_")),
+      byName("reconstruction_report.json"),
+    ].filter(Boolean);
+    Promise.all(scoreArtifacts.map(async (artifact) => {
+      try {
+        const json = await fetch(artifact.url).then((res) => res.json());
+        const payload = accuracyPayload(json);
+        const score = Number(payload.scores?.final);
+        const step = artifact.name === "loss_report_step_initial.json"
+          ? "initial"
+          : artifact.name === "reconstruction_report.json"
+            ? "final"
+            : decisionStepFromName(artifact.name);
+        return [step, Number.isFinite(score) ? score.toFixed(3) : null];
+      } catch {
+        return null;
+      }
+    })).then((entries) => {
+      if (!cancelled) setScores(Object.fromEntries(entries.filter(Boolean)));
+    });
+    return () => { cancelled = true; };
+  }, [artifactKey]);
+
+  const source = byName("source_clip.wav");
+  const makeOpen = (trace, label) => trace ? (nodeData) => {
+    setSelectedId(nodeData.id);
+    setSelectedDetail({ trace, label });
+  } : undefined;
+  const nodes = [];
+  const edges = [];
+  const baselineTraces = [
+    goalTraceFromArtifact(source, "source_clip", null, "baseline"),
+    goalTraceFromArtifact(byName("current_render_step_initial.wav"), "winner_render", null, "baseline"),
+    goalTraceFromArtifact(byName("loss_report_step_initial.json"), "audio_diff", null, "baseline"),
+    goalTraceFromArtifact(byName("patch_session_current.json"), "session", null, "baseline"),
+  ].filter(Boolean);
+  nodes.push({
+    id: "goal-baseline",
+    type: "agent",
+    position: { x: 40, y: 50 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
+    draggable: false,
+    data: {
+      id: "goal-baseline",
+      label: "Baseline",
+      detail: "target, initial render, and initial score",
+      icon: Activity,
+      base: "goal",
+      step: null,
+      status: byName("loss_report_step_initial.json") ? "completed" : "running",
+      traces: baselineTraces,
+      codexEvents: [],
+      notes: [],
+      rows: [
+        { label: "Target", value: source?.name || "pending", trace: baselineTraces.find((trace) => trace.role === "source_clip") },
+        { label: "Initial audio", value: byName("current_render_step_initial.wav")?.name || "pending", trace: baselineTraces.find((trace) => trace.name === "current_render_step_initial.wav") },
+        { label: "Initial score", value: scores.initial || "pending", trace: baselineTraces.find((trace) => trace.name === "loss_report_step_initial.json") },
+        { label: "Session", value: byName("patch_session_current.json")?.name || "pending", trace: baselineTraces.find((trace) => trace.name === "patch_session_current.json") },
+      ],
+      onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${roleName(trace.role, trace.agent)}`)?.(nodeData),
+    },
+  });
+
+  stepNumbers.forEach((step, index) => {
+    const stepId = `goal-step-${step}`;
+    const y = 50 + (index + 1) * 220;
+    const plan = byName(`critic_brief_step_${String(step).padStart(2, "0")}.md`);
+    const ops = byName(`patch_ops_step_${String(step).padStart(2, "0")}.json`);
+    const applied = byName(`patch_ops_applied_step_${String(step).padStart(2, "0")}.json`);
+    const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`);
+    const report = byName(`patch_report_step_${String(step).padStart(2, "0")}.json`);
+    const session = byName(`patch_session_step_${String(step).padStart(2, "0")}.json`) || byName("patch_session_current.json");
+    const trialCount = artifacts.filter((artifact) => artifact.name.startsWith(`candidate_loss_step_${String(step).padStart(2, "0")}`)).length;
+    const traces = [
+      goalTraceFromArtifact(plan, "recommendation", step, "goal"),
+      goalTraceFromArtifact(ops, "patch_ops", step, "goal"),
+      goalTraceFromArtifact(applied, "patch_ops", step, "goal"),
+      goalTraceFromArtifact(render, "winner_render", step, "goal"),
+      goalTraceFromArtifact(report, "audio_diff", step, "goal"),
+      goalTraceFromArtifact(session, "session", step, "goal"),
+    ].filter(Boolean);
+    nodes.push({
+      id: stepId,
+      type: "agent",
+      position: { x: 360, y },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      draggable: false,
+      data: {
+        id: stepId,
+        label: `Iteration ${step + 1}`,
+        detail: "actual TUI goal artifacts written for this iteration",
+        icon: SlidersHorizontal,
+        base: "goal",
+        step,
+        status: report ? "completed" : ops ? "running" : "waiting",
+        traces,
+        codexEvents: [],
+        notes: [],
+        rows: [
+          { label: "Plan", value: plan?.name || "pending", trace: traces.find((trace) => trace.name === plan?.name) },
+          { label: "Decisions", value: ops?.name || "pending", trace: traces.find((trace) => trace.name === ops?.name) },
+          { label: "Audio", value: render?.name || "pending", trace: traces.find((trace) => trace.name === render?.name) },
+          { label: "Score", value: scores[step] || "pending", trace: traces.find((trace) => trace.name === report?.name) },
+          { label: "Trials", value: trialCount ? `${trialCount} checks` : "pending" },
+        ],
+        onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${roleName(trace.role, trace.agent)}`)?.(nodeData),
+      },
+    });
+    edges.push({
+      id: index === 0 ? "goal-baseline-first" : `goal-step-${stepNumbers[index - 1]}-${step}`,
+      source: index === 0 ? "goal-baseline" : `goal-step-${stepNumbers[index - 1]}`,
+      target: stepId,
+      type: "smoothstep",
+      animated: !report && runActive,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24, color: "#323a85" },
+      style: { stroke: "#323a85", strokeWidth: 2 },
+    });
+  });
+
+  const finalReport = byName("reconstruction_report.json");
+  if (finalReport) {
+    const finalTraces = [
+      goalTraceFromArtifact(finalReport, "audio_diff", null, "goal"),
+      goalTraceFromArtifact(byName("final_reconstruction.wav"), "render", null, "goal"),
+      goalTraceFromArtifact(byName("reconstruction_session.json"), "session", null, "goal"),
+    ].filter(Boolean);
+    const sourceId = stepNumbers.length ? `goal-step-${stepNumbers[stepNumbers.length - 1]}` : "goal-baseline";
+    nodes.push({
+      id: "goal-complete",
+      type: "agent",
+      position: { x: 700, y: 50 + Math.max(1, stepNumbers.length) * 220 },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      draggable: false,
+      data: {
+        id: "goal-complete",
+        label: "Completion",
+        detail: "final report and audio",
+        icon: Activity,
+        base: "goal",
+        step: null,
+        status: "completed",
+        traces: finalTraces,
+        codexEvents: [],
+        notes: [],
+        rows: [
+          { label: "Final score", value: scores.final || "report", trace: finalTraces.find((trace) => trace.name === "reconstruction_report.json") },
+          { label: "Final audio", value: byName("final_reconstruction.wav")?.name || "pending", trace: finalTraces.find((trace) => trace.name === "final_reconstruction.wav") },
+          { label: "Session", value: byName("reconstruction_session.json")?.name || "pending", trace: finalTraces.find((trace) => trace.name === "reconstruction_session.json") },
+        ],
+        onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${roleName(trace.role, trace.agent)}`)?.(nodeData),
+      },
+    });
+    edges.push({
+      id: "goal-final",
+      source: sourceId,
+      target: "goal-complete",
+      type: "smoothstep",
+      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24, color: "#323a85" },
+      style: { stroke: "#323a85", strokeWidth: 2 },
+    });
+  }
+
+  const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.type === "agent");
+  const selected = selectedNode?.data || { label: "Select a block", traces: [] };
+  return h("section", { className: "workflow-section goal-workflow-section" },
+    h("div", { className: "section-title" },
+      h("h2", null, "Goal Run Graph"),
+      h("p", null, "This graph is built from the files actually written by the TUI /goal session.")
+    ),
+    h("div", { className: "workflow-layout" },
+      h("div", { className: "workflow-canvas" },
+        h(ReactFlow, {
+          key: `goal-flow-${artifactKey}`,
+          nodes,
+          edges,
+          nodeTypes,
+          fitView: true,
+          fitViewOptions: { padding: 0.2, maxZoom: 0.98, includeHiddenNodes: false },
+          minZoom: 0.18,
+          maxZoom: 1.25,
+          defaultEdgeOptions: { markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24, color: "#323a85" }, style: { stroke: "#323a85", strokeWidth: 2 } },
+          nodesDraggable: false,
+          nodesConnectable: false,
+          elementsSelectable: true,
+          panOnScroll: true,
+          onNodeClick: (_, node) => {
+            if (node.type === "agent") {
+              setSelectedId(node.id);
+              setSelectedDetail(null);
+            }
+          },
+        },
+          h(Background, { gap: 18, color: "#ececec" }),
+          h(Controls, { showInteractive: false })
+        )
+      ),
+      h(SidebarDetail, { selected, detail: selectedDetail, sourceArtifact: source, allTraces: nodes.flatMap((node) => node.data?.traces || []) })
+    )
+  );
+}
+
 function Comparison({ artifacts }) {
   const source = artifacts.find((artifact) => artifact.name === "source_clip.wav");
   const final = artifacts.find((artifact) => artifact.name === "final_reconstruction.wav");
@@ -1594,6 +1938,7 @@ function App() {
   const [winners, setWinners] = useState({});
   const [artifacts, setArtifacts] = useState([]);
   const [report, setReport] = useState(null);
+  const [runMode, setRunMode] = useState("unknown");
   const activeRun = useRef(localStorage.getItem("v1ActiveRunId"));
   const sourceTools = useRef({ wave: null, regions: null, activeRegion: null });
 
@@ -1674,6 +2019,7 @@ function App() {
     setWinners({});
     setArtifacts([]);
     setReport(null);
+    setRunMode("unknown");
   }, []);
 
   const ensureFiveSecondRegion = useCallback((start = 0) => {
@@ -1913,6 +2259,7 @@ function App() {
         activeRun.current = null;
         addRunNote(`Run ${payload.status}.`);
         const job = await api(`/api/reconstructions/${runId}`);
+        setRunMode(job.run_mode || "unknown");
         setArtifacts(job.artifacts || []);
         await renderTraceArtifacts(job.artifacts || []);
         loadRuns().catch((error) => addRunNote(error.stack || String(error)));
@@ -1957,6 +2304,7 @@ function App() {
           });
           activeRun.current = data.run_id;
           localStorage.setItem("v1ActiveRunId", data.run_id);
+          setRunMode("orchestrated_ui");
           setStatuses({ residual_critic_0: "running" });
           addAgentNote("residual_critic_0", "Started.");
           pushRunRoute(data.run_id);
@@ -1986,6 +2334,7 @@ function App() {
     const currentArtifacts = latestRun.artifacts || [];
     if (latestRun.status === "running") {
       setStatus("Running");
+      setRunMode(latestRun.run_mode || "unknown");
       activeRun.current = latestRun.id;
       localStorage.setItem("v1ActiveRunId", latestRun.id);
       setArtifacts(currentArtifacts);
@@ -1995,6 +2344,7 @@ function App() {
       return;
     }
     setStatus(viewStatusForRun(latestRun.status));
+    setRunMode(latestRun.run_mode || "unknown");
     setArtifacts(currentArtifacts);
     const reportArtifact = currentArtifacts.find((artifact) => artifact.name === "reconstruction_report.json");
     let loadedReport = null;
@@ -2032,6 +2382,7 @@ function App() {
         return api(`/api/reconstructions/${routeId}`)
           .then(async (job) => {
             setStatus(viewStatusForRun(job.status));
+            setRunMode(job.run_mode || "unknown");
             setArtifacts(job.artifacts || []);
             await renderTraceArtifacts(job.artifacts || []);
             if (job.status === "running") {
@@ -2057,6 +2408,7 @@ function App() {
           return;
         }
         setStatus("Running");
+        setRunMode(job.run_mode || "unknown");
         setArtifacts(job.artifacts || []);
         await renderTraceArtifacts(job.artifacts || []);
         events = attachEvents(activeRun.current);
@@ -2074,6 +2426,7 @@ function App() {
   const routeRunId = currentRouteRunId();
   const hasLoadedRun = runActive || traces.length > 0 || artifacts.length > 0 || report;
   const showRunDetail = Boolean(routeRunId);
+  const isGoalTuiRun = runMode === "goal_tui";
   const canKillRun = showRunDetail && runActive && activeRun.current === routeRunId;
   return h("main", { className: showRunDetail ? "react-shell run-detail-shell" : "react-shell" },
     showRunDetail ? h("div", { className: "run-topbar" },
@@ -2099,8 +2452,9 @@ function App() {
       disabled: starting || !currentSongId,
       running: starting,
     }),
-    showRunDetail && hasLoadedRun ? h(DecisionLog, { artifacts, runActive }) : null,
-    showRunDetail && hasLoadedRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts, codexEvents }) : null,
+    showRunDetail && hasLoadedRun && isGoalTuiRun ? h(GoalWorkflowCanvas, { artifacts, runActive }) : null,
+    showRunDetail && hasLoadedRun && isGoalTuiRun ? h(DecisionLog, { artifacts, runActive }) : null,
+    showRunDetail && hasLoadedRun && !isGoalTuiRun ? h(WorkflowCanvas, { traces, statuses, notes, winners, artifacts, codexEvents }) : null,
     showRunDetail && hasLoadedRun ? h(Comparison, { artifacts }) : null,
     showRunDetail && hasLoadedRun ? h(Scoreboard, { report }) : null,
     showRunDetail && hasLoadedRun ? h(Artifacts, { artifacts, onReport: setReport }) : null,

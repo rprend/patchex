@@ -940,6 +940,25 @@ def reconstruction_run_summary(run_dir: Path, report: dict | None, manifest: dic
     }
 
 
+def reconstruction_run_mode(run_dir: Path, manifest: dict | None = None, has_memory_job: bool = False) -> str:
+    if has_memory_job:
+        return "orchestrated_ui"
+    if (run_dir / "run_state.json").exists() or (run_dir / "events.jsonl").exists() or manifest:
+        return "orchestrated_ui"
+    if "_v1_" in run_dir.name:
+        return "orchestrated_ui"
+    goal_markers = [
+        "patch_ops_step_*.json",
+        "candidate_loss_step_*.json",
+        "candidate_render_step_*.wav",
+        "critic_brief_step_*.md",
+        "loss_report_step_initial.json",
+    ]
+    if any(any(run_dir.glob(pattern)) for pattern in goal_markers):
+        return "goal_tui"
+    return "unknown"
+
+
 def read_text_limited(path: Path, max_chars: int = 200_000) -> str:
     try:
         text = path.read_text(errors="replace")
@@ -1113,6 +1132,7 @@ class Handler(BaseHTTPRequestHandler):
                         {
                             "id": run_id,
                             "status": disk_reconstruction_status(run_dir),
+                            "run_mode": reconstruction_run_mode(run_dir),
                             "returncode": None,
                             "output_dir": str(run_dir),
                             "artifacts": list_artifacts(run_dir),
@@ -1124,6 +1144,7 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         "id": run_id,
                         "status": job["status"],
+                        "run_mode": "orchestrated_ui",
                         "returncode": job["returncode"],
                         "output_dir": job["output_dir"],
                         "artifacts": list_artifacts(Path(job["output_dir"])),
@@ -1462,6 +1483,7 @@ def list_reconstruction_runs() -> list[dict]:
             {
                 "id": run_id,
                 "status": "running",
+                "run_mode": "orchestrated_ui",
                 "overall_mix": summary.get("overall_mix") or "Reconstruction currently running",
                 "final_score": summary.get("final_score"),
                 "mel_score": summary.get("mel_score"),
@@ -1496,10 +1518,12 @@ def list_reconstruction_runs() -> list[dict]:
         artifacts = list_artifacts(run_dir)
         status = "running" if running_job and running_job.get("status") == "running" else disk_reconstruction_status(run_dir, manifest)
         summary = reconstruction_run_summary(run_dir, report, manifest)
+        run_mode = reconstruction_run_mode(run_dir, manifest, bool(running_job))
         runs.append(
             {
                 "id": run_dir.name,
                 "status": status,
+                "run_mode": run_mode,
                 "overall_mix": summary["overall_mix"],
                 "final_score": summary["final_score"],
                 "mel_score": summary["mel_score"],
