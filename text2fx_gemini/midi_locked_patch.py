@@ -1168,6 +1168,7 @@ def acceptance_gate(previous: dict[str, Any] | None, candidate: dict[str, Any]) 
     else:
         reasons.append("large final-score gain; absolute diagnostic gates remain reflected in the final score")
 
+    secondary_regressions = []
     for key, tolerance in (
         ("track_isolation_proxy", 0.04),
         ("patch_control", 0.03),
@@ -1179,8 +1180,13 @@ def acceptance_gate(previous: dict[str, Any] | None, candidate: dict[str, Any]) 
         previous_value = float(prev_scores.get(key, 0.0))
         candidate_value = float(cand_scores.get(key, 0.0))
         if candidate_value + tolerance < previous_value:
-            regressions.append(f"{key} regressed from {previous_value:.4f} to {candidate_value:.4f}")
+            secondary_regressions.append(f"{key} regressed from {previous_value:.4f} to {candidate_value:.4f}")
 
+    if strong_final_gain:
+        reasons.extend(f"warning: {item}" for item in regressions + secondary_regressions)
+        return {"accepted": True, "reasons": reasons, "regressions": []}
+
+    regressions.extend(secondary_regressions)
     accepted = cand_final >= prev_final and not regressions
     if regressions:
         reasons.extend(regressions)
