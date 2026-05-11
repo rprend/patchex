@@ -32,7 +32,7 @@ jobs: dict[str, dict] = {}
 analysis_jobs: dict[str, dict] = {}
 clip_jobs: dict[str, dict] = {}
 reconstruction_jobs: dict[str, dict] = {}
-EXTERNAL_RUN_ACTIVE_WINDOW_SECONDS = 2 * 60 * 60
+EXTERNAL_RUN_ACTIVE_WINDOW_SECONDS = 45 * 60
 
 NOISY_LOG_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
