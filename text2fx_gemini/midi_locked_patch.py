@@ -1393,7 +1393,23 @@ def acceptance_gate(previous: dict[str, Any] | None, candidate: dict[str, Any]) 
     return {"accepted": accepted, "reasons": reasons, "regressions": regressions}
 
 
-def codex_patch_prompt(arrangement_path: Path, current_session_path: Path, critic_brief_path: Path, loss_report_path: Path, operations_output_path: Path, session_output_path: Path) -> str:
+def codex_patch_prompt(
+    arrangement_path: Path,
+    current_session_path: Path,
+    critic_brief_path: Path,
+    loss_report_path: Path,
+    operations_output_path: Path,
+    session_output_path: Path,
+    song_research_guide_path: Path | None = None,
+) -> str:
+    guide_block = ""
+    if song_research_guide_path is not None:
+        guide_block = f"""
+Song-specific research guide:
+- Read this before choosing any patch/mix move: {song_research_guide_path}
+- Treat it as a production style guide. Stay inside its likely instruments, effects, and arrangement constraints unless the loss report gives stronger evidence.
+- If the guide and loss report disagree, choose the smallest testable change and record the tradeoff in the production hypothesis.
+"""
     return f"""
 You are the Producer agent for an audio reconstruction loop.
 
@@ -1404,6 +1420,7 @@ Read these files:
 - Current patch session JSON: {current_session_path}
 - Critic briefing markdown: {critic_brief_path}
 - Current loss report JSON: {loss_report_path}
+{guide_block}
 
 Task: Call the patch operation helper functions to save changes to {operations_output_path}. The harness will apply those operations to {current_session_path} and write the resulting patch session to {session_output_path}.
 
@@ -1606,7 +1623,16 @@ def codex_critic_prompt(
     current_render_path: Path,
     loss_report_path: Path,
     critic_brief_path: Path,
+    song_research_guide_path: Path | None = None,
 ) -> str:
+    guide_block = ""
+    if song_research_guide_path is not None:
+        guide_block = f"""
+Song-specific research guide:
+- Read this before writing recommendations: {song_research_guide_path}
+- Use it to keep recommendations grounded in known/likely instruments, effects, production idioms, and song-specific context.
+- Do not recommend wild tangents that conflict with the guide unless the measured loss report clearly proves the guide is wrong for this clip.
+"""
     return f"""
 You are the Critic agent for an audio reconstruction loop.
 
@@ -1620,6 +1646,7 @@ Read and use these inputs:
 - Target audio: {target_audio_path}
 - Current rendered audio: {current_render_path}
 - Loss report: {loss_report_path}
+{guide_block}
 
 Definitions:
 - Composition is the fixed musical performance: tracks, roles, note events, velocities, timing, active ranges, tempo, and meter.
@@ -1938,6 +1965,42 @@ def run_codex_markdown_agent(agent: str, prompt: str, output_dir: Path, markdown
     return briefing
 
 
+def codex_song_research_prompt(
+    song_title: str,
+    artist: str,
+    composition_path: Path,
+    output_path: Path,
+) -> str:
+    return f"""
+You are the Song Research agent for a MIDI-locked audio reconstruction loop.
+
+Research the internet and use your music-production knowledge to create a practical production guide for this song:
+- Artist: {artist}
+- Song: {song_title}
+
+Read the fixed composition file so your advice respects the available MIDI tracks and timing:
+- Composition: {composition_path}
+
+Write a concise markdown guide to:
+{output_path}
+
+The guide must be usable by Critic and Producer agents during iterative scoring. It should keep them from going on wild tangents.
+
+Include:
+1. Known facts with source links: artist, album/release metadata, BPM if available, credits, genre/context, and any public discussion of the sound design.
+2. Clearly labeled inferences: likely synth family, arp/sequencer behavior, filters, modulation, chorus, delay, reverb, sidechain/pump, saturation/compression, and master movement.
+3. MIDI-locked implications: what the agents may change and what they must not change. If the MIDI is sparse, explain how to create rhythmic texture with delay, gate, filter sequencing, sidechain pump, and LFOs without adding notes.
+4. A ranked first-five-second strategy: the first 5-8 patch/mix moves to try, in order.
+5. Anti-tangents: changes that are unlikely for this song or forbidden by the MIDI-locked workflow.
+6. Search notes: list the exact queries or pages you used so the run can be audited later.
+
+Hard constraints:
+- Do not suggest changing MIDI notes, timing, velocity, track order, or composition structure.
+- Do not suggest sampler playback, reference audio reuse, stem extraction, or source leakage.
+- Prefer production primitives already present in the harness: Vital synth, low-pass/filter envelope, tempo_delay, sidechain_pump, step_gate, filter_sequencer, juno_chorus, reverb/returns, saturation, compression, EQ, stereo width, and master movement.
+"""
+
+
 def load_audio(path: Path, seconds: float | None = None) -> tuple[np.ndarray, int]:
     runtime()
     audio, sr = sf.read(path, always_2d=True)
@@ -2067,6 +2130,21 @@ def command_run(args: argparse.Namespace) -> int:
         best_report: dict[str, Any] | None = current_loss_report
         best_session = session
         best_render_path: Path | None = current_render_path
+    song_research_guide_path: Path | None = None
+    if args.song_research_guide:
+        song_research_guide_path = args.song_research_guide
+    elif args.research_song:
+        song_research_guide_path = args.output_dir / "song_research_guide.md"
+    if song_research_guide_path is not None and (not song_research_guide_path.exists() or args.refresh_research):
+        print("agent_stage song_research", flush=True)
+        run_codex_markdown_agent(
+            "song_research",
+            codex_song_research_prompt(args.song_title, args.artist, arrangement_path, song_research_guide_path),
+            args.output_dir,
+            song_research_guide_path,
+            args.timeout,
+        )
+        print(f"trace_file agent=song_research role=guide path={song_research_guide_path}", flush=True)
     for step in range(start_step, start_step + args.steps):
         lock_report: dict[str, Any] = {}
         print(f"agent_stage residual_critic step={step}", flush=True)
@@ -2084,6 +2162,7 @@ def command_run(args: argparse.Namespace) -> int:
                     current_render_path,
                     current_loss_report_path,
                     critic_brief_path,
+                    song_research_guide_path,
                 ),
                 args.output_dir,
                 critic_brief_path,
@@ -2099,7 +2178,15 @@ def command_run(args: argparse.Namespace) -> int:
             write_json(proposal_path, proposal)
             write_json(operations_path, {"schema": "patchex.patch_ops.v1", "hypothesis": "neutral-session smoke run", "operations": [], "loss_trials": []})
         else:
-            prompt = codex_patch_prompt(arrangement_path, current_session_path, critic_brief_path, current_loss_report_path, operations_path, proposal_path)
+            prompt = codex_patch_prompt(
+                arrangement_path,
+                current_session_path,
+                critic_brief_path,
+                current_loss_report_path,
+                operations_path,
+                proposal_path,
+                song_research_guide_path,
+            )
             raw_operations = run_codex_patch(f"producer_step_{step:02d}", prompt, args.output_dir, operations_path, args.timeout)
             raw_proposal, operations_report = apply_patch_operations(session, raw_operations)
             write_json(args.output_dir / f"patch_ops_applied_step_{step:02d}.json", operations_report)
@@ -2140,6 +2227,7 @@ def command_run(args: argparse.Namespace) -> int:
             "acceptance_gate": gate_report,
             "critic_brief_path": str(critic_brief_path),
             "critic_brief": critic_brief,
+            "song_research_guide_path": str(song_research_guide_path) if song_research_guide_path else None,
         }
         history.append(history_item)
         write_json(args.output_dir / f"history_item_step_{step:02d}.json", history_item)
@@ -2162,6 +2250,7 @@ def command_run(args: argparse.Namespace) -> int:
         "final_path": str(final_render),
         "session_path": str(session_path),
         "midi_locked_patch_report": best_report,
+        "song_research_guide_path": str(song_research_guide_path) if song_research_guide_path else None,
     }
     write_json(args.output_dir / "reconstruction_report.json", report_payload)
     write_json(
@@ -2172,6 +2261,7 @@ def command_run(args: argparse.Namespace) -> int:
             "current_loss_report_path": str(current_loss_report_path),
             "current_render_path": str(current_render_path),
             "best_scores": report_payload["best_scores"],
+            "song_research_guide_path": str(song_research_guide_path) if song_research_guide_path else None,
         },
     )
     print(f"wrote {final_render}", flush=True)
@@ -2227,6 +2317,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--resume", action="store_true", help="continue an existing output directory from the next history step")
     p_run.add_argument("--neutral-only", action="store_true")
     p_run.add_argument("--initial-session", type=Path)
+    p_run.add_argument("--research-song", action="store_true", help="write a run-local internet/LLM song research guide before iteration")
+    p_run.add_argument("--refresh-research", action="store_true", help="regenerate the song research guide even if it already exists")
+    p_run.add_argument("--song-research-guide", type=Path, help="existing or run-local markdown guide to inject into Critic and Producer prompts")
+    p_run.add_argument("--artist", default="French 79")
+    p_run.add_argument("--song-title", default="Between the Buttons")
     p_run.set_defaults(func=command_run)
     return parser
 
