@@ -1776,7 +1776,8 @@ def command_run(args: argparse.Namespace) -> int:
     arrangement = slice_arrangement(full_arrangement, args.clip_start, args.seconds) if args.clip_start is not None else full_arrangement
     write_json(arrangement_path, arrangement)
     print(f"trace_file agent=analyzer role=arrangement path={arrangement_path}", flush=True)
-    session = neutral_session(arrangement, args.sample_rate, args.seconds)
+    session_sample_rate = sr if int(args.sample_rate) == 44100 else int(args.sample_rate)
+    session = neutral_session(arrangement, session_sample_rate, args.seconds)
     write_json(current_session_path, session)
     print(f"trace_file agent=session role=current path={current_session_path}", flush=True)
     source_clip_path = args.output_dir / "source_clip.wav"
