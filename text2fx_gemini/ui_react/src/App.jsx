@@ -1519,6 +1519,26 @@ function latestNamedArtifact(artifacts, predicate) {
     .at(-1);
 }
 
+function directCandidateStepFromName(name = "") {
+  const match = name.match(/^candidate_(\d+)_/);
+  return match ? Number(match[1]) : null;
+}
+
+function goalStepNumbers(artifacts) {
+  return Array.from(new Set(artifacts.flatMap((artifact) => {
+    const directStep = directCandidateStepFromName(artifact.name);
+    if (directStep !== null) return [directStep];
+    const matches = [...artifact.name.matchAll(/step_(\d+)/g)];
+    return matches.map((match) => Number(match[1]));
+  }))).sort((a, b) => a - b);
+}
+
+function directCandidateArtifact(artifacts, step, suffix) {
+  const prefix = `candidate_${String(step).padStart(2, "0")}_`;
+  return latestNamedArtifact(artifacts, (artifact) =>
+    artifact.name.startsWith(prefix) && artifact.name.endsWith(suffix));
+}
+
 function DecisionLog({ artifacts, runActive }) {
   const [items, setItems] = useState([]);
   const artifactKey = artifacts.map((artifact) => `${artifact.name}:${artifact.size}`).join("|");
@@ -1607,16 +1627,14 @@ function GoalRunTimeline({ artifacts, runActive }) {
   const artifactKey = artifacts.map((artifact) => `${artifact.name}:${artifact.size}`).join("|");
   const byName = (name) => artifacts.find((artifact) => artifact.name === name);
   const starts = (prefix) => artifacts.filter((artifact) => artifact.name.startsWith(prefix));
-  const stepNumbers = Array.from(new Set(artifacts.flatMap((artifact) => {
-    const matches = [...artifact.name.matchAll(/step_(\d+)/g)];
-    return matches.map((match) => Number(match[1]));
-  }))).sort((a, b) => a - b);
+  const stepNumbers = goalStepNumbers(artifacts);
 
   useEffect(() => {
     let cancelled = false;
     const scoreArtifacts = [
       byName("loss_report_step_initial.json"),
       ...starts("patch_report_step_"),
+      ...artifacts.filter((artifact) => /^candidate_\d+_.*_loss\.json$/.test(artifact.name)),
       byName("reconstruction_report.json"),
     ].filter(Boolean);
     Promise.all(scoreArtifacts.map(async (artifact) => {
@@ -1628,7 +1646,7 @@ function GoalRunTimeline({ artifacts, runActive }) {
           ? "initial"
           : artifact.name === "reconstruction_report.json"
             ? "final"
-            : decisionStepFromName(artifact.name);
+            : directCandidateStepFromName(artifact.name) ?? decisionStepFromName(artifact.name);
         return [step, Number.isFinite(score) ? score : null];
       } catch {
         return null;
@@ -1659,17 +1677,18 @@ function GoalRunTimeline({ artifacts, runActive }) {
         h("p", null, "Codex established the target clip, current patch session, first render, and initial loss report."),
         h("ul", null, baselineItems.map(([label, artifact]) => h("li", { key: label }, h("span", null, label), artifactHref(artifact))))
       ),
-      stepNumbers.map((step) => {
+      stepNumbers.map((step, index) => {
         const guidance = byName(`critic_brief_step_${String(step).padStart(2, "0")}.md`);
         const ops = byName(`patch_ops_step_${String(step).padStart(2, "0")}.json`);
         const applied = byName(`patch_ops_applied_step_${String(step).padStart(2, "0")}.json`);
-        const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`);
-        const report = byName(scoreArtifactName(step));
+        const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`) || directCandidateArtifact(artifacts, step, "_render.wav");
+        const report = byName(scoreArtifactName(step)) || directCandidateArtifact(artifacts, step, "_loss.json");
+        const session = directCandidateArtifact(artifacts, step, "_session.json");
         const trialCount = artifacts.filter((artifact) => artifact.name.startsWith(`candidate_loss_step_${String(step).padStart(2, "0")}`)).length;
         const status = report ? "scored" : ops ? "edits written" : guidance ? "planning" : "observed";
         return h("article", { className: "goal-step-card", key: step },
           h("div", { className: "goal-step-head" },
-            h("strong", null, `Iteration ${step + 1}`),
+            h("strong", null, `Iteration ${index + 1}`),
             h(Badge, { variant: "outline" }, Number.isFinite(scores[step]) ? scores[step].toFixed(3) : status)
           ),
           h("p", null, ops
@@ -1683,6 +1702,7 @@ function GoalRunTimeline({ artifacts, runActive }) {
             h("li", null, h("span", null, "Applied patch"), artifactHref(applied)),
             h("li", null, h("span", null, "Rendered audio"), artifactHref(render)),
             h("li", null, h("span", null, "Score report"), artifactHref(report)),
+            session ? h("li", null, h("span", null, "Session"), artifactHref(session)) : null,
             trialCount ? h("li", null, h("span", null, "Candidate checks"), `${trialCount} loss windows`) : null
           )
         );
@@ -1737,10 +1757,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
     artifact.name.includes("_full") &&
     artifact.name.endsWith(".wav") &&
     !isDiagnosticWindowAudioName(artifact.name));
-  const stepNumbers = Array.from(new Set(artifacts.flatMap((artifact) => {
-    const matches = [...artifact.name.matchAll(/step_(\d+)/g)];
-    return matches.map((match) => Number(match[1]));
-  }))).sort((a, b) => a - b);
+  const stepNumbers = goalStepNumbers(artifacts);
 
   useEffect(() => {
     let cancelled = false;
@@ -1748,6 +1765,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
       byName("loss_report_step_initial.json"),
       ...artifacts.filter((artifact) => artifact.name.startsWith("patch_report_step_")),
       ...artifacts.filter((artifact) => artifact.name.startsWith("candidate_loss_step_") && artifact.name.includes("_full")),
+      ...artifacts.filter((artifact) => /^candidate_\d+_.*_loss\.json$/.test(artifact.name)),
       byName("reconstruction_report.json"),
     ].filter(Boolean);
     Promise.all(scoreArtifacts.map(async (artifact) => {
@@ -1759,7 +1777,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
           ? "initial"
           : artifact.name === "reconstruction_report.json"
             ? "final"
-            : decisionStepFromName(artifact.name);
+            : directCandidateStepFromName(artifact.name) ?? decisionStepFromName(artifact.name);
         return [step, Number.isFinite(score) ? score.toFixed(3) : null];
       } catch {
         return null;
@@ -1839,9 +1857,12 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
     const plan = byName(`critic_brief_step_${String(step).padStart(2, "0")}.md`);
     const ops = stepArtifact("patch_ops_step_", step);
     const applied = stepArtifact("patch_ops_applied_step_", step);
-    const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`) || candidateFullRenderArtifact(step);
-    const report = byName(`patch_report_step_${String(step).padStart(2, "0")}.json`) || candidateArtifact("loss", step, ".json");
-    const session = byName(`patch_session_step_${String(step).padStart(2, "0")}.json`) || candidateArtifact("session", step, ".json") || byName("patch_session_current.json");
+    const directRender = directCandidateArtifact(artifacts, step, "_render.wav");
+    const directReport = directCandidateArtifact(artifacts, step, "_loss.json");
+    const directSession = directCandidateArtifact(artifacts, step, "_session.json");
+    const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`) || candidateFullRenderArtifact(step) || directRender;
+    const report = byName(`patch_report_step_${String(step).padStart(2, "0")}.json`) || candidateArtifact("loss", step, ".json") || directReport;
+    const session = byName(`patch_session_step_${String(step).padStart(2, "0")}.json`) || candidateArtifact("session", step, ".json") || directSession || byName("patch_session_current.json");
     const trialCount = artifacts.filter((artifact) => artifact.name.startsWith(`candidate_loss_step_${String(step).padStart(2, "0")}`)).length;
     const meta = stepMeta[step] || {};
     const editCount = Number.isFinite(meta.editCount) ? `${meta.editCount} edits` : goalArtifactStatus(ops, "ready");
@@ -1867,7 +1888,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
       draggable: false,
       data: {
         id: stepId,
-        label: `Iteration ${step + 1}`,
+        label: `Iteration ${index + 1}`,
         detail: "actual TUI goal artifacts written for this iteration",
         icon: SlidersHorizontal,
         base: "goal",
