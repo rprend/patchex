@@ -519,6 +519,25 @@ def apply_chorus(stereo: np.ndarray, sr: int, mix: float, width: float) -> np.nd
     return (stereo * (1.0 - mix) + delayed * mix * max(0.1, width)).astype(np.float32)
 
 
+def apply_decorrelation_width(stereo: np.ndarray, sr: int, amount: float) -> np.ndarray:
+    amount = float(np.clip(amount, 0.0, 0.75))
+    if amount <= 0.0:
+        return stereo
+    samples = stereo.shape[1]
+    delay_a = max(1, int(0.007 * sr))
+    delay_b = max(delay_a + 1, int(0.013 * sr))
+    if samples <= delay_b:
+        return stereo
+    mid = 0.5 * (stereo[0] + stereo[1])
+    delayed_a = np.zeros_like(mid)
+    delayed_b = np.zeros_like(mid)
+    delayed_a[delay_a:] = mid[:-delay_a]
+    delayed_b[delay_b:] = mid[:-delay_b]
+    side = (delayed_a - 0.65 * delayed_b) * amount
+    widened = np.vstack([mid + side, mid - side])
+    return widened.astype(np.float32)
+
+
 def apply_stereo_reverb(stereo: np.ndarray, sr: int, mix: float) -> np.ndarray:
     if mix <= 0:
         return stereo
@@ -788,7 +807,15 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     delayed = np.pad(mono[:-delay], (delay, 0)) if mono.size > delay else mono
     left = mono * (1.0 - 0.35 * layer["pan"]) + delayed * chorus_mix * layer["width"]
     right = mono * (1.0 + 0.35 * layer["pan"]) - delayed * chorus_mix * layer["width"]
-    stereo = np.vstack([left, right]) * db_to_amp(layer["gain_db"])
+    stereo = np.vstack([left, right])
+    width_amount = max(
+        0.0,
+        (float(layer.get("width", 1.0)) - 1.0) * 0.35
+        + (float(synth.get("stereo_spread", layer.get("width", 1.0))) - 1.0) * 0.25,
+    )
+    stereo = apply_decorrelation_width(stereo, sr, width_amount)
+    stereo = apply_pan_width(stereo, float(layer.get("pan", 0.0)), 1.0)
+    stereo *= db_to_amp(layer["gain_db"])
     stereo = apply_phaser(stereo, sr, float(layer["effects"].get("phaser_mix", 0.0)), float(mod.get("lfo_rate_hz", 0.23)) or 0.23)
     stereo = apply_delay(stereo, sr, float(layer["effects"].get("delay_time", 0.18)), float(layer["effects"].get("delay_mix", 0.0)))
     reverb_mix = layer["effects"]["reverb_mix"]
