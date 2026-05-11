@@ -39,9 +39,9 @@ const ROLE_LABELS = {
   answer: "Output",
   parsed_answer: "Parsed plan",
   layer_analysis: "Layer plan",
-  recommendation_initial: "Starting brief",
-  recommendation: "Next Producer brief",
-  session_proposal: "Proposed session",
+  recommendation_initial: "Starting guidance",
+  recommendation: "Goal guidance",
+  session_proposal: "Proposed patch",
   accepted_session: "Accepted session",
   candidate_session: "Candidate session",
   audio_diff: "Accuracy report",
@@ -52,10 +52,10 @@ const ROLE_LABELS = {
 };
 
 const AGENT_LABELS = {
-  producer: "Producer",
-  residual_critic: "Critic",
-  harness_improver: "Harness Improver",
-  loss: "Calculate Accuracy",
+  producer: "Patch Editor",
+  residual_critic: "Goal Guidance",
+  harness_improver: "Harness Tuning",
+  loss: "Scoring",
 };
 
 const RUN_ID_PATTERN = /^\d{8}_\d{6}_[A-Za-z0-9][A-Za-z0-9_-]*$/;
@@ -103,21 +103,21 @@ function agentStep(agent, fallback = null) {
 
 function agentName(agent) {
   const base = agentBase(agent);
-  if (base === "producer") return "Producer";
-  if (base === "residual_critic") return "Critic";
-  if (base === "harness_improver") return "Harness Improver";
-  if (base === "loss") return "Calculate Accuracy";
+  if (base === "producer") return "Patch Editor";
+  if (base === "residual_critic") return "Goal Guidance";
+  if (base === "harness_improver") return "Harness Tuning";
+  if (base === "loss") return "Scoring";
   return AGENT_LABELS[base] || base.replaceAll("_", " ");
 }
 
 function roleName(role, agent) {
-  if (role?.startsWith("producer_audio_diff")) return "Producer trial accuracy";
-  if (role?.startsWith("producer_render")) return "Producer trial audio";
+  if (role?.startsWith("producer_audio_diff")) return "Patch trial accuracy";
+  if (role?.startsWith("producer_render")) return "Patch trial audio";
   if (role?.startsWith("audio_diff")) return "Accuracy report";
   if (role?.startsWith("render")) return "Audio";
   if (role === "prompt") {
-    if (agentBase(agent) === "producer") return "Producer instructions";
-    if (agentBase(agent) === "residual_critic") return "Critic instructions";
+    if (agentBase(agent) === "producer") return "Patch edit instructions";
+    if (agentBase(agent) === "residual_critic") return "Goal guidance instructions";
     if (agentBase(agent) === "harness_improver") return "Harness instructions";
   }
   return ROLE_LABELS[role] || String(role || "File").replaceAll("_", " ");
@@ -126,8 +126,8 @@ function roleName(role, agent) {
 function friendlyWinner(name) {
   if (!name) return "unknown";
   const inner = String(name).match(/^codex_inner_(\d+)/);
-  if (inner) return `Producer trial ${Number(inner[1]) + 1}`;
-  if (name === "codex") return "Producer proposal";
+  if (inner) return `Patch trial ${Number(inner[1]) + 1}`;
+  if (name === "codex") return "Patch proposal";
   return String(name).replaceAll("_", " ");
 }
 
@@ -171,7 +171,8 @@ function cleanLogLine(line) {
   if (line.includes("/Users/ryanprendergast/")) return null;
   return line
     .replaceAll("layer_builder", "producer")
-    .replaceAll("residual_critic", "critic")
+    .replaceAll("residual_critic", "goal guidance")
+    .replaceAll("producer", "patch editor")
     .replaceAll("Loop ", "Iteration ");
 }
 
@@ -414,7 +415,8 @@ function AgentTranscript({ traces }) {
         const res = await fetch(trace.url);
         if (!res.ok) throw new Error(`Could not load ${trace.url}`);
         const text = await res.text();
-        return { trace, text: text.length > 24000 ? `${text.slice(0, 24000)}\n... [truncated; open artifact for full file]` : text };
+        const displayText = goalDisplayText(text);
+        return { trace, text: displayText.length > 24000 ? `${displayText.slice(0, 24000)}\n... [truncated; open artifact for full file]` : displayText };
       } catch (error) {
         return { trace, text: error.stack || String(error) };
       }
@@ -477,7 +479,7 @@ function AccuracyNode({ data, selected }) {
   return h("button", {
     type: "button",
     className: classes.join(" "),
-    title: "Calculate accuracy",
+    title: "Score this iteration",
     onClick: (event) => {
       event.stopPropagation();
       data.onOpen?.();
@@ -966,7 +968,7 @@ function PatchOperations({ ops }) {
   const trials = Array.isArray(ops.loss_trials) ? ops.loss_trials : [];
   return h("section", { className: "patch-section" },
     h("div", { className: "patch-section-head" },
-      h("strong", null, "Producer Decisions"),
+      h("strong", null, "Patch Decisions"),
       h("span", null, `${operations.length} edits${trials.length ? `, ${trials.length} checks` : ""}`)
     ),
     ops.hypothesis ? h("p", { className: "patch-hypothesis" }, ops.hypothesis) : null,
@@ -1114,7 +1116,7 @@ function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = []
       h(AudioComparePlayers, {
         sourceUrl: sourceArtifact?.url,
         renderUrl: outputAudio?.url,
-        renderLabel: "Producer audio",
+        renderLabel: "Rendered audio",
       })
     ),
     session?.error ? h("pre", { className: "sidebar-pre" }, session.error) : session ? h(React.Fragment, null,
@@ -1134,7 +1136,7 @@ function SidebarDetail({ selected, detail, sourceArtifact, allTraces = [] }) {
   return h("aside", { className: "workflow-sidebar" },
     h("div", { className: "sidebar-head" },
       h("div", null,
-        h("span", null, selected.step === null || selected.step === undefined ? "Agent" : `Iteration ${selected.step + 1}`),
+        h("span", null, selected.step === null || selected.step === undefined ? "Goal run" : `Iteration ${selected.step + 1}`),
         h("h3", null, detail?.label || selected.label)
       ),
       h(Badge, { variant: "outline" }, selected.status === "completed" ? "Done" : selected.status === "running" ? "Working" : "Waiting")
@@ -1157,7 +1159,7 @@ function activityKind(trace) {
   if (trace.role === "answer") return "Answer";
   if (trace.role?.includes("render") || trace.name?.endsWith(".wav")) return "Audio render";
   if (trace.role?.includes("audio_diff")) return "Accuracy report";
-  if (trace.role?.includes("recommendation")) return "Critic brief";
+  if (trace.role?.includes("recommendation")) return "Goal guidance";
   if (trace.role?.includes("session")) return "Session file";
   if (trace.role?.includes("layer_analysis")) return "Layer plan";
   return roleName(trace.role, trace.agent);
@@ -1209,11 +1211,14 @@ function AgentActivity({ selected }) {
   const requestText = requestEvent?.url ? loadedText[requestEvent.url] : "";
   const responseText = responseEvent?.url ? loadedText[responseEvent.url] : "";
   const artifacts = traces.filter((trace) => !["prompt", "answer"].includes(trace.role));
+  const hideRawPrompt = ["producer", "residual_critic"].includes(selected.base);
+  const requestLabel = requestEvent?.name || requestEvent?.path?.split("/").pop() || "instructions";
+  const responseLabel = responseEvent?.name || responseEvent?.path?.split("/").pop() || "response";
   return h("div", { className: "agent-activity" },
     h("div", { className: "codex-status-line" }, active ? `Working for ${elapsed || 1}s` : selected.status === "completed" ? "Finished" : "Waiting"),
-    requestEvent ? h("p", { className: "producer-plain-line" }, requestText || "Loading request...") : null,
+    requestEvent ? h("p", { className: "producer-plain-line" }, hideRawPrompt ? `Instructions are available in ${requestLabel}.` : requestText || "Loading request...") : null,
     progressLines.length ? progressLines.map((line, index) => h("p", { className: "producer-plain-line", key: `${line}-${index}` }, line)) : latestNote ? h("p", { className: "producer-plain-line" }, latestNote) : null,
-    responseEvent ? h("p", { className: "producer-plain-line" }, responseText || (active ? "Waiting for the Producer response..." : "Response file is not available yet.")) : null,
+    responseEvent ? h("p", { className: "producer-plain-line" }, hideRawPrompt ? `Response is available in ${responseLabel}.` : responseText || (active ? "Waiting for the goal step response..." : "Response file is not available yet.")) : null,
     artifacts.length ? h("p", { className: "producer-plain-line" }, artifacts.slice(0, 8).map((trace) => roleName(trace.role, trace.agent)).join(", ")) : null,
     active ? h("div", { className: "thinking-shimmer" }, "Thinking") : null
   );
@@ -1226,12 +1231,12 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
     .filter((step) => step !== undefined)
     .map((step) => Number(step));
   const steps = Array.from(new Set([...traceSteps, ...statusSteps])).sort((a, b) => a - b);
-  const [selectedId, setSelectedId] = useState("critic-0");
+  const [selectedId, setSelectedId] = useState("guidance-0");
   const [selectedDetail, setSelectedDetail] = useState(null);
 
   useEffect(() => {
     if (steps.some((step) => selectedId.endsWith(`-${step}`))) return;
-    setSelectedId(steps.length ? `critic-${steps[0]}` : "critic-0");
+    setSelectedId(steps.length ? `guidance-${steps[0]}` : "guidance-0");
   }, [steps.join(","), selectedId]);
 
   const makeAgentNode = (id, label, base, step, x, y, parentId = undefined, detail = "") => {
@@ -1298,8 +1303,8 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
       draggable: false,
       data: {
         id: "baseline",
-        label: "Initial Baseline",
-        detail: "before first Critic brief",
+        label: "Baseline",
+        detail: "initial render and first score",
         icon: Activity,
         rows: rows.map((row) => ({ ...row, value: row.value || "pending" })),
         onOpen: (trace, nodeData) => {
@@ -1329,7 +1334,7 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
         score: winner?.score,
         status: statuses[`loss_${step}`] || (accuracyTrace ? "completed" : "waiting"),
         onOpen: accuracyTrace ? () => {
-          setSelectedId(`producer-${step}`);
+          setSelectedId(`patch-${step}`);
           setSelectedDetail({ trace: accuracyTrace, label: `Accuracy: ${roleName(accuracyTrace.role, accuracyTrace.agent)}` });
         } : undefined,
       },
@@ -1347,14 +1352,14 @@ function WorkflowCanvas({ traces, statuses, notes, winners, artifacts, codexEven
       style: { width: 880, height: 196 },
       data: {},
     });
-    nodes.push(makeAgentNode(`critic-${step}`, "Critic", "residual_critic", step, 36, 34, frameId, "writes Producer brief"));
-    nodes.push(makeAgentNode(`producer-${step}`, "Producer", "producer", step, 336, 34, frameId, "writes session files"));
+    nodes.push(makeAgentNode(`guidance-${step}`, "Goal Guidance", "residual_critic", step, 36, 34, frameId, "identifies the next bottleneck"));
+    nodes.push(makeAgentNode(`patch-${step}`, "Patch Edits", "producer", step, 336, 34, frameId, "updates synth, effects, modulation, and mix"));
     nodes.push(makeAccuracyNode(step, 636, 78, frameId));
-    if (index === 0 && baselineTraces.length) edges.push(makeEdge("baseline-critic-0", "baseline", `critic-${step}`, statuses[`residual_critic_${step}`] === "running"));
-    edges.push(makeEdge(`c-p-${step}`, `critic-${step}`, `producer-${step}`, statuses[`producer_${step}`] === "running"));
-    edges.push(makeEdge(`p-a-${step}`, `producer-${step}`, `accuracy-${step}`, statuses[`loss_${step}`] === "running"));
+    if (index === 0 && baselineTraces.length) edges.push(makeEdge("baseline-guidance-0", "baseline", `guidance-${step}`, statuses[`residual_critic_${step}`] === "running"));
+    edges.push(makeEdge(`guidance-patch-${step}`, `guidance-${step}`, `patch-${step}`, statuses[`producer_${step}`] === "running"));
+    edges.push(makeEdge(`patch-score-${step}`, `patch-${step}`, `accuracy-${step}`, statuses[`loss_${step}`] === "running"));
     const nextStep = steps[index + 1];
-    if (nextStep !== undefined) edges.push(makeEdge(`a-c-${step}-${nextStep}`, `accuracy-${step}`, `critic-${nextStep}`, statuses[`residual_critic_${nextStep}`] === "running"));
+    if (nextStep !== undefined) edges.push(makeEdge(`score-guidance-${step}-${nextStep}`, `accuracy-${step}`, `guidance-${nextStep}`, statuses[`residual_critic_${nextStep}`] === "running"));
   });
 
   const selectedNode = nodes.find((node) => node.id === selectedId && node.type === "agent") || nodes.find((node) => node.type === "agent");
@@ -1435,10 +1440,18 @@ function decisionStepFromName(name) {
   return match ? Number(match[1]) : null;
 }
 
+function goalDisplayText(text) {
+  return String(text || "")
+    .replace(/\bCritic\b/g, "goal guidance")
+    .replace(/\bcritic\b/g, "goal guidance")
+    .replace(/\bProducer\b/g, "patch editor")
+    .replace(/\bproducer\b/g, "patch editor");
+}
+
 function summarizeOperation(operation) {
   const track = operation.track_id || String(operation.path || "").match(/layers\.([^.]+)/)?.[1] || "mix";
-  const change = operation.change || operation.op || "make a patch change";
-  const reason = operation.reason || "the current score showed this as a likely bottleneck";
+  const change = goalDisplayText(operation.change || operation.op || "make a patch change");
+  const reason = goalDisplayText(operation.reason || "the current score showed this as a likely bottleneck");
   return `Now I am going to ${change} on ${track} because ${reason}`;
 }
 
@@ -1481,7 +1494,7 @@ function DecisionLog({ artifacts, runActive }) {
             "").replace(/\s+/g, " ").trim();
           return {
             step: item.step,
-            hypothesis: item.data?.hypothesis || objective || "The producer made a focused patch/mix pass.",
+            hypothesis: goalDisplayText(item.data?.hypothesis || objective || "The goal loop made a focused patch/mix pass."),
             operations: operations.slice(0, 6).map(summarizeOperation),
             operationCount: operations.length,
             source: item.artifact.name,
@@ -1500,8 +1513,8 @@ function DecisionLog({ artifacts, runActive }) {
       h("p", null, "Plain-English patch, effects, modulation, and mix choices from the V1 goal run.")
     ),
     hasOpsPending ? h("div", { className: "decision-card pending" },
-      h("strong", null, "Producer pass pending"),
-      h("p", null, "The Critic has written guidance. Waiting for the Producer to choose concrete patch and mix edits.")
+      h("strong", null, "Patch edit pass pending"),
+      h("p", null, "Goal guidance is ready. Waiting for the next concrete patch and mix edits.")
     ) : null,
     h("div", { className: "decision-list" },
       items.map((item) => h("article", { className: "decision-card", key: item.source },
@@ -1616,9 +1629,9 @@ function App() {
     const statusId = step === null || step === undefined ? base : `${base}_${step}`;
     setStatuses((current) => ({ ...current, [statusId]: current[statusId] === "completed" ? "completed" : "running" }));
     if (role === "layer_analysis") addAgentNote(statusId, "Layer plan ready.");
-    if (role === "session_proposal") addAgentNote(statusId, "Producer wrote a session proposal.");
+    if (role === "session_proposal") addAgentNote(statusId, "Patch edit proposal ready.");
     if (role === "accepted_session") addAgentNote(statusId, "Accepted as current session.");
-    if (role === "recommendation") addAgentNote(statusId, "Critic wrote the next Producer brief.");
+    if (role === "recommendation") addAgentNote(statusId, "Goal guidance ready.");
     if (role.includes("audio_diff") || ["answer", "layer_analysis", "recommendation", "recommendation_initial", "accepted_session", "candidate_session"].includes(role)) {
       setStatuses((current) => ({ ...current, [statusId]: "completed" }));
     }
