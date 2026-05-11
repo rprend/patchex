@@ -17,15 +17,16 @@ import numpy as np
 
 try:
     from audio_diff import compare_audio, estimate_beat_grid, frame_rms, mono, stft_mag, stereo_stats
-    from reconstruct_match import CODEX_PATH, DEFAULT_SESSION, render_layer, render_session
+    from reconstruct_match import CODEX_PATH, DEFAULT_SESSION, render_layer, render_session, vital_status
     from text2fx import extract_json_object
 except ModuleNotFoundError:
     from .audio_diff import compare_audio, estimate_beat_grid, frame_rms, mono, stft_mag, stereo_stats
-    from .reconstruct_match import CODEX_PATH, DEFAULT_SESSION, render_layer, render_session
+    from .reconstruct_match import CODEX_PATH, DEFAULT_SESSION, render_layer, render_session, vital_status
     from .text2fx import extract_json_object
 
 
 sf: Any = None
+VITAL_AVAILABLE: bool | None = None
 
 GM_PROGRAMS = [
     "Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano",
@@ -339,6 +340,14 @@ def default_layer_for_track(track: dict[str, Any], sample_rate: int, duration: f
     if is_drums:
         wavetable = "noise"
         waveform = "noise"
+    global VITAL_AVAILABLE
+    if VITAL_AVAILABLE is None:
+        try:
+            status = vital_status()
+            VITAL_AVAILABLE = bool(status.get("audio_unit_loadable", False) or status.get("pedalboard_loadable", False))
+        except Exception:
+            VITAL_AVAILABLE = False
+    synth_engine = "vital" if VITAL_AVAILABLE else "internal"
     return {
         "id": track["id"],
         "role": role,
@@ -348,7 +357,7 @@ def default_layer_for_track(track: dict[str, Any], sample_rate: int, duration: f
         "notes": [{"note": n["note"], "start": n["start"], "duration": n["duration"], "velocity": n["velocity"]} for n in track.get("notes", [])],
         "synth": {
             "waveform": waveform,
-            "engine": "internal",
+            "engine": synth_engine,
             "wavetable": wavetable,
             "wavetable_position": 0.95 if is_drums else (0.78 if is_lead else (0.62 if "saw" in wavetable else 0.45)),
             "warp": 0.0,
@@ -392,6 +401,20 @@ def default_layer_for_track(track: dict[str, Any], sample_rate: int, duration: f
             "compression_attack": 0.01,
             "compression_release": 0.16,
             "return_send": 0.0 if is_bass or is_drums else 0.12,
+            "tempo_delay": {
+                "enabled": False,
+                "division": "1/8d",
+                "feedback": 0.32,
+                "mix": 0.0,
+                "low_cut_hz": 160.0,
+                "high_cut_hz": 4500.0,
+                "ping_pong": True,
+                "ducking": 0.0,
+            },
+            "sidechain_pump": {"enabled": False, "rate_hz": 2.0, "depth_db": 0.0, "attack": 0.01, "release": 0.24, "phase": 0.0, "curve": 1.4},
+            "step_gate": {"enabled": False, "division": "1/16", "pattern": [1.0, 0.65] * 8, "depth": 0.0, "smooth": 0.015},
+            "filter_sequencer": {"enabled": False, "division": "1/16", "pattern": [1.0, 0.55] * 8, "amount_hz": 0.0, "smooth": 0.02},
+            "juno_chorus": {"enabled": False, "mode": "I", "mix": 0.0, "width": 1.0, "noise": 0.0},
         },
         "arrangement_locked": True,
         "source_midi_track_index": track.get("source_track_index"),
@@ -407,7 +430,17 @@ def neutral_session(arrangement: dict[str, Any], sample_rate: int = 44100, secon
     session["sample_rate"] = sample_rate
     session["duration"] = duration
     session["layers"] = [default_layer_for_track(track, sample_rate, duration) for track in arrangement.get("tracks", [])]
-    session["master"] = {"gain_db": -3.0, "width": 1.0}
+    session["master"] = {
+        "gain_db": -3.0,
+        "width": 1.0,
+        "saturation": 0.0,
+        "compression_mix": 0.0,
+        "compression_threshold_db": -14.0,
+        "compression_ratio": 2.0,
+        "compression_attack": 0.01,
+        "compression_release": 0.18,
+        "movement": {"type": "none", "mix": 0.0, "rate_hz": 0.18, "depth": 0.25, "feedback": 0.2},
+    }
     return session
 
 
@@ -993,6 +1026,112 @@ def modulation_identity_diagnostics(diff: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def rhythmic_texture_diagnostics(arrangement: dict[str, Any], diff: dict[str, Any], duration: float) -> dict[str, Any]:
+    scores = diff.get("scores", {})
+    diagnostics = diff.get("diagnostics", {})
+    note_starts = sorted(
+        {
+            round(float(note.get("start", 0.0)), 4)
+            for track in arrangement.get("tracks", [])
+            for note in track.get("notes", [])
+            if 0.0 <= float(note.get("start", 0.0)) < duration
+        }
+    )
+    note_durations = [
+        float(note.get("duration", 0.0))
+        for track in arrangement.get("tracks", [])
+        for note in track.get("notes", [])
+        if 0.0 <= float(note.get("start", 0.0)) < duration
+    ]
+    reference_onsets = diagnostics.get("reference_onset_positions", [])
+    candidate_onsets = diagnostics.get("candidate_onset_positions", [])
+    midi_onset_rate = len(note_starts) / max(duration, 1e-6)
+    reference_onset_rate = len(reference_onsets) / max(duration, 1e-6)
+    candidate_onset_rate = len(candidate_onsets) / max(duration, 1e-6)
+    sustained_ratio = float(np.mean([dur >= 0.75 for dur in note_durations])) if note_durations else 0.0
+    sparse_sustained_midi = midi_onset_rate < 1.0 and sustained_ratio >= 0.6
+    high_reference_texture = reference_onset_rate >= max(3.0, midi_onset_rate * 4.0)
+    component_scores = {
+        "transient_onset": float(scores.get("transient_onset", 1.0)),
+        "onset_count": float(scores.get("onset_count", 1.0)),
+        "onset_timing": float(scores.get("onset_timing", 1.0)),
+        "beat_grid_mel": float(scores.get("beat_grid_mel", 1.0)),
+        "beat_grid_band": float(scores.get("beat_grid_band", 1.0)),
+        "beat_grid_envelope": float(scores.get("beat_grid_envelope", 1.0)),
+    }
+    score = float(np.mean(list(component_scores.values())))
+    recommendation = "match MIDI articulation"
+    if sparse_sustained_midi and high_reference_texture:
+        recommendation = "use rhythmic effects: tempo_delay, step_gate, filter_sequencer, sidechain_pump, and LFOs; do not add MIDI notes"
+    return {
+        "score": score,
+        "components": component_scores,
+        "midi_unique_onsets": len(note_starts),
+        "reference_onsets": len(reference_onsets),
+        "candidate_onsets": len(candidate_onsets),
+        "midi_onset_rate": midi_onset_rate,
+        "reference_onset_rate": reference_onset_rate,
+        "candidate_onset_rate": candidate_onset_rate,
+        "sustained_note_ratio": sustained_ratio,
+        "sparse_sustained_midi": sparse_sustained_midi,
+        "high_reference_texture": high_reference_texture,
+        "recommendation": recommendation,
+        "summary": (
+            f"Rhythmic texture score {score:.3f}; MIDI has {len(note_starts)} unique onsets "
+            f"vs {len(reference_onsets)} reference onsets. Recommendation: {recommendation}."
+        ),
+    }
+
+
+def production_plausibility_diagnostics(session: dict[str, Any]) -> dict[str, Any]:
+    manual_gain_points = 0
+    gain_reversals = 0
+    productive_primitives = 0
+    details = []
+    for layer in session.get("layers", []):
+        layer_id = str(layer.get("id", ""))
+        points = layer.get("gain_points", [])
+        if isinstance(points, list):
+            extra = max(0, len(points) - 3)
+            manual_gain_points += extra
+            values = [float(point.get("db", 0.0)) for point in points if isinstance(point, dict)]
+            if len(values) >= 3:
+                diffs = np.diff(values)
+                gain_reversals += int(np.sum(np.diff(np.signbit(diffs)) != 0))
+            if extra:
+                details.append(f"{layer_id} has {len(points)} gain_points")
+        effects = layer.get("effects", {}) if isinstance(layer.get("effects", {}), dict) else {}
+        mod = layer.get("modulation", {}) if isinstance(layer.get("modulation", {}), dict) else {}
+        if effects.get("tempo_delay", {}).get("enabled") and float(effects.get("tempo_delay", {}).get("mix", 0.0)) > 0:
+            productive_primitives += 1
+        if effects.get("sidechain_pump", {}).get("enabled") and float(effects.get("sidechain_pump", {}).get("depth_db", 0.0)) > 0:
+            productive_primitives += 1
+        if effects.get("step_gate", {}).get("enabled") and float(effects.get("step_gate", {}).get("depth", 0.0)) > 0:
+            productive_primitives += 1
+        if effects.get("filter_sequencer", {}).get("enabled") and float(effects.get("filter_sequencer", {}).get("amount_hz", 0.0)) != 0:
+            productive_primitives += 1
+        if effects.get("juno_chorus", {}).get("enabled") and float(effects.get("juno_chorus", {}).get("mix", 0.0)) > 0:
+            productive_primitives += 1
+        if float(effects.get("delay_mix", 0.0)) > 0 or float(effects.get("chorus_mix", 0.0)) > 0 or float(effects.get("phaser_mix", 0.0)) > 0:
+            productive_primitives += 1
+        if isinstance(mod.get("lfos"), list) and mod.get("lfos"):
+            productive_primitives += min(2, len(mod.get("lfos", [])))
+    primitive_credit = min(0.18, productive_primitives * 0.035)
+    penalty = 0.07 * manual_gain_points + 0.10 * gain_reversals
+    score = float(max(0.0, min(1.0, 1.0 - penalty + primitive_credit)))
+    return {
+        "score": score,
+        "manual_gain_point_excess": manual_gain_points,
+        "gain_direction_reversals": gain_reversals,
+        "productive_primitive_count": productive_primitives,
+        "details": details[:8],
+        "summary": (
+            f"Production plausibility score {score:.3f}; {manual_gain_points} excess manual gain points, "
+            f"{gain_reversals} gain reversals, {productive_primitives} named production primitives."
+        ),
+    }
+
+
 def spectral_centroid(audio: np.ndarray, sr: int) -> float:
     mag = stft_mag(mono(audio))
     if mag.size == 0:
@@ -1031,6 +1170,8 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     loudness_floor = loudness_floor_diagnostics(global_diff)
     groove_envelope = groove_envelope_diagnostics(global_diff)
     modulation_identity = modulation_identity_diagnostics(global_diff)
+    rhythmic_texture = rhythmic_texture_diagnostics(arrangement, global_diff, duration)
+    production_plausibility = production_plausibility_diagnostics(session)
     preservation = arrangement_preservation(arrangement, session)
     layers = {str(layer.get("id")): layer for layer in session.get("layers", [])}
     track_scores = []
@@ -1096,13 +1237,15 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     stereo_motion = float(np.mean([global_scores.get("stereo_width", 0.0), global_scores.get("beat_grid_mid_side", 0.0)]))
     pitch_chroma = float(np.mean([global_scores.get("pitch_chroma", 0.0), global_scores.get("f0_contour", 0.0)]))
     weighted_final = (
-        0.25 * spectral_timbre
-        + 0.20 * loudness_envelope
-        + 0.20 * float(groove_envelope["score"])
-        + 0.15 * float(modulation_identity["score"])
-        + 0.10 * stereo_motion
-        + 0.05 * pitch_chroma
-        + 0.05 * patch_control_score
+        0.30 * spectral_timbre
+        + 0.12 * loudness_envelope
+        + 0.10 * float(groove_envelope["score"])
+        + 0.17 * float(rhythmic_texture["score"])
+        + 0.12 * float(modulation_identity["score"])
+        + 0.09 * stereo_motion
+        + 0.03 * pitch_chroma
+        + 0.03 * patch_control_score
+        + 0.04 * float(production_plausibility["score"])
     )
     hard_gates = {
         "loudness_floor": float(loudness_floor["score"]),
@@ -1131,32 +1274,38 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
             "loudness_floor": float(loudness_floor["score"]),
             "groove_envelope": float(groove_envelope["score"]),
             "modulation_identity": float(modulation_identity["score"]),
+            "rhythmic_texture": float(rhythmic_texture["score"]),
             "spectral_timbre": spectral_timbre,
             "stereo_motion": stereo_motion,
             "pitch_chroma": pitch_chroma,
+            "production_plausibility": float(production_plausibility["score"]),
             "arrangement_preservation": float(1.0 - preservation["penalty"]),
         },
-        "loss_version": "midi_locked_patch.v2_strict_loudness_modulation",
+        "loss_version": "midi_locked_patch.v3_timbre_texture_plausibility",
         "loss_components": {
             "weighted_final_before_gates": weighted_final,
             "gate_multiplier": gate_multiplier,
             "dropout_penalty": dropout_penalty,
             "hard_gates": hard_gates,
             "weights": {
-                "spectral_timbre": 0.25,
-                "loudness_envelope": 0.20,
-                "groove_envelope": 0.20,
-                "modulation_identity": 0.15,
-                "stereo_motion": 0.10,
-                "pitch_chroma": 0.05,
-                "patch_control": 0.05,
+                "spectral_timbre": 0.30,
+                "loudness_envelope": 0.12,
+                "groove_envelope": 0.10,
+                "rhythmic_texture": 0.17,
+                "modulation_identity": 0.12,
+                "stereo_motion": 0.09,
+                "pitch_chroma": 0.03,
+                "patch_control": 0.03,
+                "production_plausibility": 0.04,
             },
         },
         "global_mix_diff": global_diff,
         "sustain_shape_diagnostics": sustain_shape,
         "loudness_floor_diagnostics": loudness_floor,
         "groove_envelope_diagnostics": groove_envelope,
+        "rhythmic_texture_diagnostics": rhythmic_texture,
         "modulation_identity_diagnostics": modulation_identity,
+        "production_plausibility_diagnostics": production_plausibility,
         "track_scores": track_scores,
         "arrangement_preservation": preservation,
         "weakest_tracks": sorted(track_scores, key=lambda item: item["active_window_score"].get("final", 0.0))[:5],
@@ -1225,6 +1374,8 @@ def acceptance_gate(previous: dict[str, Any] | None, candidate: dict[str, Any]) 
         ("loudness_floor", 0.04),
         ("groove_envelope", 0.04),
         ("modulation_identity", 0.04),
+        ("rhythmic_texture", 0.04),
+        ("production_plausibility", 0.08),
     ):
         previous_value = float(prev_scores.get(key, 0.0))
         candidate_value = float(cand_scores.get(key, 0.0))
@@ -1258,7 +1409,7 @@ Task: Call the patch operation helper functions to save changes to {operations_o
 
 Definitions:
 - Composition is the fixed musical performance: track ids, roles, note events, velocities, timing, active ranges, tempo, and meter.
-- Patch session is the sound design, effects, and mix state: synth settings, envelopes, filters, modulation, effects, sends, gain, pan, width, returns, master, and production_notes.
+- Patch session is the sound design, effects, and mix state: Vital or internal synth settings, envelopes, filters, modulation, effects, sends, gain, pan, width, returns, master, and production_notes.
 - Critic briefing is the production advice you should follow first.
 - Loss report is the measured difference between the target audio and current rendered audio.
 
@@ -1267,7 +1418,7 @@ Workflow:
 2. Read the current patch session and identify the exact fields you will edit.
 3. Read the composition only to understand track roles and active timing. Do not solve composition in this step.
 4. Write a short production hypothesis through `set_production_hypothesis(...)`. Phrase it as production decisions, for example: "The bass is too static and dry, so add subtle filter LFO and saturation while lowering the keys that mask it" or "The pad needs a wider saw-stack source with slower attack and longer reverb tail."
-5. Choose one primary objective for this pass: envelope/automation, timbre/source, or space/modulation. If `exact_envelope_50ms`, `directional_delta`, `modulation`, or `sustain_shape` is among the weakest areas, make an envelope/automation-focused pass unless the Critic explicitly says a different blocker is more important.
+5. Choose one primary objective for this pass: timbre/source, rhythmic texture, space/modulation, or envelope. If the MIDI is sparse/sustained but the reference has many onsets or repeats, treat that as a texture/effects problem and prefer tempo delay, step gate, filter sequencer, sidechain pump, chorus, phaser/flanger, or LFOs before volume automation.
 6. Make the smallest set of high-impact patch/mix changes that follows that one objective and the Critic briefing. Avoid broad multi-domain rewrites that make it impossible to tell which edit helped.
 7. Save each intended patch/mix edit by calling `save_patch_change(...)`. This is how changelog entries are created.
 8. Apply your candidate operations to create a candidate session, then run loss checks on the full clip and on the weakest 50ms/beat windows called out by the loss report.
@@ -1327,7 +1478,7 @@ Output contract:
 - Do not return a full patch session.
 - The operation payload created by the helper functions has schema `patchex.patch_ops.v1`.
 - Supported operation types: `set`, `append`, and `extend`.
-- Operation paths use layer ids, not numeric layer indexes: `layers.<track_id>.synth.waveform`, `layers.<track_id>.amp_envelope.attack`, `layers.<track_id>.filter.cutoff_points`, `layers.<track_id>.effects.reverb_mix`, `returns.space.decay`, `master.gain_db`, or `production_notes.hypothesis`.
+- Operation paths use layer ids, not numeric layer indexes: `layers.<track_id>.synth.waveform`, `layers.<track_id>.amp_envelope.attack`, `layers.<track_id>.filter.cutoff_points`, `layers.<track_id>.effects.reverb_mix`, `layers.<track_id>.effects.tempo_delay`, `layers.<track_id>.effects.sidechain_pump`, `layers.<track_id>.effects.step_gate`, `layers.<track_id>.effects.filter_sequencer`, `layers.<track_id>.effects.juno_chorus`, `returns.space.decay`, `master.gain_db`, `master.movement`, or `production_notes.hypothesis`.
 - Each operation should include `track_id`, `path`, `value`, `change`, and `reason`.
 - `loss_trials` entries should include the command, score/loss numbers if available, the time window if applicable, and a short note.
 
@@ -1343,6 +1494,7 @@ Hard boundary:
 Allowed patch and production changes:
 
 Oscillator/source:
+- Prefer `synth.engine = "vital"` when Vital is available; use renderer-friendly oscillator fields first, and `synth.vital_parameters` only for explicit raw Vital AU overrides.
 - Change `synth.waveform` toward sine, triangle, square, pulse, saw, supersaw-style saw, fifth-saw, organ-like, electric-piano-like, string-pad-like, bass-like, noise, air, transient, or drum-like source.
 - Change `synth.wavetable` among renderer-friendly names such as sine, triangle, digital, formant, saw, saw_stack, square_saw, square, noise, or air.
 - Adjust `synth.wavetable_position` to move between purer, brighter, buzzier, hollower, noisier, or more digital tones.
@@ -1362,7 +1514,7 @@ Envelope and articulation:
 - Make notes pluckier, sharper, softer, more legato, more gated, more sustained, punchier, smoother, shorter, or longer.
 - Shorten releases that smear rhythm.
 - Lengthen releases when the target has more sustain or ambience.
-- Use `gain_points` for clip-level fades, swells, ducking, pulsing, or phrase emphasis.
+- Use `gain_points` only for simple fades, one intentional duck/recovery, or phrase-level level correction. Do not draw many arbitrary gain points to fake rhythm; use sidechain, step gate, delay, filter sequencer, or LFOs for rhythmic motion.
 
 Filter and brightness:
 - Adjust `filter.cutoff_start_hz`, `filter.cutoff_end_hz`, `filter.cutoff_points`, `filter.resonance`, and `filter.drive`.
@@ -1377,7 +1529,14 @@ Amplitude, dynamics, and sidechain-like motion:
 - Use `modulation.lfos` targeting gain/amp/volume for tremolo or pumping.
 - Adjust `effects.compression_mix`, `compression_threshold_db`, `compression_ratio`, `compression_attack`, and `compression_release`.
 - Make tracks more forward, tucked back, even, dynamic, aggressive, soft, punchy, or controlled.
-- To approximate sidechain X to Y, duck the masked track with gain automation or gain LFO during the dominant track's active windows.
+- Prefer `effects.sidechain_pump` for French-electro breathing/pumping. Fields: `enabled`, `rate_hz`, `depth_db`, `attack`, `release`, `phase`, and `curve`.
+- Use gain automation only when the movement is a simple fade or a single musical duck that cannot be represented by `sidechain_pump`.
+
+Rhythmic texture primitives:
+- Use `effects.tempo_delay` for synced delay repeats. Fields: `enabled`, `division` such as `1/8`, `1/8d`, `1/16`, `feedback`, `mix`, `low_cut_hz`, `high_cut_hz`, `ping_pong`, and `ducking`.
+- Use `effects.step_gate` for sequencer-like articulation from sustained notes. Fields: `enabled`, `division`, `pattern`, `depth`, and `smooth`.
+- Use `effects.filter_sequencer` for rhythmic cutoff motion from sustained notes. Fields: `enabled`, `division`, `pattern`, `amount_hz`, and `smooth`.
+- Use `effects.juno_chorus` for Juno-style ensemble width. Fields: `enabled`, `mode`, `mix`, `width`, and `noise`.
 
 Modulation and motion:
 - Add, remove, or change `modulation.lfos`.
@@ -1390,6 +1549,7 @@ Effects and space:
 - Adjust `effects.reverb_mix`, `return_send`, and session `returns`.
 - Adjust return `gain_db`, `decay`, and `width`.
 - Adjust `effects.delay_mix`, `delay_time`, `phaser_mix`, and `chorus_mix`.
+- Prefer `effects.tempo_delay` over plain `delay_mix` when the target has dotted/8th/16th rhythmic repeats.
 - Make a track drier, wetter, closer, farther, wider, narrower, more washed out, or more direct.
 - Shorten reverb tails if the mix is blurry.
 - Increase space if the target has more late energy or stereo spread.
@@ -1416,6 +1576,7 @@ Mix and master:
 - Reduce masking between bass and keys.
 - Adjust `master.gain_db` if the render is globally too loud or quiet.
 - Adjust `master.width` if the full image is too narrow or too wide.
+- Use `master.saturation`, `master.compression_*`, or `master.movement` (`type`: `phaser` or `flanger`) only when the whole mix needs shared color or movement.
 - Prefer track-level changes before broad master changes unless the Critic identifies a global issue.
 
 Drums and percussion, if present:
@@ -1428,6 +1589,8 @@ Decision rules:
 - Prefer high-impact production moves over tiny random parameter changes.
 - Make changes that are coherent as a production hypothesis, not isolated parameter noise.
 - For sustained locked arrangements, do not create `gain_points` that alternate high/low across 0.5s segments unless the reference segment envelope also alternates. Prefer smooth holds, ramps, or one intentional duck/recovery.
+- If `rhythmic_texture_diagnostics` says MIDI is sparse/sustained but the reference has high onset density, do not conclude that notes should change. Use effects/modulation primitives to create texture from sustained MIDI.
+- If `production_plausibility` is weak because of excess `gain_points`, simplify automation and move the rhythm into named production primitives.
 - Reject your own candidate if it improves full score but worsens the weakest local envelope windows, `sustain_shape`, `exact_envelope_50ms`, or `directional_delta` versus the current report.
 - Treat low `f0_contour` cautiously when `pitch_chroma` is high and arrangement preservation is perfect; do not infer note or chord edits from that metric.
 - In your recorded loss trial notes, include the before/after effect on weakest components such as `harmonic_noise`, `modulation`, `exact_envelope_50ms`, `directional_delta`, `band_envelope_by_time`, `stereo_width`, and `sustain_shape` when available.
@@ -1460,7 +1623,7 @@ Read and use these inputs:
 
 Definitions:
 - Composition is the fixed musical performance: tracks, roles, note events, velocities, timing, active ranges, tempo, and meter.
-- Patch session is the current sound design, effects, and mix attempt: synth settings, envelopes, filters, modulation, effects, sends, gain, pan, width, returns, and master settings.
+- Patch session is the current sound design, effects, and mix attempt: Vital or internal synth settings, envelopes, filters, modulation, effects, sends, gain, pan, width, returns, and master settings.
 - Target audio is the reference clip we are trying to reconstruct.
 - Current rendered audio is what the current patch session produces from the fixed composition.
 - Loss report contains measured inaccuracies between the target audio and current rendered audio.
@@ -1488,6 +1651,8 @@ Use all available evidence:
 - envelope/ADSR diagnostics
 - brightness/filter diagnostics
 - modulation diagnostics
+- rhythmic_texture diagnostics, especially whether sparse sustained MIDI is being asked to match many reference onsets
+- production_plausibility diagnostics, especially excess manual gain automation versus named production primitives
 - stereo/space diagnostics
 - saturation/noise diagnostics
 - arrangement preservation diagnostics
@@ -1499,6 +1664,7 @@ Be specific. For each recommendation, name the track id, the problem, and the ex
 Possible production changes include:
 
 Oscillator/source:
+- Prefer Vital-style subtractive synth decisions when the layer engine is `vital`; describe oscillator, filter, envelope, unison, chorus, delay, and modulation moves in patch terms rather than generic EQ-only moves.
 - Change a track synth toward sine, triangle, square, pulse, saw, supersaw, fifth-saw, organ, electric piano, string pad, bass, noise, or drum-like source.
 - Add, remove, or rebalance oscillator layers.
 - Detune oscillators more or less.
@@ -1537,6 +1703,7 @@ Amplitude and dynamics:
 - Add or reduce transient punch.
 - Make a track more forward, more tucked back, more even, more dynamic, more aggressive, or softer.
 - Change gain automation if a part should grow, fade, pulse, or duck.
+- Prefer sidechain pump, step gate, tempo delay, filter sequencer, or LFOs over many manual gain automation points when the target breathes, repeats, pulses, or has sequenced texture.
 
 Modulation and motion:
 - Add or reduce tremolo.
@@ -1554,7 +1721,9 @@ Effects and space:
 - Change reverb size, decay, pre-delay, damping, or wet level.
 - Add or reduce delay.
 - Change delay time, feedback, filtering, stereo spread, or wet level.
+- Use tempo-synced filtered ping-pong/dotted delay when the reference has sparkly repeats between sparse notes or sustained chords.
 - Add or reduce chorus, ensemble, phaser, flanger, or widening.
+- Use Juno-style chorus/ensemble for broad synth width when appropriate.
 - Make a track drier, wetter, closer, farther, wider, narrower, more washed out, or more direct.
 - Shorten reverb tails if the mix is blurry.
 - Increase space if the target has more late energy or width.
@@ -1581,6 +1750,7 @@ Mix balance:
 - Reduce masking between bass and keys.
 - Adjust master gain if the render is globally too loud or quiet.
 - Adjust EQ balance if the whole render is too bright, dull, boomy, thin, harsh, or muddy.
+- Use subtle master saturation, compression, phaser, or flanger only when the whole title/mix needs shared movement or texture.
 
 Drums and percussion, if present:
 - Change drum level.
@@ -1593,7 +1763,8 @@ Drums and percussion, if present:
 Prioritization:
 - Start with the changes most likely to improve the full rendered audio.
 - Prefer high-impact track and mix changes over tiny parameter tweaks.
-- If arrangement preservation is perfect and the target is sustained, rank envelope automation before timbre when whole-clip RMS is close but 50ms/local windows are extreme.
+- If arrangement preservation is perfect and the MIDI is sparse/sustained but the target has many onsets or rhythmic sparkle, rank delay/gate/filter-sequencer/sidechain/LFO texture before hand-drawn gain automation.
+- If the target is genuinely sustained and not onset-rich, then use envelope and timbre shaping, but keep gain automation simple.
 - When `pitch_chroma` is high but `f0_contour` is low on a dense sustained pad, describe it as a tone/source or octave-support uncertainty, not as evidence to change notes.
 - Provide one primary objective for the next Producer pass and list which edit families should be avoided in that pass.
 - If the loss report and your listening disagree, explain the disagreement and choose the more musically plausible action.

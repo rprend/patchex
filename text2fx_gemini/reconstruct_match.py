@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import os
+import re
 import tempfile
 import subprocess
 import time
@@ -325,13 +326,32 @@ def sanitize_session(payload: dict[str, Any], duration: float, sample_rate: int)
                     "compression_attack": float(np.clip(float(compression_attack), 0.001, 0.5)),
                     "compression_release": float(np.clip(float(compression_release), 0.01, 2.0)),
                     "return_send": sanitize_return_send(effects.get("return_send", 0.0)),
+                    "tempo_delay": sanitize_tempo_delay(effects),
+                    "sidechain_pump": sanitize_sidechain_pump(effects),
+                    "step_gate": sanitize_step_gate(effects),
+                    "filter_sequencer": sanitize_filter_sequencer(effects),
+                    "juno_chorus": sanitize_juno_chorus(effects),
                 },
             }
         )
     master = payload.get("master", {})
+    master_movement = master.get("movement", {}) if isinstance(master.get("movement", {}), dict) else {}
     session["master"] = {
         "gain_db": float(np.clip(float(master.get("gain_db", -1.0)), -24.0, 6.0)),
         "width": float(np.clip(float(master.get("width", 1.0)), 0.0, 1.5)),
+        "saturation": float(np.clip(float(master.get("saturation", 0.0)), 0.0, 0.6)),
+        "compression_mix": float(np.clip(float(master.get("compression_mix", 0.0)), 0.0, 1.0)),
+        "compression_threshold_db": float(np.clip(float(master.get("compression_threshold_db", -14.0)), -60.0, 0.0)),
+        "compression_ratio": float(np.clip(float(master.get("compression_ratio", 2.0)), 1.0, 20.0)),
+        "compression_attack": float(np.clip(float(master.get("compression_attack", 0.01)), 0.001, 0.5)),
+        "compression_release": float(np.clip(float(master.get("compression_release", 0.18)), 0.01, 2.0)),
+        "movement": {
+            "type": str(master_movement.get("type", "none")).lower(),
+            "mix": float(np.clip(float(master_movement.get("mix", 0.0)), 0.0, 0.6)),
+            "rate_hz": float(np.clip(float(master_movement.get("rate_hz", 0.18)), 0.01, 5.0)),
+            "depth": float(np.clip(float(master_movement.get("depth", 0.25)), 0.0, 1.0)),
+            "feedback": float(np.clip(float(master_movement.get("feedback", 0.2)), 0.0, 0.95)),
+        },
     }
     return session
 
@@ -459,6 +479,84 @@ def layer_eq(audio: np.ndarray, sr: int, effects: dict[str, Any]) -> np.ndarray:
 
 def stereo_layer_eq(stereo: np.ndarray, sr: int, effects: dict[str, Any]) -> np.ndarray:
     return np.vstack([layer_eq(stereo[0], sr, effects), layer_eq(stereo[1], sr, effects)]).astype(np.float32)
+
+
+def sanitize_tempo_delay(effects: dict[str, Any]) -> dict[str, Any]:
+    payload = effects.get("tempo_delay", effects.get("delay", {}))
+    delay = payload if isinstance(payload, dict) else {}
+    return {
+        "enabled": bool(delay.get("enabled", float(effects.get("delay_mix", 0.0)) > 0.001)),
+        "division": str(delay.get("division", effects.get("delay_division", "1/8d"))),
+        "time": float(np.clip(float(delay.get("time", effects.get("delay_time", 0.18))), 0.03, 1.5)),
+        "feedback": float(np.clip(float(delay.get("feedback", effects.get("delay_feedback", 0.32))), 0.0, 0.92)),
+        "mix": float(np.clip(float(delay.get("mix", effects.get("delay_mix", 0.0))), 0.0, 0.8)),
+        "low_cut_hz": float(np.clip(float(delay.get("low_cut_hz", effects.get("delay_low_cut_hz", 160.0))), 20.0, 4000.0)),
+        "high_cut_hz": float(np.clip(float(delay.get("high_cut_hz", effects.get("delay_high_cut_hz", 4500.0))), 300.0, 18000.0)),
+        "ping_pong": bool(delay.get("ping_pong", effects.get("delay_ping_pong", True))),
+        "ducking": float(np.clip(float(delay.get("ducking", effects.get("delay_ducking", 0.0))), 0.0, 1.0)),
+    }
+
+
+def sanitize_sidechain_pump(effects: dict[str, Any]) -> dict[str, Any]:
+    payload = effects.get("sidechain_pump", effects.get("pump", {}))
+    pump = payload if isinstance(payload, dict) else {}
+    return {
+        "enabled": bool(pump.get("enabled", False)),
+        "rate_hz": float(np.clip(float(pump.get("rate_hz", pump.get("rate", 2.0))), 0.05, 12.0)),
+        "depth_db": float(np.clip(float(pump.get("depth_db", 0.0)), 0.0, 18.0)),
+        "attack": float(np.clip(float(pump.get("attack", 0.01)), 0.001, 0.25)),
+        "release": float(np.clip(float(pump.get("release", 0.24)), 0.01, 1.5)),
+        "phase": float(np.clip(float(pump.get("phase", 0.0)), 0.0, 1.0)),
+        "curve": float(np.clip(float(pump.get("curve", 1.4)), 0.25, 6.0)),
+    }
+
+
+def sanitize_step_pattern(value: Any, length: int = 16) -> list[float]:
+    if not isinstance(value, list) or not value:
+        return [1.0 if i % 2 == 0 else 0.65 for i in range(length)]
+    out = []
+    for item in value[:32]:
+        try:
+            out.append(float(np.clip(float(item), 0.0, 1.0)))
+        except (TypeError, ValueError):
+            continue
+    return out or [1.0] * length
+
+
+def sanitize_step_gate(effects: dict[str, Any]) -> dict[str, Any]:
+    payload = effects.get("step_gate", {})
+    gate = payload if isinstance(payload, dict) else {}
+    return {
+        "enabled": bool(gate.get("enabled", False)),
+        "division": str(gate.get("division", "1/16")),
+        "depth": float(np.clip(float(gate.get("depth", 0.0)), 0.0, 1.0)),
+        "smooth": float(np.clip(float(gate.get("smooth", 0.015)), 0.0, 0.2)),
+        "pattern": sanitize_step_pattern(gate.get("pattern"), 16),
+    }
+
+
+def sanitize_filter_sequencer(effects: dict[str, Any]) -> dict[str, Any]:
+    payload = effects.get("filter_sequencer", {})
+    seq = payload if isinstance(payload, dict) else {}
+    return {
+        "enabled": bool(seq.get("enabled", False)),
+        "division": str(seq.get("division", "1/16")),
+        "amount_hz": float(np.clip(float(seq.get("amount_hz", 0.0)), -8000.0, 8000.0)),
+        "smooth": float(np.clip(float(seq.get("smooth", 0.02)), 0.0, 0.3)),
+        "pattern": sanitize_step_pattern(seq.get("pattern"), 16),
+    }
+
+
+def sanitize_juno_chorus(effects: dict[str, Any]) -> dict[str, Any]:
+    payload = effects.get("juno_chorus", {})
+    chorus = payload if isinstance(payload, dict) else {}
+    return {
+        "enabled": bool(chorus.get("enabled", False)),
+        "mode": str(chorus.get("mode", "I")),
+        "mix": float(np.clip(float(chorus.get("mix", 0.0)), 0.0, 1.0)),
+        "width": float(np.clip(float(chorus.get("width", 1.0)), 0.0, 2.0)),
+        "noise": float(np.clip(float(chorus.get("noise", 0.0)), 0.0, 0.05)),
+    }
 
 
 def apply_saturation(stereo: np.ndarray, amount: float) -> np.ndarray:
@@ -665,6 +763,133 @@ def apply_delay(stereo: np.ndarray, sr: int, delay_time: float, mix: float) -> n
     return stereo * (1.0 - mix) + delayed * mix
 
 
+def division_seconds(division: str, bpm: float = 120.0) -> float:
+    beat = 60.0 / max(1.0, float(bpm))
+    name = str(division or "1/8").strip().lower()
+    dotted = name.endswith("d") or "dotted" in name
+    triplet = name.endswith("t") or "triplet" in name
+    match = re.search(r"1\s*/\s*(\d+)", name)
+    denom = float(match.group(1)) if match else 8.0
+    seconds = beat * 4.0 / denom
+    if dotted:
+        seconds *= 1.5
+    if triplet:
+        seconds *= 2.0 / 3.0
+    return float(np.clip(seconds, 0.02, 1.5))
+
+
+def smooth_curve(curve: np.ndarray, sr: int, seconds: float) -> np.ndarray:
+    if seconds <= 0:
+        return curve.astype(np.float32)
+    win = max(1, int(seconds * sr))
+    if win <= 1:
+        return curve.astype(np.float32)
+    kernel = np.ones(win, dtype=np.float32) / win
+    return np.convolve(curve, kernel, mode="same").astype(np.float32)
+
+
+def step_curve(pattern: list[float], division: str, samples: int, sr: int, smooth: float = 0.0) -> np.ndarray:
+    step_samples = max(1, int(round(division_seconds(division) * sr)))
+    pattern_values = np.asarray(pattern or [1.0], dtype=np.float32)
+    indexes = (np.arange(samples) // step_samples) % pattern_values.size
+    curve = pattern_values[indexes.astype(int)]
+    return smooth_curve(curve, sr, smooth)
+
+
+def apply_tempo_delay(stereo: np.ndarray, sr: int, settings: dict[str, Any]) -> np.ndarray:
+    mix = float(settings.get("mix", 0.0))
+    if not settings.get("enabled", False) or mix <= 0:
+        return stereo
+    delay_time = division_seconds(str(settings.get("division", ""))) if settings.get("division") else float(settings.get("time", 0.18))
+    delay_samples = max(1, int(delay_time * sr))
+    if delay_samples >= stereo.shape[1]:
+        return stereo
+    feedback = float(settings.get("feedback", 0.32))
+    ping_pong = bool(settings.get("ping_pong", True))
+    wet = np.zeros_like(stereo)
+    source = stereo.copy()
+    gain = 1.0
+    for _ in range(8):
+        gain *= feedback
+        if gain < 0.01:
+            break
+        shifted = np.zeros_like(stereo)
+        if ping_pong:
+            shifted[0, delay_samples:] = source[1, :-delay_samples] * gain
+            shifted[1, delay_samples:] = source[0, :-delay_samples] * gain
+        else:
+            shifted[:, delay_samples:] = source[:, :-delay_samples] * gain
+        wet += shifted
+        source = shifted
+    low_cut = float(settings.get("low_cut_hz", 160.0))
+    high_cut = float(settings.get("high_cut_hz", 4500.0))
+    for channel in range(2):
+        wet[channel] = moving_lowpass(one_pole_highpass(wet[channel], sr, low_cut), sr, high_cut, high_cut, 0.0)
+    ducking = float(settings.get("ducking", 0.0))
+    if ducking > 0:
+        dry_level = np.clip(np.mean(np.abs(stereo), axis=0) * 8.0, 0.0, 1.0)
+        wet *= (1.0 - ducking * dry_level)[None, :]
+    return (stereo * (1.0 - mix) + wet * mix).astype(np.float32)
+
+
+def apply_sidechain_pump(stereo: np.ndarray, sr: int, settings: dict[str, Any]) -> np.ndarray:
+    if not settings.get("enabled", False) or float(settings.get("depth_db", 0.0)) <= 0:
+        return stereo
+    samples = stereo.shape[1]
+    phase = float(settings.get("phase", 0.0))
+    rate = float(settings.get("rate_hz", 2.0))
+    cycle = (np.arange(samples, dtype=np.float32) / sr * rate + phase) % 1.0
+    attack = max(0.001, float(settings.get("attack", 0.01))) * rate
+    release = max(0.001, float(settings.get("release", 0.24))) * rate
+    depth = float(settings.get("depth_db", 0.0))
+    curve_power = float(settings.get("curve", 1.4))
+    duck = np.where(cycle < attack, 1.0, np.maximum(0.0, 1.0 - (cycle - attack) / max(0.001, release)))
+    duck = np.power(np.clip(duck, 0.0, 1.0), curve_power)
+    gain_db = -depth * duck
+    return (stereo * np.power(10.0, gain_db / 20.0)[None, :]).astype(np.float32)
+
+
+def apply_step_gate(stereo: np.ndarray, sr: int, settings: dict[str, Any]) -> np.ndarray:
+    depth = float(settings.get("depth", 0.0))
+    if not settings.get("enabled", False) or depth <= 0:
+        return stereo
+    curve = step_curve(settings.get("pattern", [1.0]), str(settings.get("division", "1/16")), stereo.shape[1], sr, float(settings.get("smooth", 0.015)))
+    gain = 1.0 - depth * (1.0 - curve)
+    return (stereo * gain[None, :]).astype(np.float32)
+
+
+def filter_sequencer_curve(settings: dict[str, Any], samples: int, sr: int) -> np.ndarray:
+    if not settings.get("enabled", False) or float(settings.get("amount_hz", 0.0)) == 0:
+        return np.zeros(samples, dtype=np.float32)
+    curve = step_curve(settings.get("pattern", [1.0]), str(settings.get("division", "1/16")), samples, sr, float(settings.get("smooth", 0.02)))
+    return ((curve - 0.5) * 2.0 * float(settings.get("amount_hz", 0.0))).astype(np.float32)
+
+
+def apply_juno_chorus(stereo: np.ndarray, sr: int, settings: dict[str, Any]) -> np.ndarray:
+    mix = float(settings.get("mix", 0.0))
+    if not settings.get("enabled", False) or mix <= 0:
+        return stereo
+    mode = str(settings.get("mode", "I")).upper()
+    rate = 0.32 if mode in {"I", "1"} else 0.78 if mode in {"II", "2"} else 0.55
+    depth = 0.006 if mode in {"I", "1"} else 0.010
+    samples = stereo.shape[1]
+    t = np.arange(samples, dtype=np.float32) / sr
+    mod_a = (0.012 + depth * np.sin(2.0 * np.pi * rate * t)) * sr
+    mod_b = (0.016 + depth * np.sin(2.0 * np.pi * (rate * 0.83) * t + np.pi * 0.6)) * sr
+    wet = np.zeros_like(stereo)
+    idx = np.arange(samples)
+    for ch, delays in enumerate([mod_a, mod_b]):
+        read = np.clip(idx - delays, 0, samples - 1)
+        wet[ch] = np.interp(read, idx, stereo[1 - ch]).astype(np.float32)
+    width = float(settings.get("width", 1.0))
+    wet = apply_pan_width(wet, 0.0, width)
+    noise = float(settings.get("noise", 0.0))
+    if noise > 0:
+        rng = np.random.default_rng(12345)
+        wet += rng.normal(0.0, noise, wet.shape).astype(np.float32)
+    return (stereo * (1.0 - mix) + wet * mix).astype(np.float32)
+
+
 def apply_phaser(stereo: np.ndarray, sr: int, mix: float, rate_hz: float = 0.23) -> np.ndarray:
     if mix <= 0:
         return stereo
@@ -677,7 +902,39 @@ def apply_phaser(stereo: np.ndarray, sr: int, mix: float, rate_hz: float = 0.23)
     return stereo * (1.0 - mix) + out * mix
 
 
+def apply_flanger(stereo: np.ndarray, sr: int, mix: float, rate_hz: float = 0.18, depth: float = 0.35, feedback: float = 0.2) -> np.ndarray:
+    if mix <= 0:
+        return stereo
+    samples = stereo.shape[1]
+    idx = np.arange(samples)
+    t = idx.astype(np.float32) / sr
+    base = 0.003 * sr
+    sweep = (0.001 + 0.006 * float(depth) * (0.5 + 0.5 * np.sin(2.0 * np.pi * rate_hz * t))) * sr
+    wet = np.zeros_like(stereo)
+    for ch in range(2):
+        read = np.clip(idx - base - sweep, 0, samples - 1)
+        delayed = np.interp(read, idx, stereo[ch]).astype(np.float32)
+        wet[ch] = delayed + float(feedback) * (delayed - stereo[ch])
+    return (stereo * (1.0 - mix) + wet * mix).astype(np.float32)
+
+
+def apply_master_movement(stereo: np.ndarray, sr: int, movement: dict[str, Any]) -> np.ndarray:
+    mix = float(movement.get("mix", 0.0))
+    if mix <= 0:
+        return stereo
+    kind = str(movement.get("type", "none")).lower()
+    if kind == "phaser":
+        return apply_phaser(stereo, sr, mix, float(movement.get("rate_hz", 0.18)))
+    if kind == "flanger":
+        return apply_flanger(stereo, sr, mix, float(movement.get("rate_hz", 0.18)), float(movement.get("depth", 0.25)), float(movement.get("feedback", 0.2)))
+    return stereo
+
+
 def render_vital_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
+    if sf is None:
+        import soundfile as soundfile_module
+
+        globals()["sf"] = soundfile_module
     renderer = ensure_vital_au_renderer()
     with tempfile.TemporaryDirectory(prefix="text2fx_vital_") as tmp:
         tmp_path = Path(tmp)
@@ -755,6 +1012,7 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
         gate_curve = automation_curve(mod.get("gate_points", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}]), "level", samples, duration)
         cutoff_curve = automation_curve(filt.get("cutoff_points", [{"time": 0.0, "hz": filt["cutoff_start_hz"]}, {"time": duration, "hz": filt["cutoff_end_hz"]}]), "hz", samples, duration)
         lfo_curves = modulation_curves(mod, samples, sr, duration)
+        cutoff_curve = np.clip(cutoff_curve + filter_sequencer_curve(layer["effects"].get("filter_sequencer", {}), samples, sr), 40.0, sr / 2.0)
         cutoff_curve = np.clip(cutoff_curve + lfo_curves["filter_hz"], 40.0, sr / 2.0)
         for channel in range(2):
             stereo[channel] = moving_lowpass(stereo[channel].astype(np.float32), sr, filt["cutoff_start_hz"], filt["cutoff_end_hz"], filt["resonance"], cutoff_curve)
@@ -767,9 +1025,13 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
         stereo = stereo_layer_eq(stereo, sr, layer["effects"])
         stereo = apply_saturation(stereo, float(layer["effects"].get("saturation", 0.0)))
         stereo = apply_compressor(stereo, sr, layer["effects"])
+        stereo = apply_sidechain_pump(stereo, sr, layer["effects"].get("sidechain_pump", {}))
+        stereo = apply_step_gate(stereo, sr, layer["effects"].get("step_gate", {}))
         stereo = apply_chorus(stereo, sr, float(layer["effects"].get("chorus_mix", 0.0)), float(layer.get("width", 1.0)))
+        stereo = apply_juno_chorus(stereo, sr, layer["effects"].get("juno_chorus", {}))
         stereo = apply_phaser(stereo, sr, float(layer["effects"].get("phaser_mix", 0.0)), float(mod.get("lfo_rate_hz", 0.23)) or 0.23)
         stereo = apply_delay(stereo, sr, float(layer["effects"].get("delay_time", 0.18)), float(layer["effects"].get("delay_mix", 0.0)))
+        stereo = apply_tempo_delay(stereo, sr, layer["effects"].get("tempo_delay", {}))
         dynamic_pan = float(layer.get("pan", 0.0)) + float(np.mean(lfo_curves["pan"])) if lfo_curves["pan"].size else float(layer.get("pan", 0.0))
         dynamic_width = float(layer.get("width", 1.0)) + float(np.mean(lfo_curves["width"])) if lfo_curves["width"].size else float(layer.get("width", 1.0))
         stereo = apply_pan_width(stereo, dynamic_pan, dynamic_width)
@@ -784,6 +1046,7 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     gate_curve = automation_curve(mod.get("gate_points", [{"time": 0.0, "level": 1.0}, {"time": duration, "level": 1.0}]), "level", samples, duration)
     cutoff_curve = automation_curve(filt.get("cutoff_points", [{"time": 0.0, "hz": filt["cutoff_start_hz"]}, {"time": duration, "hz": filt["cutoff_end_hz"]}]), "hz", samples, duration)
     lfo_curves = modulation_curves(mod, samples, sr, duration)
+    cutoff_curve = np.clip(cutoff_curve + filter_sequencer_curve(layer["effects"].get("filter_sequencer", {}), samples, sr), 40.0, sr / 2.0)
     cutoff_curve = np.clip(cutoff_curve + lfo_curves["filter_hz"], 40.0, sr / 2.0)
     for note in layer["notes"]:
         start = int(note["start"] * sr)
@@ -819,6 +1082,8 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
         mono = np.tanh(mono * (1.0 + 6.0 * saturation)) / np.tanh(1.0 + 6.0 * saturation)
     mono_stereo = np.vstack([mono, mono])
     mono = apply_compressor(mono_stereo, sr, layer["effects"]).mean(axis=0)
+    mono = apply_sidechain_pump(np.vstack([mono, mono]), sr, layer["effects"].get("sidechain_pump", {})).mean(axis=0)
+    mono = apply_step_gate(np.vstack([mono, mono]), sr, layer["effects"].get("step_gate", {})).mean(axis=0)
     peak = float(np.max(np.abs(mono))) if mono.size else 0.0
     if peak > 1.0:
         mono *= 1.0 / peak
@@ -836,8 +1101,10 @@ def render_layer(layer: dict[str, Any], duration: float, sr: int) -> np.ndarray:
     stereo = apply_decorrelation_width(stereo, sr, width_amount)
     stereo = apply_pan_width(stereo, float(layer.get("pan", 0.0)), 1.0)
     stereo *= db_to_amp(layer["gain_db"])
+    stereo = apply_juno_chorus(stereo, sr, layer["effects"].get("juno_chorus", {}))
     stereo = apply_phaser(stereo, sr, float(layer["effects"].get("phaser_mix", 0.0)), float(mod.get("lfo_rate_hz", 0.23)) or 0.23)
     stereo = apply_delay(stereo, sr, float(layer["effects"].get("delay_time", 0.18)), float(layer["effects"].get("delay_mix", 0.0)))
+    stereo = apply_tempo_delay(stereo, sr, layer["effects"].get("tempo_delay", {}))
     reverb_mix = layer["effects"]["reverb_mix"]
     if reverb_mix > 0:
         tail = np.zeros_like(stereo)
@@ -878,11 +1145,15 @@ def render_session(session: dict[str, Any]) -> np.ndarray:
         return_input += rendered * float(layer.get("effects", {}).get("return_send", 0.0))
     for ret in session.get("returns", []):
         mix += apply_return_effect(return_input, ret, sr)
-    width = session.get("master", {}).get("width", 1.0)
+    master = session.get("master", {})
+    mix = apply_saturation(mix, float(master.get("saturation", 0.0)))
+    mix = apply_compressor(mix, sr, master)
+    mix = apply_master_movement(mix, sr, master.get("movement", {}))
+    width = master.get("width", 1.0)
     mid = mix.mean(axis=0)
     side = (mix[0] - mix[1]) * 0.5 * width
     mix = np.vstack([mid + side, mid - side])
-    mix *= db_to_amp(session.get("master", {}).get("gain_db", -1.0))
+    mix *= db_to_amp(master.get("gain_db", -1.0))
     peak = float(np.max(np.abs(mix))) if mix.size else 0.0
     if peak > 0.98:
         mix *= 0.98 / peak
