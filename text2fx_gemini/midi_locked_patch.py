@@ -821,6 +821,129 @@ def sustain_shape_diagnostics(diff: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def loudness_floor_diagnostics(diff: dict[str, Any]) -> dict[str, Any]:
+    fixed = diff.get("diagnostics", {}).get("fixed_50ms", {})
+    windows = fixed.get("windows") or []
+    if not windows:
+        return {
+            "score": 1.0,
+            "median_rms_ratio": 1.0,
+            "p10_rms_ratio": 1.0,
+            "max_under_db": 0.0,
+            "dropout_window_count": 0,
+            "severe_under_window_count": 0,
+            "weak_windows": [],
+            "summary": "No fixed-window loudness diagnostics available.",
+        }
+    ratios = []
+    under_windows = []
+    for item in windows:
+        source = float(item.get("source_rms", 0.0))
+        candidate = float(item.get("candidate_rms", 0.0))
+        if source < 1e-5:
+            continue
+        ratio = candidate / max(source, 1e-8)
+        ratios.append(ratio)
+        under_db = 20.0 * math.log10(max(ratio, 1e-8))
+        if under_db < -6.0:
+            under_windows.append({**item, "rms_ratio": ratio, "under_db": under_db})
+    if not ratios:
+        return {
+            "score": 1.0,
+            "median_rms_ratio": 1.0,
+            "p10_rms_ratio": 1.0,
+            "max_under_db": 0.0,
+            "dropout_window_count": 0,
+            "severe_under_window_count": 0,
+            "weak_windows": [],
+            "summary": "Reference is silent enough that no loudness floor was required.",
+        }
+    ratios_arr = np.asarray(ratios, dtype=np.float32)
+    median_ratio = float(np.median(ratios_arr))
+    p10_ratio = float(np.percentile(ratios_arr, 10))
+    min_ratio = float(np.min(ratios_arr))
+    max_under_db = float(20.0 * math.log10(max(min_ratio, 1e-8)))
+    dropout_count = int(np.sum(ratios_arr < 0.25))
+    severe_under_count = int(np.sum(ratios_arr < 0.50))
+    median_score = min(1.0, median_ratio / 0.85)
+    p10_score = min(1.0, p10_ratio / 0.55)
+    dropout_score = math.exp(-0.18 * dropout_count - 0.06 * severe_under_count)
+    score = float(max(0.0, min(1.0, 0.42 * median_score + 0.38 * p10_score + 0.20 * dropout_score)))
+    weak_windows = sorted(under_windows, key=lambda item: item["rms_ratio"])[:10]
+    return {
+        "score": score,
+        "median_rms_ratio": median_ratio,
+        "p10_rms_ratio": p10_ratio,
+        "max_under_db": max_under_db,
+        "dropout_window_count": dropout_count,
+        "severe_under_window_count": severe_under_count,
+        "weak_windows": weak_windows,
+        "summary": (
+            f"Loudness floor score {score:.3f}; median RMS ratio {median_ratio:.2f}, "
+            f"p10 ratio {p10_ratio:.2f}, {dropout_count} dropout windows below -12 dB."
+        ),
+    }
+
+
+def groove_envelope_diagnostics(diff: dict[str, Any]) -> dict[str, Any]:
+    scores = diff.get("scores", {})
+    beat_grid = diff.get("diagnostics", {}).get("beat_grid_scores", {})
+    fixed = diff.get("diagnostics", {}).get("fixed_50ms", {})
+    component_scores = {
+        "beat_grid_envelope": float(scores.get("beat_grid_envelope", beat_grid.get("envelope", 1.0))),
+        "beat_grid_band": float(scores.get("beat_grid_band", beat_grid.get("band", 1.0))),
+        "beat_grid_mid_side": float(scores.get("beat_grid_mid_side", beat_grid.get("mid_side", 1.0))),
+        "directional_delta": float(scores.get("directional_delta", 1.0)),
+        "exact_envelope_50ms": float(scores.get("exact_envelope_50ms", fixed.get("envelope", 1.0))),
+    }
+    score = float(np.mean(list(component_scores.values())))
+    weak_slices = beat_grid.get("weak_slices", [])[:10]
+    return {
+        "score": score,
+        "components": component_scores,
+        "weak_slices": weak_slices,
+        "summary": f"Groove/envelope score {score:.3f}; weakest component is {min(component_scores.items(), key=lambda item: item[1])[0]}.",
+    }
+
+
+def modulation_identity_diagnostics(diff: dict[str, Any]) -> dict[str, Any]:
+    scores = diff.get("scores", {})
+    analysis = diff.get("diagnostics", {}).get("modulation_analysis", {})
+    reference = analysis.get("reference", {})
+    candidate = analysis.get("candidate", {})
+    reference_rate = float(reference.get("rate_hz", 0.0))
+    candidate_rate = float(candidate.get("rate_hz", 0.0))
+    reference_depth = float(reference.get("depth", 0.0))
+    candidate_depth = float(candidate.get("depth", 0.0))
+    reference_periodicity = float(reference.get("periodicity", 0.0))
+    candidate_periodicity = float(candidate.get("periodicity", 0.0))
+    component_scores = {
+        "rate": float(scores.get("modulation_rate", 1.0)),
+        "depth": float(scores.get("modulation_depth", 1.0)),
+        "periodicity": float(scores.get("modulation_periodicity", 1.0)),
+        "band_motion": float(scores.get("modulation", 1.0)),
+        "spectral_motion": float(scores.get("spectral_motion", 1.0)),
+    }
+    score = float(np.mean(list(component_scores.values())))
+    reference_has_cyclic_motion = reference_periodicity >= 0.10 and reference_depth >= 0.04 and reference_rate >= 0.20
+    candidate_too_slow = reference_has_cyclic_motion and candidate_rate < reference_rate * 0.60
+    candidate_too_shallow = reference_has_cyclic_motion and candidate_depth < reference_depth * 0.60
+    movement_type = "cyclic_lfo_like" if reference_has_cyclic_motion else "mostly_automation_or_drift"
+    return {
+        "score": score,
+        "components": component_scores,
+        "reference": reference,
+        "candidate": candidate,
+        "reference_movement_type": movement_type,
+        "candidate_too_slow": bool(candidate_too_slow),
+        "candidate_too_shallow": bool(candidate_too_shallow),
+        "summary": (
+            f"Modulation identity score {score:.3f}; reference {reference_rate:.2f}Hz/depth {reference_depth:.2f}, "
+            f"candidate {candidate_rate:.2f}Hz/depth {candidate_depth:.2f}."
+        ),
+    }
+
+
 def spectral_centroid(audio: np.ndarray, sr: int) -> float:
     mag = stft_mag(mono(audio))
     if mag.size == 0:
@@ -856,6 +979,9 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     beat_grid = estimate_beat_grid(reference_audio, sr, subdivision=4)
     global_diff = compare_audio(reference_audio, candidate_audio, sr, beat_grid)
     sustain_shape = sustain_shape_diagnostics(global_diff)
+    loudness_floor = loudness_floor_diagnostics(global_diff)
+    groove_envelope = groove_envelope_diagnostics(global_diff)
+    modulation_identity = modulation_identity_diagnostics(global_diff)
     preservation = arrangement_preservation(arrangement, session)
     layers = {str(layer.get("id")): layer for layer in session.get("layers", [])}
     track_scores = []
@@ -894,26 +1020,94 @@ def score_midi_locked(arrangement: dict[str, Any], session: dict[str, Any], refe
     track_active_score = float(np.mean(active_values)) if active_values else 0.0
     isolation_proxy_score = float(np.mean(proxy_values)) if proxy_values else 0.0
     patch_control_score = float(np.mean(control_values)) if control_values else 0.0
+    global_scores = global_diff["scores"]
+    spectral_timbre = float(
+        np.mean(
+            [
+                global_scores.get("multi_resolution_spectral", 0.0),
+                global_scores.get("mel_spectrogram", 0.0),
+                global_scores.get("a_weighted_spectral", 0.0),
+                global_scores.get("spectral_features", 0.0),
+                global_scores.get("harmonic_noise", 0.0),
+                global_scores.get("codec_latent", 0.0),
+            ]
+        )
+    )
+    loudness_envelope = float(
+        np.mean(
+            [
+                global_scores.get("envelope", 0.0),
+                global_scores.get("segment_envelope", 0.0),
+                global_scores.get("exact_envelope_50ms", 0.0),
+                loudness_floor["score"],
+                sustain_shape["score"],
+            ]
+        )
+    )
+    stereo_motion = float(np.mean([global_scores.get("stereo_width", 0.0), global_scores.get("beat_grid_mid_side", 0.0)]))
+    pitch_chroma = float(np.mean([global_scores.get("pitch_chroma", 0.0), global_scores.get("f0_contour", 0.0)]))
+    weighted_final = (
+        0.25 * spectral_timbre
+        + 0.20 * loudness_envelope
+        + 0.20 * float(groove_envelope["score"])
+        + 0.15 * float(modulation_identity["score"])
+        + 0.10 * stereo_motion
+        + 0.05 * pitch_chroma
+        + 0.05 * patch_control_score
+    )
+    hard_gates = {
+        "loudness_floor": float(loudness_floor["score"]),
+        "groove_envelope": float(groove_envelope["score"]),
+        "modulation_identity": float(modulation_identity["score"]),
+        "arrangement_preservation": float(1.0 - preservation["penalty"]),
+    }
+    gate_multiplier = float(min(1.0, 0.58 + 0.42 * min(hard_gates.values())))
+    dropout_penalty = math.exp(-0.08 * float(loudness_floor["dropout_window_count"]))
     final_loss = (
-        0.45 * (1.0 - float(global_diff["scores"]["final"]))
-        + 0.30 * (1.0 - track_active_score)
-        + 0.15 * (1.0 - patch_control_score)
-        + 0.05 * (1.0 - float(sustain_shape["score"]))
+        1.0
+        - max(0.0, min(1.0, weighted_final * gate_multiplier * dropout_penalty))
         + 0.05 * float(preservation["penalty"])
     )
+    final_score = float(max(0.0, 1.0 - final_loss))
     return {
         "scores": {
-            "final": float(max(0.0, 1.0 - final_loss)),
+            "final": final_score,
             "loss": float(final_loss),
             "global_mix": float(global_diff["scores"]["final"]),
             "track_active_window": track_active_score,
             "track_isolation_proxy": isolation_proxy_score,
             "patch_control": patch_control_score,
             "sustain_shape": float(sustain_shape["score"]),
+            "loudness_envelope": loudness_envelope,
+            "loudness_floor": float(loudness_floor["score"]),
+            "groove_envelope": float(groove_envelope["score"]),
+            "modulation_identity": float(modulation_identity["score"]),
+            "spectral_timbre": spectral_timbre,
+            "stereo_motion": stereo_motion,
+            "pitch_chroma": pitch_chroma,
             "arrangement_preservation": float(1.0 - preservation["penalty"]),
+        },
+        "loss_version": "midi_locked_patch.v2_strict_loudness_modulation",
+        "loss_components": {
+            "weighted_final_before_gates": weighted_final,
+            "gate_multiplier": gate_multiplier,
+            "dropout_penalty": dropout_penalty,
+            "hard_gates": hard_gates,
+            "weights": {
+                "spectral_timbre": 0.25,
+                "loudness_envelope": 0.20,
+                "groove_envelope": 0.20,
+                "modulation_identity": 0.15,
+                "stereo_motion": 0.10,
+                "pitch_chroma": 0.05,
+                "patch_control": 0.05,
+            },
         },
         "global_mix_diff": global_diff,
         "sustain_shape_diagnostics": sustain_shape,
+        "loudness_floor_diagnostics": loudness_floor,
+        "groove_envelope_diagnostics": groove_envelope,
+        "modulation_identity_diagnostics": modulation_identity,
         "track_scores": track_scores,
         "arrangement_preservation": preservation,
         "weakest_tracks": sorted(track_scores, key=lambda item: item["active_window_score"].get("final", 0.0))[:5],
@@ -946,7 +1140,38 @@ def acceptance_gate(previous: dict[str, Any] | None, candidate: dict[str, Any]) 
             f"largest 50ms RMS error grew from {prev_largest:.5f} to {cand_largest:.5f}"
         )
 
-    for key, tolerance in (("track_isolation_proxy", 0.04), ("patch_control", 0.03), ("global_mix", 0.03)):
+    cand_loudness = candidate.get("loudness_floor_diagnostics", {})
+    cand_modulation = candidate.get("modulation_identity_diagnostics", {})
+    cand_groove = candidate.get("groove_envelope_diagnostics", {})
+    if float(cand_loudness.get("p10_rms_ratio", 1.0)) < 0.45:
+        regressions.append(
+            f"active-window loudness floor failed: p10 RMS ratio {float(cand_loudness.get('p10_rms_ratio', 0.0)):.2f}"
+        )
+    if int(cand_loudness.get("dropout_window_count", 0)) > 0:
+        regressions.append(f"candidate has {int(cand_loudness.get('dropout_window_count', 0))} dropout windows below -12 dB")
+    if bool(cand_modulation.get("candidate_too_slow", False)):
+        ref = cand_modulation.get("reference", {})
+        cand = cand_modulation.get("candidate", {})
+        regressions.append(
+            f"modulation rate is too slow: source {float(ref.get('rate_hz', 0.0)):.2f}Hz vs candidate {float(cand.get('rate_hz', 0.0)):.2f}Hz"
+        )
+    if bool(cand_modulation.get("candidate_too_shallow", False)):
+        ref = cand_modulation.get("reference", {})
+        cand = cand_modulation.get("candidate", {})
+        regressions.append(
+            f"modulation depth is too shallow: source {float(ref.get('depth', 0.0)):.2f} vs candidate {float(cand.get('depth', 0.0)):.2f}"
+        )
+    if float(cand_groove.get("score", 1.0)) < 0.55:
+        regressions.append(f"beat/groove envelope gate failed: {float(cand_groove.get('score', 0.0)):.4f}")
+
+    for key, tolerance in (
+        ("track_isolation_proxy", 0.04),
+        ("patch_control", 0.03),
+        ("global_mix", 0.03),
+        ("loudness_floor", 0.04),
+        ("groove_envelope", 0.04),
+        ("modulation_identity", 0.04),
+    ):
         previous_value = float(prev_scores.get(key, 0.0))
         candidate_value = float(cand_scores.get(key, 0.0))
         if candidate_value + tolerance < previous_value:
