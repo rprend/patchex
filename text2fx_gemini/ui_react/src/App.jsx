@@ -123,6 +123,16 @@ function roleName(role, agent) {
   return ROLE_LABELS[role] || String(role || "File").replaceAll("_", " ");
 }
 
+function goalRoleName(role) {
+  if (role === "recommendation") return "Goal plan";
+  if (role === "patch_ops") return "Patch decisions";
+  if (role === "audio_diff") return "Score report";
+  if (role === "winner_render" || role === "render") return "Rendered audio";
+  if (role === "session") return "Patch session";
+  if (role === "source_clip") return "Target audio";
+  return String(role || "Artifact").replaceAll("_", " ");
+}
+
 function friendlyWinner(name) {
   if (!name) return "unknown";
   const inner = String(name).match(/^codex_inner_(\d+)/);
@@ -966,7 +976,7 @@ function PatchOperations({ ops }) {
   const trials = Array.isArray(ops.loss_trials) ? ops.loss_trials : [];
   return h("section", { className: "patch-section" },
     h("div", { className: "patch-section-head" },
-      h("strong", null, "Producer Decisions"),
+      h("strong", null, "Patch Decisions"),
       h("span", null, `${operations.length} edits${trials.length ? `, ${trials.length} checks` : ""}`)
     ),
     ops.hypothesis ? h("p", { className: "patch-hypothesis" }, ops.hypothesis) : null,
@@ -1114,7 +1124,7 @@ function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = []
       h(AudioComparePlayers, {
         sourceUrl: sourceArtifact?.url,
         renderUrl: outputAudio?.url,
-        renderLabel: "Producer audio",
+        renderLabel: selected.base === "goal" ? "Rendered audio" : "Producer audio",
       })
     ),
     session?.error ? h("pre", { className: "sidebar-pre" }, session.error) : session ? h(React.Fragment, null,
@@ -1148,7 +1158,34 @@ function SidebarDetail({ selected, detail, sourceArtifact, allTraces = [] }) {
             renderUrl: trace.url,
             renderLabel: detail?.label || "Rendered audio",
           })
-    ) : isAccuracy ? h(AccuracyViewer, { trace }) : isSession ? h(SessionArtifactViewer, { trace, selected, sourceArtifact, allTraces }) : detail ? h(TextArtifactViewer, { trace }) : h(AgentActivity, { selected })
+    ) : isAccuracy ? h(AccuracyViewer, { trace }) : isSession ? h(SessionArtifactViewer, { trace, selected, sourceArtifact, allTraces }) : detail ? h(TextArtifactViewer, { trace }) : selected.base === "goal" ? h(GoalNodeDetails, { selected, sourceArtifact }) : h(AgentActivity, { selected })
+  );
+}
+
+function GoalNodeDetails({ selected, sourceArtifact }) {
+  const rows = (selected.rows || []).filter((row) => row.trace);
+  const traces = selected.traces || [];
+  const audio = traces.find((trace) => trace.name?.endsWith(".wav") && trace.role !== "source_clip");
+  return h("div", { className: "goal-node-details" },
+    selected.detail ? h("p", { className: "sidebar-note" }, selected.detail) : null,
+    rows.length ? h("div", { className: "goal-node-artifacts" },
+      rows.map((row) => h("button", {
+        type: "button",
+        key: row.label,
+        className: "goal-artifact-row",
+        onClick: () => selected.onOpen?.(row.trace, selected),
+      },
+        h("span", null, row.label),
+        h("strong", null, row.value)
+      ))
+    ) : h("p", { className: "sidebar-note" }, "Waiting for this iteration to write artifacts."),
+    audio ? h("div", { className: "sidebar-audio-compare" },
+      h(AudioComparePlayers, {
+        sourceUrl: traces.find((trace) => trace.role === "source_clip")?.url || sourceArtifact?.url,
+        renderUrl: audio.url,
+        renderLabel: "Rendered audio",
+      })
+    ) : null
   );
 }
 
@@ -1730,7 +1767,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
         { label: "Initial score", value: scores.initial || "pending", trace: baselineTraces.find((trace) => trace.name === "loss_report_step_initial.json") },
         { label: "Session", value: byName("patch_session_current.json")?.name || "pending", trace: baselineTraces.find((trace) => trace.name === "patch_session_current.json") },
       ],
-      onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${roleName(trace.role, trace.agent)}`)?.(nodeData),
+      onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${goalRoleName(trace.role)}`)?.(nodeData),
     },
   });
 
@@ -1777,7 +1814,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
           { label: "Score", value: scores[step] || "pending", trace: traces.find((trace) => trace.name === report?.name) },
           { label: "Trials", value: trialCount ? `${trialCount} checks` : "pending" },
         ],
-        onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${roleName(trace.role, trace.agent)}`)?.(nodeData),
+        onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${goalRoleName(trace.role)}`)?.(nodeData),
       },
     });
     edges.push({
@@ -1822,7 +1859,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
           { label: "Final audio", value: byName("final_reconstruction.wav")?.name || "pending", trace: finalTraces.find((trace) => trace.name === "final_reconstruction.wav") },
           { label: "Session", value: byName("reconstruction_session.json")?.name || "pending", trace: finalTraces.find((trace) => trace.name === "reconstruction_session.json") },
         ],
-        onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${roleName(trace.role, trace.agent)}`)?.(nodeData),
+        onOpen: (trace, nodeData) => makeOpen(trace, `${nodeData.label}: ${goalRoleName(trace.role)}`)?.(nodeData),
       },
     });
     edges.push({

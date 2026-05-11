@@ -1507,6 +1507,51 @@ textarea {
   z-index: 2;
 }
 
+.goal-node-details {
+  display: grid;
+  gap: .9rem;
+}
+
+.goal-node-artifacts {
+  display: grid;
+  gap: .45rem;
+}
+
+.goal-artifact-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, .7fr) minmax(0, 1fr);
+  align-items: center;
+  gap: .75rem;
+  width: 100%;
+  padding: .55rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: .35rem;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.goal-artifact-row:hover {
+  border-color: #b9c8dd;
+  background: #fbfcff;
+}
+
+.goal-artifact-row span {
+  color: var(--muted);
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.goal-artifact-row strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: .86rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workflow-node {
   width: 248px;
   min-height: 128px;
