@@ -1,0 +1,81 @@
+{
+  "schema": "patchex.patch_ops.v1",
+  "hypothesis": "The cleanest accepted move is to widen the sustained string body while preserving the current envelope and EP anchor, because the render is far too narrow but RMS, note timing, exact 50ms envelope, and sustain shape are already near the current local optimum. I rejected broader dark-filter candidates because they improved timbre but damaged the weakest envelope windows.",
+  "critic_brief_used": "text2fx_gemini/ui_runs/20260511_152606_goal_first5/critic_brief_step_02.md",
+  "operations": [
+    {
+      "op": "set",
+      "path": "layers.strings.synth.stereo_spread",
+      "value": 1.45,
+      "track_id": "strings",
+      "change": "increase string stereo spread",
+      "reason": "Target side/mid width is much higher than current render; width should come from strings, not the low EP anchor."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.width",
+      "value": 1.9,
+      "track_id": "strings",
+      "change": "widen string layer",
+      "reason": "Raises sustained side energy from the ensemble layer while preserving notes and gain automation."
+    },
+    {
+      "op": "set",
+      "path": "layers.strings.effects.chorus_mix",
+      "value": 0.18,
+      "track_id": "strings",
+      "change": "reduce chorus brightening while widening source",
+      "reason": "Avoids using bright chorus smear as the width source; keeps the body wide but less glassy."
+    }
+  ],
+  "loss_trials": [
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_02.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_02_full.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_02_full.wav --seconds 5",
+      "notes": "Rejected broad dark-filter/gain candidate: spectral_timbre improved 0.264->0.429, centroid trajectory 0.015->0.385, sustain_shape 0.668->0.684, but final fell and exact_envelope_50ms dropped 0.443->0.338 with loudness_floor 0.499.",
+      "score": 0.18048625839044752,
+      "loss": 0.8195137416095525
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_02_v3.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_02_v3_full.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_02_v3_full.wav --seconds 5",
+      "notes": "Rejected minimal timbre/filter candidate despite full score gain: stereo_width improved 0.670->0.709 and spectral_timbre 0.264->0.326, but exact_envelope_50ms fell 0.443->0.399 and sustain_shape fell 0.668->0.663.",
+      "score": 0.3001362203753768,
+      "loss": 0.6998637796246232
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_02_v4.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_02_v4_full.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_02_v4_full.wav --seconds 5",
+      "notes": "Rejected string-darkening candidate: full score improved slightly and stereo_width 0.709, but exact_envelope_50ms dropped to 0.407 and sustain_shape to 0.661, so it violated the local-envelope guardrail.",
+      "score": 0.29658175305167034,
+      "loss": 0.7034182469483297
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_02_v6.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_02_v6_full.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_02_v6_full.wav --seconds 5",
+      "notes": "Accepted width-only candidate: final 0.294->0.300, exact_envelope_50ms 0.442826->0.442827, sustain_shape 0.668125->0.668126, exact_band_50ms 0.481879->0.482361, stereo_width 0.6699->0.7417; timbre remains the next blocker.",
+      "score": 0.2998666714330327,
+      "loss": 0.7001333285669673
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_02_v6.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_02_v6_win_075.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_02_v6_win_075.wav --seconds 5 --window-start 0.75 --window-duration 0.45",
+      "notes": "Weak 0.75-1.20s window trial: local final 0.357, exact_envelope_50ms 0.264, exact_band_50ms 0.626, directional_delta 0.490, stereo_width 0.731.",
+      "score": 0.3571786989635721,
+      "loss": 0.6428213010364279,
+      "window_start": 0.75,
+      "window_duration": 0.45
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_02_v6.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_02_v6_win_260.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_02_v6_win_260.wav --seconds 5 --window-start 2.6 --window-duration 0.25",
+      "notes": "Chord-change window trial: local final 0.383, sustain_shape 0.628, exact_envelope_50ms 0.213, exact_band_50ms 0.678, directional_delta 0.495, stereo_width 0.709; no gain/filter rewrite accepted here.",
+      "score": 0.38330932728793354,
+      "loss": 0.6166906727120665,
+      "window_start": 2.6,
+      "window_duration": 0.25
+    },
+    {
+      "command": "python3 text2fx_gemini/midi_locked_patch.py score-session --arrangement text2fx_gemini/ui_runs/20260511_152606_goal_first5/arrangement.json --session text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_session_step_02_v6.json --reference text2fx_gemini/ui_runs/20260511_152606_goal_first5/source_clip.wav --output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_loss_step_02_v6_win_485.json --render-output text2fx_gemini/ui_runs/20260511_152606_goal_first5/candidate_render_step_02_v6_win_485.wav --seconds 5 --window-start 4.85 --window-duration 0.15",
+      "notes": "Tail window trial: local final 0.473, sustain_shape 0.801, exact_envelope_50ms 0.465, exact_band_50ms 0.625, directional_delta 0.497, stereo_width 0.728; final hold remains intact.",
+      "score": 0.4734134122313356,
+      "loss": 0.5265865877686644,
+      "window_start": 4.85,
+      "window_duration": 0.15
+    }
+  ]
+}
