@@ -1108,13 +1108,8 @@ function SessionArtifactViewer({ trace, selected, sourceArtifact, allTraces = []
 
   const isRenderAudio = (item) => {
     const name = item?.name || item?.path?.split("/").pop() || "";
-    return name !== "source_clip.wav" && (
-      item?.role?.includes("render") ||
-      name === "current_render_step_initial.wav" ||
-      name.match(/^producer_reconstruction_step_.*\.wav$/) ||
-      name.match(/^patch_render_step_.*\.wav$/) ||
-      name === "final_reconstruction.wav"
-    );
+    if (name === "source_clip.wav" || isDiagnosticWindowAudioName(name)) return false;
+    return isPrimaryRenderAudioName(name) || item?.role?.includes("render");
   };
   const outputAudio = (selected.traces || []).find(isRenderAudio) ||
     allTraces.find((item) => item.step === selected.step && (
@@ -1166,7 +1161,7 @@ function SidebarDetail({ selected, detail, sourceArtifact, allTraces = [] }) {
 function GoalNodeDetails({ selected, sourceArtifact }) {
   const rows = (selected.rows || []).filter((row) => row.trace);
   const traces = selected.traces || [];
-  const audio = traces.find((trace) => trace.name?.endsWith(".wav") && trace.role !== "source_clip");
+  const audio = traces.find((trace) => isPrimaryRenderAudioName(trace.name) && trace.role !== "source_clip");
   return h("div", { className: "goal-node-details" },
     selected.detail ? h("p", { className: "sidebar-note" }, selected.detail) : null,
     rows.length ? h("div", { className: "goal-node-artifacts" },
@@ -1449,7 +1444,10 @@ function Artifacts({ artifacts, onReport }) {
   }, [artifacts]);
 
   if (!artifacts.length) return null;
-  const sortedArtifacts = [...artifacts].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedArtifacts = [...artifacts].sort((a, b) =>
+    Number(isDiagnosticWindowAudioName(a.name)) - Number(isDiagnosticWindowAudioName(b.name)) ||
+    a.name.localeCompare(b.name)
+  );
   return h("section", { className: "section-block" },
     h(Accordion, { className: "artifact-groups artifact-groups-compact", type: "single", collapsible: true },
       h(AccordionItem, { className: "artifact-group", value: "files" },
@@ -1460,10 +1458,14 @@ function Artifacts({ artifacts, onReport }) {
         ),
         h(AccordionContent, null,
           h("div", { className: "artifact-list compact-artifact-list" },
-            sortedArtifacts.map((artifact) => h("a", { className: artifact.name.endsWith(".wav") ? "audio-artifact-link" : "", href: artifact.url, target: "_blank", key: artifact.url },
-              h("span", null, artifact.name),
-              artifact.name.endsWith(".wav") ? h(Badge, { variant: "secondary" }, "audio") : null
-            ))
+            sortedArtifacts.map((artifact) => {
+              const isWindowAudio = isDiagnosticWindowAudioName(artifact.name);
+              const isAudio = artifact.name.endsWith(".wav");
+              return h("a", { className: isAudio && !isWindowAudio ? "audio-artifact-link" : "", href: artifact.url, target: "_blank", key: artifact.url },
+                h("span", null, artifact.name),
+                isAudio ? h(Badge, { variant: "secondary" }, isWindowAudio ? "window" : "audio") : null
+              );
+            })
           )
         )
       )
@@ -1482,6 +1484,21 @@ function goalDisplayText(text) {
     .replace(/\bcritic\b/g, "goal guidance")
     .replace(/\bProducer\b/g, "patch editor")
     .replace(/\bproducer\b/g, "patch editor");
+}
+
+function isDiagnosticWindowAudioName(name = "") {
+  const value = String(name || "");
+  return /(?:^|_)(?:w\d{3}|win_\d{3})(?:_|\.wav$)/.test(value);
+}
+
+function isPrimaryRenderAudioName(name = "") {
+  const value = String(name || "");
+  if (isDiagnosticWindowAudioName(value)) return false;
+  return value === "current_render_step_initial.wav" ||
+    value === "final_reconstruction.wav" ||
+    /^patch_render_step_\d+\.wav$/.test(value) ||
+    /^candidate_render_step_\d+(?:_v\d+)?_full\.wav$/.test(value) ||
+    /^producer_reconstruction_step_\d+_.+\.wav$/.test(value);
 }
 
 function summarizeOperation(operation) {
@@ -1715,6 +1732,11 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
     artifact.name.startsWith(`${prefix}${String(step).padStart(2, "0")}`) && artifact.name.endsWith(suffix));
   const candidateArtifact = (kind, step, suffix) => latestNamedArtifact(artifacts, (artifact) =>
     artifact.name.startsWith(`candidate_${kind}_step_${String(step).padStart(2, "0")}`) && artifact.name.endsWith(suffix));
+  const candidateFullRenderArtifact = (step) => latestNamedArtifact(artifacts, (artifact) =>
+    artifact.name.startsWith(`candidate_render_step_${String(step).padStart(2, "0")}`) &&
+    artifact.name.includes("_full") &&
+    artifact.name.endsWith(".wav") &&
+    !isDiagnosticWindowAudioName(artifact.name));
   const stepNumbers = Array.from(new Set(artifacts.flatMap((artifact) => {
     const matches = [...artifact.name.matchAll(/step_(\d+)/g)];
     return matches.map((match) => Number(match[1]));
@@ -1817,7 +1839,7 @@ function GoalWorkflowCanvas({ artifacts, runActive }) {
     const plan = byName(`critic_brief_step_${String(step).padStart(2, "0")}.md`);
     const ops = stepArtifact("patch_ops_step_", step);
     const applied = stepArtifact("patch_ops_applied_step_", step);
-    const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`) || candidateArtifact("render", step, ".wav");
+    const render = byName(`patch_render_step_${String(step).padStart(2, "0")}.wav`) || candidateFullRenderArtifact(step);
     const report = byName(`patch_report_step_${String(step).padStart(2, "0")}.json`) || candidateArtifact("loss", step, ".json");
     const session = byName(`patch_session_step_${String(step).padStart(2, "0")}.json`) || candidateArtifact("session", step, ".json") || byName("patch_session_current.json");
     const trialCount = artifacts.filter((artifact) => artifact.name.startsWith(`candidate_loss_step_${String(step).padStart(2, "0")}`)).length;
