@@ -58,7 +58,7 @@ const AGENT_LABELS = {
   loss: "Calculate Accuracy",
 };
 
-const RUN_ID_PATTERN = /^\d{8}_\d{6}_v1_[A-Za-z0-9]+$/;
+const RUN_ID_PATTERN = /^\d{8}_\d{6}_[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 function api(path, options = {}) {
   return fetch(path, options).then(async (res) => {
@@ -393,7 +393,7 @@ function currentRouteRunId() {
 
 function pushRunRoute(runId) {
   if (!runId) return;
-  const target = `/${runId}`;
+  const target = `/v1/${runId}`;
   if (window.location.pathname !== target) window.history.pushState({}, "", target);
 }
 
@@ -1780,10 +1780,11 @@ function App() {
     });
     await Promise.all(traceArtifacts.map(async (artifact) => {
       const name = artifact.name || "";
-      const isAccuracy = name.startsWith("patch_report_step_") || name.startsWith("audio_diff_") || name.startsWith("producer_audio_diff_");
+      const isAccuracy = name.startsWith("patch_report_step_") || name.startsWith("audio_diff_") || name.startsWith("producer_audio_diff_") || name === "loss_report_step_initial.json";
       const stepMatch = name.match(/step_(\d+)/);
-      if (!isAccuracy || !stepMatch) return;
-      const step = Number(stepMatch[1]);
+      if (!isAccuracy) return;
+      const step = stepMatch ? Number(stepMatch[1]) : (name === "loss_report_step_initial.json" ? 0 : null);
+      if (step === null) return;
       try {
         const json = await fetch(artifact.url).then((res) => res.json());
         const payload = accuracyPayload(json);
@@ -1875,32 +1876,35 @@ function App() {
   const loadPastRun = useCallback(async (run, options = {}) => {
     resetRunView();
     if (options.push !== false) pushRunRoute(run.id);
-    if (run.status === "running") {
+    let latestRun = { ...run };
+    try {
+      const job = await api(`/api/reconstructions/${run.id}`);
+      latestRun = { ...latestRun, ...job, artifacts: job.artifacts || latestRun.artifacts || [] };
+    } catch (error) {
+      addRunNote(error.stack || String(error));
+    }
+    const currentArtifacts = latestRun.artifacts || [];
+    if (latestRun.status === "running") {
       setStatus("Running");
-      activeRun.current = run.id;
-      localStorage.setItem("v1ActiveRunId", run.id);
-      try {
-        const job = await api(`/api/reconstructions/${run.id}`);
-        setArtifacts(job.artifacts || []);
-        await renderTraceArtifacts(job.artifacts || []);
-      } catch (error) {
-        addRunNote(error.stack || String(error));
-      }
-      attachEvents(run.id);
-      addRunNote(`Reconnected to ${run.id}.`);
+      activeRun.current = latestRun.id;
+      localStorage.setItem("v1ActiveRunId", latestRun.id);
+      setArtifacts(currentArtifacts);
+      await renderTraceArtifacts(currentArtifacts);
+      attachEvents(latestRun.id);
+      addRunNote(`Reconnected to ${latestRun.id}.`);
       return;
     }
-    setStatus(viewStatusForRun(run.status));
-    setArtifacts(run.artifacts || []);
-    const reportArtifact = run.artifacts.find((artifact) => artifact.name === "reconstruction_report.json");
+    setStatus(viewStatusForRun(latestRun.status));
+    setArtifacts(currentArtifacts);
+    const reportArtifact = currentArtifacts.find((artifact) => artifact.name === "reconstruction_report.json");
     let loadedReport = null;
     if (reportArtifact) {
       loadedReport = await fetch(reportArtifact.url).then((res) => res.json());
       setReport(loadedReport);
     }
-    await renderTraceArtifacts(run.artifacts || [], loadedReport);
-    addRunNote(`Opened ${run.id}.`);
-  }, [addRunNote, renderTraceArtifacts, resetRunView]);
+    await renderTraceArtifacts(currentArtifacts, loadedReport);
+    addRunNote(`Opened ${latestRun.id}.`);
+  }, [addRunNote, attachEvents, renderTraceArtifacts, resetRunView]);
 
   const killRun = useCallback(async () => {
     const runId = currentRouteRunId();

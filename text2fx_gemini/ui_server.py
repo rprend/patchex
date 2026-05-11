@@ -32,6 +32,7 @@ jobs: dict[str, dict] = {}
 analysis_jobs: dict[str, dict] = {}
 clip_jobs: dict[str, dict] = {}
 reconstruction_jobs: dict[str, dict] = {}
+EXTERNAL_RUN_ACTIVE_WINDOW_SECONDS = 2 * 60 * 60
 
 NOISY_LOG_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
@@ -844,7 +845,99 @@ def disk_reconstruction_status(run_dir: Path, manifest: dict | None = None) -> s
         except (json.JSONDecodeError, OSError):
             pass
     status = (manifest or {}).get("status")
-    return "interrupted" if status == "running" else (status or "partial")
+    if status:
+        return "interrupted" if status == "running" else status
+    latest_mtime = latest_artifact_mtime(run_dir)
+    if latest_mtime and time.time() - latest_mtime <= EXTERNAL_RUN_ACTIVE_WINDOW_SECONDS:
+        return "running"
+    return "partial"
+
+
+def latest_artifact_mtime(run_dir: Path) -> float | None:
+    try:
+        mtimes = [path.stat().st_mtime for path in run_dir.rglob("*") if path.is_file()]
+    except OSError:
+        return None
+    return max(mtimes) if mtimes else None
+
+
+def read_json_file(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def score_from_report(report: dict | None) -> float | None:
+    if not report:
+        return None
+    candidates = [
+        ((report.get("best_scores") or {}).get("final") if isinstance(report.get("best_scores"), dict) else None),
+        ((report.get("scores") or {}).get("final") if isinstance(report.get("scores"), dict) else None),
+        (((report.get("global_mix_diff") or {}).get("scores") or {}).get("final") if isinstance(report.get("global_mix_diff"), dict) else None),
+    ]
+    for value in candidates:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if numeric == numeric:
+            return numeric
+    return None
+
+
+def score_summary_from_artifacts(run_dir: Path, report: dict | None) -> dict:
+    scored_steps = []
+    final_score = score_from_report(report)
+    if final_score is not None:
+        scored_steps.append({"step": "final", "score": final_score, "name": "reconstruction_report.json"})
+    for path in sorted(run_dir.glob("patch_report_step_*.json")):
+        step_match = re.search(r"step_(\d+)", path.name)
+        score = score_from_report(read_json_file(path))
+        if score is not None:
+            scored_steps.append({"step": int(step_match.group(1)) if step_match else None, "score": score, "name": path.name})
+    initial_score = score_from_report(read_json_file(run_dir / "loss_report_step_initial.json"))
+    if initial_score is not None:
+        scored_steps.append({"step": "initial", "score": initial_score, "name": "loss_report_step_initial.json"})
+    if not scored_steps:
+        return {"final_score": None, "best_step": None, "best_name": None}
+    best = max(scored_steps, key=lambda item: item["score"])
+    return {"final_score": best["score"], "best_step": best["step"], "best_name": best["name"]}
+
+
+def reconstruction_run_summary(run_dir: Path, report: dict | None, manifest: dict | None = None) -> dict:
+    history = (report or {}).get("history") or []
+    score_summary = score_summary_from_artifacts(run_dir, report)
+    patch_reports = sorted(run_dir.glob("patch_report_step_*.json"))
+    patch_ops = sorted(run_dir.glob("patch_ops_step_*.json"))
+    accepted_sessions = sorted(run_dir.glob("patch_session_step_*.json"))
+    stage_count = len(history) or max(len(patch_reports), len(patch_ops))
+    final_score = score_summary["final_score"]
+    if report:
+        overall_mix = (((report.get("analysis") or {}).get("global") or {}).get("overall_mix") or "").strip()
+    else:
+        overall_mix = ""
+    if not overall_mix:
+        if final_score is not None:
+            best_step = score_summary["best_step"]
+            if best_step == "initial":
+                overall_mix = f"Initial score {final_score:.3f}; waiting for patch iterations"
+            elif best_step == "final":
+                overall_mix = f"Final score {final_score:.3f}"
+            else:
+                overall_mix = f"Best patch score {final_score:.3f} at step {best_step}"
+        elif patch_ops or (run_dir / "patch_session_current.json").exists():
+            overall_mix = "Patch goal run in progress; waiting for first score"
+        else:
+            overall_mix = (manifest or {}).get("reference", "") or "Partial reconstruction run"
+    return {
+        "overall_mix": overall_mix,
+        "final_score": final_score,
+        "mel_score": ((report or {}).get("best_scores") or {}).get("mel_spectrogram"),
+        "envelope_score": ((report or {}).get("best_scores") or {}).get("envelope"),
+        "stage_count": stage_count,
+        "accepted_layers": len(((report or {}).get("analysis") or {}).get("layers") or []) or len(accepted_sessions),
+    }
 
 
 def read_text_limited(path: Path, max_chars: int = 200_000) -> str:
@@ -1191,7 +1284,10 @@ class Handler(BaseHTTPRequestHandler):
                 break
 
     def stream_reconstruction_events(self, run_id: str) -> None:
-        job = reconstruction_jobs[run_id]
+        job = reconstruction_jobs.get(run_id)
+        if not job:
+            self.stream_external_reconstruction_events(run_id)
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
@@ -1209,6 +1305,48 @@ class Handler(BaseHTTPRequestHandler):
             if event.get("type") == "done":
                 break
 
+    def stream_external_reconstruction_events(self, run_id: str) -> None:
+        run_dir = (RUNS / run_id).resolve()
+        if not run_dir.is_dir():
+            raise KeyError(run_id)
+        if RUNS.resolve() not in run_dir.parents and run_dir != RUNS.resolve():
+            raise ValueError("Run path escapes runs directory.")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        seen: dict[str, tuple[int, float]] = {}
+        self.write_sse({"type": "log", "line": "Watching external Codex goal run artifacts on disk."})
+        while True:
+            try:
+                files = [path for path in sorted(run_dir.rglob("*")) if path.is_file()]
+                changed = []
+                for path in files:
+                    stat = path.stat()
+                    rel = str(path.relative_to(run_dir))
+                    stamp = (stat.st_size, stat.st_mtime)
+                    if seen.get(rel) != stamp:
+                        seen[rel] = stamp
+                        changed.append(path)
+                for path in changed:
+                    event = trace_event_for_artifact(run_dir, path)
+                    if event:
+                        self.write_sse(event)
+                status = disk_reconstruction_status(run_dir)
+                if status == "completed":
+                    self.write_sse({"type": "done", "status": "completed", "returncode": 0})
+                    break
+                self.write_sse({"type": "heartbeat"})
+                time.sleep(2)
+            except (BrokenPipeError, ConnectionResetError):
+                break
+
+    def write_sse(self, event: dict) -> None:
+        data = f"data: {json.dumps(event)}\n\n".encode()
+        self.wfile.write(data)
+        self.wfile.flush()
+
 
 def list_artifacts(path: Path) -> list[dict]:
     if not path.exists():
@@ -1222,6 +1360,66 @@ def list_artifacts(path: Path) -> list[dict]:
         for file in sorted(path.rglob("*"))
         if file.is_file()
     ]
+
+
+def trace_event_for_artifact(run_dir: Path, path: Path) -> dict | None:
+    name = str(path.relative_to(run_dir))
+    if not path.is_file():
+        return None
+    base = path.name
+    role = "file"
+    agent = "producer"
+    step = None
+    step_match = re.search(r"step_(\d+)", base)
+    if step_match:
+        step = int(step_match.group(1))
+    if base.startswith("codex_"):
+        role = "prompt" if "_prompt" in base else "answer"
+        agent = re.sub(r"^codex_|_(prompt|answer)\.txt$", "", base)
+    elif base.startswith("critic_brief_step_"):
+        role = "recommendation"
+        agent = f"residual_critic_step_{step:02d}" if step is not None else "residual_critic"
+    elif base.startswith("patch_report_step_"):
+        role = "audio_diff"
+        agent = f"loss_step_{step:02d}" if step is not None else "loss"
+    elif base.startswith("patch_render_step_"):
+        role = "winner_render"
+        agent = f"loss_step_{step:02d}" if step is not None else "loss"
+    elif base.startswith("patch_session_step_"):
+        role = "accepted_session"
+        agent = f"producer_step_{step:02d}" if step is not None else "producer"
+    elif base.startswith("patch_ops_step_") or base.startswith("patch_ops_applied_step_"):
+        role = "session"
+        agent = f"producer_step_{step:02d}" if step is not None else "producer"
+    elif base in {"patch_session_current.json", "arrangement.json", "full_arrangement.json"}:
+        role = "layer_analysis"
+        agent = "baseline"
+    elif base == "source_clip.wav":
+        role = "source_clip"
+        agent = "baseline"
+    elif base == "current_render_step_initial.wav":
+        role = "winner_render"
+        agent = "baseline"
+    elif base == "loss_report_step_initial.json":
+        role = "audio_diff"
+        agent = "baseline"
+    elif base == "final_reconstruction.wav":
+        role = "render"
+        agent = "loss"
+    elif base.endswith(".wav"):
+        role = "render"
+    elif base == "reconstruction_report.json":
+        role = "audio_diff"
+        agent = "loss"
+    return {
+        "type": "trace_file",
+        "agent": agent,
+        "role": role,
+        "step": step,
+        "name": name,
+        "path": f"/ui_runs/{run_dir.name}/{name}",
+        "url": f"/media/runs/{run_dir.name}/{'/'.join(quote(part) for part in path.relative_to(run_dir).parts)}",
+    }
 
 
 def list_runs() -> list[dict]:
@@ -1257,18 +1455,20 @@ def list_reconstruction_runs() -> list[dict]:
         if job.get("status") != "running":
             continue
         output_dir = Path(job["output_dir"])
+        artifacts = list_artifacts(output_dir) if output_dir.exists() else []
+        summary = reconstruction_run_summary(output_dir, None) if output_dir.exists() else {}
         seen.add(run_id)
         runs.append(
             {
                 "id": run_id,
                 "status": "running",
-                "overall_mix": "Reconstruction currently running",
-                "final_score": None,
-                "mel_score": None,
-                "envelope_score": None,
-                "stage_count": 0,
-                "accepted_layers": 0,
-                "artifacts": list_artifacts(output_dir) if output_dir.exists() else [],
+                "overall_mix": summary.get("overall_mix") or "Reconstruction currently running",
+                "final_score": summary.get("final_score"),
+                "mel_score": summary.get("mel_score"),
+                "envelope_score": summary.get("envelope_score"),
+                "stage_count": summary.get("stage_count") or 0,
+                "accepted_layers": summary.get("accepted_layers") or 0,
+                "artifacts": artifacts,
             }
         )
     for run_dir in sorted(RUNS.glob("*"), reverse=True):
@@ -1293,20 +1493,19 @@ def list_reconstruction_runs() -> list[dict]:
                 manifest = json.loads(manifest_path.read_text())
             except (json.JSONDecodeError, FileNotFoundError):
                 manifest = None
-        history = (report or {}).get("history") or []
-        scores = (report or {}).get("best_scores") or {}
         artifacts = list_artifacts(run_dir)
         status = "running" if running_job and running_job.get("status") == "running" else disk_reconstruction_status(run_dir, manifest)
+        summary = reconstruction_run_summary(run_dir, report, manifest)
         runs.append(
             {
                 "id": run_dir.name,
                 "status": status,
-                "overall_mix": (((report or {}).get("analysis") or {}).get("global") or {}).get("overall_mix", "") or (manifest or {}).get("reference", "") or "Partial reconstruction run",
-                "final_score": scores.get("final"),
-                "mel_score": scores.get("mel_spectrogram"),
-                "envelope_score": scores.get("envelope"),
-                "stage_count": len(history),
-                "accepted_layers": len(((report or {}).get("analysis") or {}).get("layers") or []),
+                "overall_mix": summary["overall_mix"],
+                "final_score": summary["final_score"],
+                "mel_score": summary["mel_score"],
+                "envelope_score": summary["envelope_score"],
+                "stage_count": summary["stage_count"],
+                "accepted_layers": summary["accepted_layers"],
                 "artifacts": artifacts,
             }
         )
