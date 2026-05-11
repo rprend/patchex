@@ -1787,7 +1787,14 @@ def command_run(args: argparse.Namespace) -> int:
     write_json(arrangement_path, arrangement)
     print(f"trace_file agent=analyzer role=arrangement path={arrangement_path}", flush=True)
     session_sample_rate = sr if int(args.sample_rate) == 44100 else int(args.sample_rate)
-    session = neutral_session(arrangement, session_sample_rate, args.seconds)
+    if args.initial_session:
+        session = json.loads(args.initial_session.read_text())
+        session["sample_rate"] = session_sample_rate
+        session["duration"] = float(args.seconds)
+        session, initial_lock_report = enforce_arrangement_lock(arrangement, session)
+        write_json(args.output_dir / "initial_session_lock.json", initial_lock_report)
+    else:
+        session = neutral_session(arrangement, session_sample_rate, args.seconds)
     write_json(current_session_path, session)
     print(f"trace_file agent=session role=current path={current_session_path}", flush=True)
     source_clip_path = args.output_dir / "source_clip.wav"
@@ -1960,6 +1967,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--steps", type=int, default=1)
     p_run.add_argument("--timeout", type=int, default=600)
     p_run.add_argument("--neutral-only", action="store_true")
+    p_run.add_argument("--initial-session", type=Path)
     p_run.set_defaults(func=command_run)
     return parser
 
